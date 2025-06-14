@@ -1,0 +1,468 @@
+.homeLayout {
+  height: 100%;
+  background-color: var(--background-color-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  background-color: #fff;
+  padding: 0 !important;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 0 !important;
+  min-height: 0 !important;
+  line-height: normal;
+  flex-shrink: 0;
+  border-bottom: none;
+  display: none;
+  margin: 0 !important;
+  border: none !important;
+}
+
+.headerTitle {
+  color: var(--text-color-primary); 
+  margin-bottom: 0;
+  margin-right: auto;
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.controlButton {
+  font-size: 16px;
+}
+
+.searchContainer {
+  display: flex;
+  align-items: center;
+}
+
+.searchInput {
+}
+
+.mainSearchInput {
+  flex-grow: 1;
+  margin-right: 16px;
+}
+
+.contentLayout {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  flex-grow: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* 底部控制栏 - 使用全局样式强制覆盖 */
+.listFooterControls {
+  padding: 0;
+  border-top: 1px solid var(--border-color-split, #f0f0f0);
+  flex-shrink: 0;
+  background-color: #ffffff;
+  margin: 0;
+}
+
+/* 使用全局选择器强制覆盖Ant Design样式 */
+.listFooterControls :global(.ant-radio-group) {
+  width: 100%;
+  display: flex;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+}
+
+.listFooterControls :global(.ant-radio-button-wrapper) {
+  flex: 1;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  color: #8E8E93 !important;
+  padding: 6px 4px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s ease;
+  cursor: pointer;
+}
+
+.listFooterControls :global(.ant-radio-button-wrapper-checked) {
+  color: #007AFF !important;
+  font-weight: 500 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.listFooterControls :global(.ant-radio-button-wrapper:hover) {
+  color: #007AFF !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 彻底移除所有焦点和交互状态的边框效果 */
+.listFooterControls :global(.ant-radio-button-wrapper:focus),
+.listFooterControls :global(.ant-radio-button-wrapper:active),
+.listFooterControls :global(.ant-radio-button-wrapper-checked:focus),
+.listFooterControls :global(.ant-radio-button-wrapper-checked:active),
+.listFooterControls :global(.ant-radio-button-wrapper:focus-visible),
+.listFooterControls :global(.ant-radio-button-wrapper-checked:focus-visible),
+.listFooterControls :global(.ant-radio-button-wrapper:focus-within),
+.listFooterControls :global(.ant-radio-button-wrapper-checked:focus-within) {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* 强制移除Ant Design的所有可能边框效果 */
+.listFooterControls :global(.ant-radio-group-outline .ant-radio-button-wrapper),
+.listFooterControls :global(.ant-radio-group-outline .ant-radio-button-wrapper-checked),
+.listFooterControls :global(.ant-radio-button-wrapper.ant-radio-button-wrapper-checked),
+.listFooterControls :global(.ant-radio-button-wrapper:not(:first-child)),
+.listFooterControls :global(.ant-radio-button-wrapper:first-child),
+.listFooterControls :global(.ant-radio-button-wrapper:last-child),
+.listFooterControls :global(.ant-radio-button-wrapper.css-dev-only-do-not-override-1m2bkf9),
+.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9),
+.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9:focus),
+.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9:active) {
+  border: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-top: none !important;
+  border-bottom: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* 覆盖所有可能的伪类选择器 */
+.listFooterControls :global(.ant-radio-button-wrapper)::before,
+.listFooterControls :global(.ant-radio-button-wrapper)::after,
+.listFooterControls :global(.ant-radio-button-wrapper-checked)::before,
+.listFooterControls :global(.ant-radio-button-wrapper-checked)::after {
+  display: none !important;
+  content: none !important;
+  border: none !important;
+}
+
+/* 终极方案：移除所有子元素的焦点效果 */
+.listFooterControls :global(*),
+.listFooterControls :global(*:focus),
+.listFooterControls :global(*:active),
+.listFooterControls :global(*:focus-visible),
+.listFooterControls :global(input),
+.listFooterControls :global(input:focus),
+.listFooterControls :global(input:active),
+.listFooterControls :global(input:checked) {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* 彻底隐藏原生Radio Button元素和input */
+.listFooterControls :global(.ant-radio-button),
+.listFooterControls :global(.ant-radio-button-inner),
+.listFooterControls :global(.ant-radio-button-checked),
+.listFooterControls :global(.ant-radio-button-checked .ant-radio-button-inner),
+.listFooterControls :global(.ant-radio-button-input) {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+  position: absolute !important;
+  left: -9999px !important;
+  z-index: -1 !important;
+}
+
+/* 强制移除原生input的所有焦点效果 */
+.listFooterControls :global(.ant-radio-button-input:focus),
+.listFooterControls :global(.ant-radio-button-input:active),
+.listFooterControls :global(.ant-radio-button-input:focus-visible),
+.listFooterControls :global(.ant-radio-button-input:checked),
+.listFooterControls :global(.ant-radio-button-input:checked:focus),
+.listFooterControls :global(.ant-radio-button-input:checked:active) {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+/* 移除分隔线 */
+.listFooterControls :global(.ant-radio-button-wrapper:not(:first-child)::before) {
+  display: none !important;
+}
+
+/* 标签布局 - 水平排列 */
+.listFooterControls :global(.ant-radio-button-label) {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 4px !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* 图标和文字样式 - 水平布局优化 */
+.listFooterControls :global(.anticon) {
+  font-size: 14px !important;
+  color: inherit !important;
+}
+
+.listFooterControls :global(.ant-radio-button-label span:not(.anticon)) {
+  font-size: 11px !important;
+  font-weight: inherit !important;
+  color: inherit !important;
+  line-height: 1;
+}
+
+/* 暗色主题 */
+:global(.dark-theme) .listFooterControls {
+  background-color: #1C1C1E;
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper) {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper-checked),
+:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper:hover) {
+  color: #007AFF !important;
+}
+
+.articleListControls {
+  flex-shrink: 0;
+}
+
+.articleListContainer {
+  flex: 1;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.articleDetail {
+  height: 100%;
+  background-color: #fff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.fullscreenDetail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background-color: #fff;
+  overflow-y: auto;
+}
+
+.resizeHandle {
+  width: 2px;
+  background-color: transparent;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  z-index: 10;
+}
+
+.resizeHandle:hover,
+.resizeHandle[data-resize-handle-active] { 
+  background-color: var(--primary-color-active);
+}
+
+.resizeHandle::before {
+  display: none;
+}
+
+:global(.dark-theme) .header {
+  background-color: #1f1f1f;
+  color: #fff;
+}
+
+:global(.dark-theme) .articleListControls {
+  background-color: var(--bg-primary-dark, #1f1f1f);
+  border-bottom-color: transparent;
+}
+
+:global(.dark-theme) .articleListContainer {
+  background-color: var(--bg-primary-dark, #1f1f1f);
+}
+
+:global(.dark-theme) .articleDetail {
+  background-color: #1f1f1f;
+}
+
+:global(.dark-theme) .fullscreenDetail {
+  background-color: #1f1f1f;
+}
+
+:global(.dark-theme) .resizeHandle {
+  background-color: var(--dark-border-color, #2c2c2c);
+}
+
+:global(.dark-theme) .resizeHandle::before {
+  background-color: var(--dark-text-color-secondary, #555);
+}
+
+:global(.dark-theme) .resizeHandle[data-resize-handle-active] {
+  background-color: var(--dark-primary-color-active, #383838);
+}
+
+@media (max-width: 768px) {
+  .articleDetail {
+    position: absolute;
+    width: 100% !important;
+    height: 100%;
+    top: 0;
+    right: 0;
+    z-index: 10;
+  }
+
+  .header {
+    padding: 0 16px;
+    height: 50px;
+    line-height: 50px;
+  }
+
+  .headerTitle {
+    font-size: 16px;
+  }
+}
+
+.emptyDetailPane {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-secondary);
+}
+
+.viewModePopoverContent {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.viewModePopoverContent .ant-btn {
+  width: 100%;
+  text-align: left;
+}
+
+/* 新增：下拉刷新加载指示器容器样式 */
+.pullToRefreshIndicatorContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  height: auto; 
+  flex-shrink: 0;
+  overflow: hidden;
+  opacity: 0;
+  max-height: 0;
+  transition: opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease;
+  background-color: transparent !important;
+}
+
+.pullToRefreshIndicatorContainer.visible {
+  opacity: 1;
+  max-height: 40px;
+  padding: 10px 0;
+}
+
+/* Change Spin component color to black */
+.pullToRefreshIndicatorContainer :global(.ant-spin-dot-item) {
+  background-color: #000000 !important;
+}
+
+/* NEW Styles for the header within the Article List Panel */
+.articleListPanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center; 
+  padding: 8px 16px;
+  background-color: #ffffff;
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.panelHeaderTitle {
+  margin-bottom: 0 !important;
+  margin-right: auto;
+}
+
+.panelHeaderControls {
+}
+
+.panelHeaderControls .ant-btn {
+}
+
+.panelHeaderControls .ant-btn:hover {
+  background-color: var(--ant-control-item-bg-hover, #e6f4ff); 
+  color: var(--ant-primary-color-hover, #0958d9);
+}
+
+/* NEW Styles for the Search Input container within the Panel */
+.panelSearchInputContainer {
+  padding: 4px 6px; 
+  background-color: #e9e9e9;
+  flex-shrink: 0;
+  margin: 0 8px 0px 8px;
+  border-radius: 6px;
+}
+
+/* Targeting the Ant Design Input component itself within our container */
+.panelSearchInputContainer :global(.ant-input-affix-wrapper) {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0;
+}
+
+.panelSearchInputContainer :global(.ant-input) {
+  background-color: transparent !important;
+  font-size: 12px !important;
+  height: 24px !important;
+  padding: 2px 8px !important;
+  line-height: normal !important;
+  border: none !important;
+}
+
+.panelSearchInputContainer :global(.ant-input-prefix) .anticon {
+}
+
+.panelSearchInputContainer :global(.ant-input-clear-icon) .anticon {
+  color: var(--ant-text-color-secondary, #888);
+}
+
+.panelSearchInput {
+  width: 100%;
+} 

@@ -1,0 +1,408 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background-color: var(--article-bg-color);
+}
+
+.fixedControlsBar {
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--article-bg-color);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.headerControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.controlSeparator {
+  height: 16px;
+  border-left: 1px solid var(--border-color-light);
+  margin: 0 4px;
+}
+
+.toolbarButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Style for active view mode button */
+.activeViewMode .anticon {
+  color: var(--icon-active-color); /* 改为使用新的 active icon 颜色变量 */
+}
+
+/* Ensure text buttons have appropriate color by default for better visibility if needed */
+.fixedControlsBar .ant-btn-text {
+  color: var(--text-secondary); /* Or your desired default icon color */
+}
+
+.fixedControlsBar .ant-btn-text:hover {
+  background-color: var(--hover-color); /* Subtle background on hover for text buttons */
+  color: var(--text-primary); /* Darken icon on hover */
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  background-color: var(--bg-primary);
+  padding-top: 48px;
+  padding-bottom: 3em;
+  scroll-behavior: smooth;
+  position: relative;
+  padding: 1rem 0;
+}
+
+.loadingContainer,
+.errorContainer {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-family: var(--font-family-sans);
+}
+
+.article {
+  /* No direct styles needed here, it's a semantic wrapper */
+  padding: 0 3rem; /* Add some padding for smaller screens where margins might collapse */
+}
+
+.header {
+  background-color: var(--bg-secondary);
+  padding: 2rem;
+  margin-bottom: 2rem;
+  border-radius: 8px;
+}
+
+.publishDate {
+  font-size: 0.75em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin: 0 0 1.5rem 0;
+  letter-spacing: 0.5px;
+}
+
+.title {
+  font-family: var(--font-family-article-title, var(--font-family-sans));
+  font-size: var(--article-font-size-title, 2.2em);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--article-title-color);
+  margin: 0 0 0.5rem 0;
+  padding: 0;
+}
+
+.sourceName {
+  font-size: 0.9em;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.metaLine,
+.metaSeparator {
+  display: none; /* Hide old meta display elements */
+}
+
+.meta {
+  font-family: var(--font-family-article-meta, var(--font-family-sans));
+  font-size: var(--article-font-size-meta, 0.85em);
+  color: var(--text-secondary);
+  margin-top: 0.8em;
+  margin-bottom: 1.8em;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5em 1.5em;
+}
+
+.author {
+  font-weight: 500;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5em;
+}
+
+.tags .ant-tag {
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background-color: var(--bg-tertiary, #f0f0f0);
+  border-color: var(--border-color-light, #e0e0e0);
+  color: var(--text-secondary);
+  border-radius: 3px;
+}
+
+.featuredImage {
+  margin-bottom: 2em;
+}
+
+.featuredImage img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 6px;
+}
+
+.articleContent {
+  font-family: var(--font-family-article-body, serif);
+  font-size: var(--article-font-size-body, 16px);
+  line-height: var(--article-line-height-body, 1.5);
+  color: var(--article-text-color);
+}
+
+.articleContent p,
+.articleContent ul,
+.articleContent ol,
+.articleContent dl,
+.articleContent table,
+.articleContent blockquote,
+.articleContent figure,
+.articleContent pre {
+  margin-bottom: 0.8em; /* 减少段落等块级元素下间距 */
+}
+
+.articleContent ul,
+.articleContent ol {
+  padding-left: 1.8em;
+}
+
+.articleContent li > ul,
+.articleContent li > ol {
+  margin-bottom: 0.3em; /* 减少列表项内嵌列表的下间距 */
+}
+
+.articleContent img {
+  max-width: 100%;
+  height: auto;
+  margin: 1.2em auto; /* 减少图片上下间距 */
+  display: block;
+  border-radius: 4px;
+}
+
+.articleContent a {
+  color: var(--link-color, var(--highlight-color));
+  text-decoration: none;
+}
+
+.articleContent a:hover {
+  text-decoration: underline;
+  color: var(--link-hover-color, var(--highlight-color-darker));
+}
+
+.articleContent strong { font-weight: 600; }
+.articleContent em { font-style: italic; }
+
+.articleContent h1,
+.articleContent h2,
+.articleContent h3,
+.articleContent h4,
+.articleContent h5,
+.articleContent h6 {
+  font-family: var(--font-family-article-title, var(--font-family-sans));
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--text-heading, var(--text-primary));
+  margin-top: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.articleContent h1 { font-size: calc(var(--article-font-size-h2) * 1.1); }
+.articleContent h2 { font-size: var(--article-font-size-h2, 1.6em); }
+.articleContent h3 { font-size: var(--article-font-size-h3, 1.4em); }
+.articleContent h4 { font-size: 1.2em; }
+.articleContent h5 { font-size: 1.1em; }
+.articleContent h6 { font-size: 1em; font-weight: bold; text-transform: uppercase; }
+
+.articleContent blockquote {
+  margin: 1.2em 0;
+  padding: 1em 1em;
+  background-color: var(--bg-blockquote, var(--bg-secondary));
+  border-left: 3px solid var(--blockquote-border-color, var(--highlight-color));
+  color: var(--text-blockquote, var(--text-secondary));
+  font-style: italic;
+  font-size: 0.8em;
+}
+
+.articleContent blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.articleContent hr {
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  margin: 1.5em 0; /* 减少 HR 上下间距 */
+}
+
+.articleContent pre {
+  background-color: var(--bg-code-block, #2d2d2d);
+  color: var(--text-code-block, #f8f8f2);
+  padding: 1.2em 1.5em;
+  overflow-x: auto;
+  border-radius: 6px;
+  font-family: var(--font-family-mono, monospace);
+  font-size: 0.9em;
+  line-height: 1.6;
+  margin-top: 1.8em;
+  margin-bottom: 1.8em;
+}
+
+.articleContent code {
+  font-family: var(--font-family-mono, monospace);
+  background-color: var(--bg-code-inline, #f0f0f0);
+  color: var(--text-code-inline, var(--text-body));
+  padding: 0.2em 0.5em;
+  border-radius: 4px;
+  font-size: 0.88em;
+  word-break: break-word;
+}
+
+.articleContent pre code {
+  background-color: transparent;
+  padding: 0;
+  font-size: inherit;
+  color: inherit;
+  word-break: normal;
+}
+
+.originalContent {
+  font-family: var(--font-family-mono, monospace);
+  white-space: pre-wrap;
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: auto;
+  font-size: 0.9em;
+  line-height: 1.5;
+}
+
+.footer {
+  margin-top: 3em;
+  padding-top: 1.5em;
+  border-top: 1px solid var(--border-color-light, #e0e0e0);
+  text-align: center;
+}
+
+.sourceLink {
+  font-family: var(--font-family-article-meta, var(--font-family-sans));
+  font-size: 0.9em;
+  color: var(--text-secondary);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  transition: color 0.2s ease;
+}
+
+.sourceLink:hover {
+  color: var(--highlight-color);
+  text-decoration: none;
+}
+
+.webFrame {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+:global(.dark-theme) .articleContent {
+  color: var(--text-body-dark, #cccccc);
+}
+
+:global(.dark-theme) .articleContent a {
+  color: var(--link-color-dark, var(--highlight-color-lighter));
+}
+
+:global(.dark-theme) .articleContent a:hover {
+  color: var(--link-hover-color-dark, var(--highlight-color));
+}
+
+:global(.dark-theme) .tags .ant-tag {
+  background-color: var(--bg-tertiary-dark, #2c2c2c);
+  border-color: var(--border-color-light-dark, #424242);
+  color: var(--text-secondary-dark, #8c8c8c);
+}
+
+@media (max-width: 768px) {
+  .article {
+    padding: 0 16px;
+  }
+  .content {
+    padding-top: 1.5em;
+    padding-bottom: 2em;
+  }
+  .title {
+    font-size: 1.8em;
+  }
+  .articleContent {
+    font-size: 15px;
+  }
+  .featuredImage {
+    max-height: 300px;
+    margin-bottom: 1.5em;
+  }
+  .meta {
+    font-size: calc(var(--article-font-size-meta, 0.85em) * 0.95);
+    margin-bottom: 1.5em;
+  }
+  .toolbar {
+    padding: 8px;
+  }
+}
+
+.webViewContainerFullPage {
+  display: flex;
+  flex-direction: column;
+  height: 100%; 
+  overflow: hidden; 
+  background-color: var(--bg-primary); /* 添加背景色以防透明 */
+}
+
+.webViewHeader {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px; 
+  background-color: var(--bg-secondary, #f0f2f5); 
+  border-bottom: 1px solid var(--border-color, #e8e8e8); 
+  flex-shrink: 0; /* 防止头部被压缩 */
+}
+
+.webViewBackButton {
+  font-size: 18px; 
+  margin-right: 10px; 
+}
+
+.webViewBackButton .anticon {
+  vertical-align: middle; 
+}
+
+.webViewPageTitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-grow: 1; 
+  text-align: left; 
+}
+
+.webFrameFullPage {
+  flex-grow: 1;    /* 主要靠这个伸展 */
+  flex-shrink: 1;  /* 允许缩小 */
+  flex-basis: auto;  /* 自动基准大小 */
+  min-height: 0;   /* 关键：允许 flex item 缩小到0，而不是被其内容撑开 */
+  border: none; 
+  width: 100%;
+  /* 移除固定的 height: 100% */
+} 

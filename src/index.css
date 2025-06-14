@@ -1,0 +1,627 @@
+/* 全局样式 */
+:root {
+  /* 亮色主题变量 */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f9f9f9;
+  --bg-tertiary: #f5f5f5; /* 新增：用于hover状态和轻微突出的背景 */
+  --bg-elevated: #ffffff; /* 新增：用于顶部操作栏等需要覆盖内容的区域 */
+  --text-primary: #1d1d1f;
+  --text-secondary: #515154;
+  --text-tertiary: #86868b; /* 用于更次要的文本，如日期分隔符 */
+  --border-color: #e4e4e4;
+  --highlight-color: #1890ff; /* 主要高亮色，例如链接、按钮等 */
+  --icon-active-color: #777777; /* 新增：用于活动状态的图标，浅灰色 */
+  --hover-color: #f0f0f0;
+  --card-bg: #ffffff;
+  --scrollbar-thumb: #d9d9d9;
+  --scrollbar-thumb-hover-color: rgba(0,0,0,0.4);
+  --scrollbar-thumb-default-color: transparent;
+
+  /* Reeder风格字体栈 - 优先SF Pro系统字体 */
+  --font-family-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+  --font-family-sans: var(--font-family-system);
+  --font-family-mono: "SF Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+
+  /* 分层字体定义 */
+  --font-family-title: 'SF Pro Display', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; /* 标题用Display */
+  --font-family-body: 'SF Pro Text', -apple-system, BlinkMacSystemFont, system-ui, sans-serif; /* 正文用Text */
+  --font-family-ui: var(--font-family-body); /* 界面元素 */
+  
+  /* 应用内字体分配 */
+  --font-family-sidebar-title: var(--font-family-title); /* 侧边栏标题 */
+  --font-family-sidebar-item: var(--font-family-body); /* 侧边栏项目 */
+  --font-family-article-title: var(--font-family-title); /* 文章标题 */
+  --font-family-article-body: var(--font-family-body); /* 文章内容 */
+  --font-family-article-meta: var(--font-family-body); /* 文章元数据 */
+
+  /* 基础颜色 (亮色主题) */
+  --bg-primary: #ffffff;
+  --text-code-block: #f8f8f2;
+  --bg-code-inline: rgba(27, 31, 35, 0.05);
+
+  /* 新增排版相关变量 */
+  --article-max-width: 720px; /* Reeder 风格的阅读宽度 */
+  --article-line-height-body: 1.7; /* 用户先前提及，从1.8改回1.7 */
+  --article-font-size-body: 17px; /* 可根据喜好调整，16-18px 常见 */
+  --article-font-size-meta: 0.85em;
+  --article-font-size-title: 2.2em; /* 相对于基础字体 */
+  --article-font-size-h2: 1.6em;
+  --article-font-size-h3: 1.4em;
+
+  font-family: var(--font-family-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+/* 暗色主题变量 */
+.dark-theme {
+  --bg-primary: #1f1f1f;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3a3a3a; /* 新增：暗色主题下的hover背景 */
+  --bg-elevated: #1f1f1f; /* 新增：确保暗色主题下也是不透明的 */
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-tertiary: #999999; /* 暗色主题下更次要的文本 */
+  --border-color: #3a3a3a;
+  --highlight-color: #1890ff; /* 主要高亮色，保持与亮色主题一致或自定义 */
+  --icon-active-color: #bbbbbb; /* 新增：用于活动状态的图标，暗色主题下的浅灰色 */
+  --hover-color: #3a3a3a;
+  --card-bg: #2d2d2d;
+  --scrollbar-thumb: #4d4d4d;
+  --scrollbar-thumb-hover-color: rgba(255,255,255,0.3);
+  --scrollbar-thumb-default-color: transparent;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  /* Unified Firefox Scrollbar */
+  scrollbar-width: none; /* 直接隐藏 Firefox 滚动条 */
+  /* scrollbar-color 在 scrollbar-width: none 时不再需要 */
+  /* scrollbar-color: var(--scrollbar-thumb-hover-color) transparent; */
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  font-family: var(--font-family-system);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s, color 0.3s;
+}
+
+/* Unified Webkit Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 1px; /* 保持一个极小值，以确保滚动功能，但几乎不可见 */
+  height: 1px; /* 保持一个极小值 */
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent !important; /* 强制始终透明 */
+  /* border-radius: 3px; */ /* 透明时圆角无意义 */
+}
+/* 移除 hover 状态，因为希望始终不可见 */
+/* ::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover-color); 
+} */
+
+/* 全局卡片样式 */
+.card {
+  background-color: var(--card-bg);
+  border-radius: 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.3s;
+}
+
+.card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 全局过渡效果 */
+.fade-enter {
+  opacity: 0;
+}
+
+.fade-enter-active {
+  opacity: 1;
+  transition: opacity 300ms;
+}
+
+.fade-exit {
+  opacity: 1;
+}
+
+.fade-exit-active {
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+/* 应用主布局 */
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.main-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* 自定义标题栏 */
+.title-bar {
+  -webkit-app-region: drag;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.title-bar-controls {
+  -webkit-app-region: no-drag;
+  margin-left: auto;
+  display: flex;
+}
+
+/* 工具提示 */
+.tooltip {
+  position: relative;
+}
+
+.tooltip:hover::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 10;
+}
+
+/* Bionic阅读模式 */
+.bionic-text span.highlight {
+  font-weight: bold;
+  color: var(--highlight-color);
+}
+
+/* Ant Design 覆盖样式 */
+.ant-list-item-meta-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-list-item {
+  background-color: var(--bg-primary) !important;
+}
+
+.ant-menu-inline {
+  border-right: none !important;
+}
+
+.ant-badge-count {
+  right: 8px;
+}
+
+.ant-tree-treenode {
+  padding: 0 4px !important;
+}
+
+.ant-tree-node-content-wrapper {
+  padding: 4px 6px !important;
+}
+
+.ant-tree-title {
+  color: var(--text-primary) !important;
+}
+
+/* 修复左侧导航栏数据对齐问题 */
+.ant-tree-title .feedInfo {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.ant-tree-title .feedLeft {
+  display: flex !important;
+  align-items: center !important;
+  flex: 1 !important;
+  min-width: 0 !important;
+}
+
+.ant-tree-title .feedBadge {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  text-align: right !important;
+}
+
+.ant-tree-title .countNumber {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  text-align: right !important;
+}
+
+/* 更强力的左侧导航栏数字右对齐 */
+.ant-tree .ant-tree-title {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+/* 针对分组标题的数字右对齐 */
+.ant-tree .ant-tree-title .groupTitle {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.ant-tree .ant-tree-title .groupTitle .countNumber {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* 针对订阅源的数字右对齐 */
+.ant-tree .ant-tree-title .feedInfo .feedBadge {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+/* 全局左侧导航栏布局修复 */
+.ant-layout-sider .ant-tree .ant-tree-node-content-wrapper {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.ant-layout-sider .ant-tree .ant-tree-title {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+  flex: 1 !important;
+}
+
+/* 确保左侧内容和右侧数字的正确布局 */
+.ant-layout-sider .ant-tree .ant-tree-title > div:first-child,
+.ant-layout-sider .ant-tree .ant-tree-title > .groupTitle {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+/* 数字容器的统一样式 */
+.ant-layout-sider .ant-tree .countNumber,
+.ant-layout-sider .ant-tree .feedBadge,
+.ant-layout-sider .ant-tree .ant-badge {
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  text-align: right !important;
+}
+
+/* 左侧内容区域 */
+.ant-layout-sider .ant-tree .groupName,
+.ant-layout-sider .ant-tree .feedLeft,
+.ant-layout-sider .ant-tree .feedTitleText {
+  flex: 1 !important;
+  min-width: 0 !important;
+  text-align: left !important;
+}
+
+.bionic-text span.highlight {
+  font-weight: bold;
+  color: var(--highlight-color);
+}
+
+/* 暗色主题下的覆盖 */
+.dark-theme .listFooterControls .ant-radio-button-wrapper {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.dark-theme .listFooterControls .ant-radio-button-wrapper-checked,
+.dark-theme .listFooterControls .ant-radio-button-wrapper:hover {
+  color: #007AFF !important;
+}
+
+.dark-theme {
+  color: var(--text-primary);
+}
+
+.dark-theme .ant-layout {
+  background: var(--bg-primary) !important;
+}
+
+.dark-theme .ant-layout-sider {
+  background: var(--bg-secondary) !important;
+}
+
+.dark-theme .ant-menu {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .ant-card {
+  background: var(--card-bg) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .ant-tree {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.dark-theme .ant-list {
+  background: transparent !important;
+} 
+
+/* ================================ */
+/* Reeder风格字体样式优化 */
+/* ================================ */
+
+/* 侧边栏字体样式 */
+.ant-layout-sider {
+  font-family: var(--font-family-ui) !important;
+}
+
+/* 侧边栏主标题 ("Readix") */
+.ant-layout-sider .ant-typography {
+  font-family: var(--font-family-title) !important;
+  font-weight: 600 !important;
+  font-size: 18px !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 2px !important;
+}
+
+/* 侧边栏副标题 (时间信息等) */
+.ant-layout-sider .sidebar-subtitle {
+  font-family: var(--font-family-body) !important;
+  font-weight: 400 !important;
+  font-size: 11px !important;
+  color: var(--text-secondary) !important;
+  margin-bottom: 16px !important;
+  opacity: 0.7;
+}
+
+/* 侧边栏分组标题 */
+.ant-tree .ant-tree-title .groupTitle {
+  font-family: var(--font-family-ui) !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: var(--text-primary) !important;
+  margin: 8px 0 4px 0 !important;
+}
+
+/* 侧边栏Feed项目 */
+.ant-tree .ant-tree-title .feedInfo {
+  font-family: var(--font-family-ui) !important;
+  font-weight: 400 !important;
+  font-size: 13px !important;
+}
+
+/* 侧边栏数字徽章 */
+.ant-tree .ant-tree-title .countNumber {
+  font-family: var(--font-family-ui) !important;
+  font-weight: 400 !important;
+  font-size: 12px !important;
+}
+
+/* 文章列表区域头部 */
+.articleListPanelHeader .panelHeaderTitle {
+  font-family: var(--font-family-title) !important;
+  font-weight: 600 !important;
+  font-size: 20px !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 0 !important;
+}
+
+/* 文章列表副标题 (统计信息) */
+.articleListPanelHeader .panel-subtitle {
+  font-family: var(--font-family-body) !important;
+  font-weight: 400 !important;
+  font-size: 12px !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+/* 文章列表项标题 */
+.ant-list-item-meta-title {
+  font-family: var(--font-family-body) !important;
+  font-weight: 500 !important;
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+  color: var(--text-primary) !important;
+  margin-bottom: 4px !important;
+}
+
+/* 文章列表项描述 */
+.ant-list-item-meta-description {
+  font-family: var(--font-family-body) !important;
+  font-weight: 400 !important;
+  font-size: 13px !important;
+  line-height: 1.4 !important;
+  color: var(--text-secondary) !important;
+  opacity: 0.85;
+}
+
+/* 文章时间戳等元数据 */
+.ant-list-item .ant-tag,
+.ant-list-item-extra {
+  font-family: var(--font-family-body) !important;
+  font-weight: 400 !important;
+  font-size: 11px !important;
+  color: var(--text-tertiary) !important;
+  opacity: 0.7;
+}
+
+/* 文章列表项间距优化 */
+.ant-list-item {
+  padding: 12px 16px !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* 文章列表缩略图优化 */
+.ant-list-item-meta-avatar {
+  margin-right: 12px !important;
+}
+
+.ant-list-item-meta-avatar img {
+  border-radius: 4px !important;
+  width: 60px !important;
+  height: 60px !important;
+  object-fit: cover !important;
+}
+
+/* 底部控制栏 */
+.listFooterControls {
+  font-family: var(--font-family-ui) !important;
+}
+
+.listFooterControls .ant-radio-button-label span:not(.anticon) {
+  font-family: var(--font-family-ui) !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+}
+
+/* 文章详情页面 */
+.articleDetail {
+  font-family: var(--font-family-body) !important;
+  padding: 24px 32px; /* 增加内边距 */
+  max-width: 800px; /* 限制最大宽度，优化阅读体验 */
+  margin: 0 auto; /* 居中显示 */
+  box-sizing: border-box;
+}
+
+/* 文章详情标题 */
+.articleDetail h1 {
+  font-family: var(--font-family-title) !important;
+  font-weight: 700 !important;
+  font-size: 28px !important;
+  line-height: 1.2 !important;
+  margin-bottom: 8px !important; /* 调整标题下外边距 */
+}
+
+/* 文章详情正文 */
+.articleDetail p {
+  font-family: var(--font-family-body) !important;
+  font-weight: 400 !important;
+  font-size: 16px !important;
+  line-height: 1.7 !important; /* 增加行间距，提升可读性 */
+  margin-bottom: 1.2em !important; /* 增加段落间距 */
+}
+
+/* 文章详情元数据 */
+.articleDetail .article-meta {
+  font-family: var(--font-family-body) !important;
+  font-weight: 500 !important; /* 中等字重 */
+  font-size: 11px !important;
+  color: var(--text-tertiary) !important; /* 使用更柔和的颜色 */
+  text-transform: uppercase;
+  letter-spacing: 0.8px; /* 增加字母间距 */
+  opacity: 0.9;
+  margin-bottom: 32px !important; /* 增加与正文的间距 */
+}
+
+/* Reeder风格的日期分组标题 */
+.article-list-date-group {
+  font-family: var(--font-family-body) !important;
+  font-weight: 500 !important;
+  font-size: 11px !important;
+  color: var(--text-tertiary) !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 8px 16px 4px 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* 侧边栏项目hover效果 */
+.ant-tree-node-content-wrapper:hover {
+  background-color: var(--bg-tertiary) !important;
+  border-radius: 4px !important;
+}
+
+/* 文章列表项hover效果 */
+.ant-list-item:hover {
+  background-color: var(--bg-tertiary) !important;
+  cursor: pointer;
+}
+
+/* 选中状态优化 */
+.ant-list-item.selected {
+  background-color: var(--highlight-color) !important;
+  color: white !important;
+}
+
+.ant-list-item.selected .ant-list-item-meta-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-list-item.selected .ant-list-item-meta-description {
+  color: var(--text-secondary) !important;
+}
+
+/* --- Pulsing Loader --- */
+.pulsing-loader-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  position: fixed;
+  top: 0;
+  left: 0;
+  background-color: var(--bg-primary);
+  z-index: 9999;
+}
+
+.pulsing-loader {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.pulsing-loader .dot {
+  width: 12px;
+  height: 12px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background-color: var(--text-tertiary);
+  animation: pulse 1.4s infinite ease-in-out both;
+}
+
+.pulsing-loader .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.pulsing-loader .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes pulse {
+  0%, 80%, 100% {
+    transform: scale(0.5);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+/* --- End Pulsing Loader --- */ 

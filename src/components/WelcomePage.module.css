@@ -1,0 +1,84 @@
+.welcomeContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  width: 100%;
+  padding: 24px;
+  background-color: #f5f5f5;
+}
+
+.welcomeCard {
+  width: 100%;
+  max-width: 800px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.welcomeTitle {
+  text-align: center;
+  margin-bottom: 24px !important;
+  color: #1890ff;
+}
+
+.welcomeContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.emptyIcon {
+  font-size: 64px;
+  color: #1890ff;
+}
+
+.welcomeDescription {
+  text-align: center;
+  font-size: 16px;
+  max-width: 600px;
+  line-height: 1.8;
+}
+
+.welcomeSteps {
+  width: 100%;
+  max-width: 500px;
+  margin: 16px 0;
+}
+
+.welcomeActions {
+  margin: 16px 0;
+}
+
+.welcomeTips {
+  width: 100%;
+  background-color: #f9f9f9;
+  padding: 16px;
+  border-radius: 4px;
+  border-left: 4px solid #1890ff;
+}
+
+.welcomeTips ul {
+  margin-top: 16px;
+  list-style-type: disc;
+  padding-left: 20px;
+}
+
+.welcomeTips li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+/* 暗色主题适配 */
+:global(.dark-theme) .welcomeContainer {
+  background-color: #1f1f1f;
+}
+
+:global(.dark-theme) .welcomeCard {
+  background-color: #2a2a2a;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+:global(.dark-theme) .welcomeTips {
+  background-color: #303030;
+} 

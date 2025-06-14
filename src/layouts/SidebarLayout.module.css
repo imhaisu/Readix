@@ -1,0 +1,278 @@
+.layoutContainer {
+  width: 100%;
+  height: 100vh;
+}
+
+.sider {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-right: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.siderHeader {
+  padding: 8px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.siderTitle {
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.siderTitle h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.2px;
+}
+
+.collapseButton, .addButton, .settingsButton {
+  padding: 0 8px;
+}
+
+.menu {
+  border-right: 0;
+  overflow-y: auto;
+  flex-grow: 0;
+  background-color: transparent;
+}
+
+.feedsContainer {
+  flex-grow: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 0;
+}
+
+.feedsHeader {
+  padding: 8px 16px 2px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 28px;
+}
+
+.feedsHeaderCollapsed {
+  padding: 8px 0;
+  justify-content: center;
+  min-height: auto;
+  display: flex;
+  align-items: center;
+}
+
+.feedsHeaderCollapsed .feedsTitle {
+  display: none;
+}
+
+.feedsHeaderCollapsed .ant-btn {
+  margin: 0;
+}
+
+.feedsTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.siderFooter {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  border-top: 1px solid var(--border-color-split);
+  justify-content: flex-start;
+  padding: 8px;
+  background-color: var(--bg-secondary);
+  transition: padding 0.2s ease-out, border-color 0.2s ease-out, height 0.2s ease-out;
+}
+
+.siderFooterCollapsed {
+  justify-content: center;
+  padding: 0;
+  border-top-color: transparent;
+}
+
+.siderFooterCollapsed .settingsButton.ant-btn {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.settingsButtonCollapsed .anticon {
+  font-size: 18px;
+}
+
+/* Styles for react-resizable-panels handle */
+.siderResizeHandle_rH {
+  width: 2px;
+  background-color: transparent;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+  z-index: 10;
+}
+
+.siderResizeHandle_rH:hover,
+.siderResizeHandle_rH[data-resize-handle-active] {
+  background-color: var(--primary-color-active);
+}
+
+/* Remove before if not needed, or style it to be very subtle */
+.siderResizeHandle_rH::before {
+  display: none;
+}
+
+.layoutContainer_rH {
+  height: 100%;
+  background-color: var(--background-color-primary);
+}
+
+.contentLayout_rH {
+  height: 100%;
+  background-color: var(--background-color-primary);
+}
+
+.content_rH {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.content_rH > * {
+  flex: 1;
+  min-height: 0;
+}
+
+.addButton {
+  /* styles for add button in header */
+}
+
+/* 暗色主题适配 */
+:global(.dark-theme) .sider {
+  border-right-color: #303030;
+  background-color: #1c1c1c;
+}
+
+:global(.dark-theme) .siderHeader,
+:global(.dark-theme) .menu,
+:global(.dark-theme) .siderFooter {
+  border-color: transparent;
+}
+
+:global(.dark-theme) .feedsHeader {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 768px) {
+  .sider {
+    position: absolute;
+    z-index: 10;
+    height: 100%;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* Center the Add button icon when Sider is collapsed and button is icon-only */
+.siderHeader > .ant-tooltip-open > .addButton.ant-btn-icon-only,
+.siderHeader > .addButton.ant-btn-icon-only {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+/* For Ant Design Menu Items when inlineCollapsed */
+:global(.ant-menu-inline-collapsed.ant-menu-root) {
+    width: 100% !important;
+}
+
+:global(.ant-menu-inline-collapsed > .ant-menu-item),
+:global(.ant-menu-inline-collapsed > .ant-menu-submenu > .ant-menu-submenu-title) {
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 40px;
+    margin: 4px 0;
+}
+
+:global(.ant-menu-inline-collapsed .ant-menu-item .anticon),
+:global(.ant-menu-inline-collapsed .ant-menu-submenu-title .anticon) {
+    font-size: 18px;
+    margin-right: 0 !important;
+}
+
+/* Hide text in menu items when collapsed - Antd usually does this with .ant-menu-item-text-collapsed */
+:global(.ant-menu-inline-collapsed .ant-menu-title-content) {
+    display: none !important;
+}
+
+/* 自定义菜单项容器样式 */
+.menuItemContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+/* 自定义徽标样式 */
+.menuItemBadge {
+  margin-left: 4px;
+}
+
+/* 覆盖 antd Badge 内部计数元素的样式 */
+.menuItemBadge :global(.ant-badge-count) {
+  background-color: transparent !important;
+  color: var(--text-primary) !important;
+  box-shadow: none !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: 0.9em !important;
+  font-weight: normal !important;
+  min-width: auto !important;
+  height: auto !important;
+  line-height: inherit !important;
+}
+
+/* 调整展开状态下主菜单项的垂直间距 */
+/* 我们选择一个相对特定的选择器以避免意外影响其他菜单 */
+/* targeting items in the main menu when it's not collapsed */
+.menu:not(:global(.ant-menu-inline-collapsed)) :global(.ant-menu-item) {
+  height: 32px !important; /* 减小高度 */
+  line-height: 32px !important; /* 配合高度调整行高 */
+  margin-top: 2px !important; /* 减小上外边距 */
+  margin-bottom: 2px !important; /* 减小下外边距 */
+  /* Ant Design 默认的 padding-inline (左右内边距) 通常是足够的，如有需要也可以调整 */
+  /* padding-top: 0 !important; */ /* 如果内部元素导致高度问题，可以强制 */
+  /* padding-bottom: 0 !important; */
+}
+
+/* 如果菜单项内有图标，确保图标垂直居中 (Ant Design 通常会处理好) */
+.menu:not(:global(.ant-menu-inline-collapsed)) :global(.ant-menu-item .anticon) {
+  line-height: 32px !important; /* 确保图标也适应新的行高 */
+} 

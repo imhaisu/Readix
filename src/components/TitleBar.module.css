@@ -1,0 +1,65 @@
+.titleBar {
+  -webkit-app-region: drag;
+  height: 35px;
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-secondary);
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-color);
+  position: relative;
+  z-index: 1000;
+}
+
+.titleText {
+  margin-right: 20px;
+  font-weight: bold;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.searchWrapper {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.searchButton {
+  -webkit-app-region: no-drag;
+}
+
+.controls {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+}
+
+.controlButton {
+  -webkit-app-region: no-drag;
+  height: 32px;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  margin-left: 4px;
+}
+
+.windowControls {
+  display: flex;
+  margin-left: 16px;
+}
+
+.closeButton:hover {
+  background-color: #ff4d4f;
+  color: white;
+}
+
+@media (max-width: 768px) {
+  .searchWrapper {
+    max-width: 200px;
+  }
+  
+  .titleText {
+    font-size: 14px;
+  }
+} 

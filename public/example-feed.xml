@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+<channel>
+  <title>NewReader示例RSS</title>
+  <link>https://example.com/news</link>
+  <description>这是一个示例RSS源，用于测试NewReader RSS阅读器</description>
+  <item>
+    <title>欢迎使用NewReader</title>
+    <link>https://example.com/news/1</link>
+    <description>NewReader是一个本地化的轻量级RSS阅读器，提供了丰富的功能帮助您管理和阅读订阅内容。</description>
+    <pubDate>Mon, 16 May 2023 10:00:00 +0800</pubDate>
+  </item>
+  <item>
+    <title>如何添加RSS源</title>
+    <link>https://example.com/news/2</link>
+    <description>
+      <![CDATA[
+        <h2>添加RSS源很简单</h2>
+        <p>只需点击左侧边栏的"+"按钮，然后输入RSS源的URL即可。</p>
+        <p>您也可以为RSS源指定分组，方便管理。</p>
+        <img src="https://example.com/images/add-feed.jpg" alt="添加RSS源" />
+      ]]>
+    </description>
+    <pubDate>Mon, 16 May 2023 11:00:00 +0800</pubDate>
+  </item>
+  <item>
+    <title>自定义阅读体验</title>
+    <link>https://example.com/news/3</link>
+    <description>
+      <![CDATA[
+        <h2>个性化设置</h2>
+        <p>您可以通过设置页面自定义阅读体验，包括：</p>
+        <ul>
+          <li>切换亮色/暗色主题</li>
+          <li>调整字体大小和行高</li>
+          <li>选择不同的文章视图模式</li>
+          <li>设置布局方式</li>
+        </ul>
+      ]]>
+    </description>
+    <pubDate>Mon, 16 May 2023 12:00:00 +0800</pubDate>
+  </item>
+</channel>
+</rss> 
