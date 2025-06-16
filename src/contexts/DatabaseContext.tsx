@@ -7,16 +7,18 @@ export class RssDatabase extends Dexie {
   articles!: Dexie.Table<Article, string>;
   groups!: Dexie.Table<Group, string>;
   savedLinks!: Dexie.Table<SavedLink, string>;
+  annotations!: Dexie.Table<Annotation, string>;
 
   constructor() {
     super('RssDatabase');
     
     // 定义数据库结构
-    this.version(7).stores({
+    this.version(8).stores({
       feeds: 'id, groupId, title, url, lastUpdated, unreadCount, active, order, viewMode, bionicReading',
       articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, [sourceId+isRead]',
       groups: 'id, name, order, collapsed',
-      savedLinks: 'id, url, title, addedDate, isRead'
+      savedLinks: 'id, url, title, addedDate, isRead',
+      annotations: 'id, articleId, createdAt'
     }).upgrade(async (tx) => {
       console.log("数据库升级: 版本 6->7。为 articles 添加了 fetchDate 索引。如果这是全新创建，则无需迁移。");
     });
@@ -26,6 +28,7 @@ export class RssDatabase extends Dexie {
     this.articles = this.table('articles');
     this.groups = this.table('groups');
     this.savedLinks = this.table('savedLinks');
+    this.annotations = this.table('annotations');
   }
 }
 
@@ -81,6 +84,18 @@ export interface SavedLink {
   content?: string;
   isRead: boolean;
   readPosition?: number;
+}
+
+// 新增 Annotation 接口
+export interface Annotation {
+  id: string;
+  articleId: string;
+  type: 'highlight' | 'note';
+  text: string; // 高亮的文本内容
+  prefix: string; // 高亮内容的前20个字符上下文
+  suffix: string; // 高亮内容的后20个字符上下文
+  noteContent?: string; // 笔记内容 (如果是笔记类型)
+  createdAt: number; // 创建时间戳，用于排序
 }
 
 // 数据库上下文类型

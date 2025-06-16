@@ -1,0 +1,6218 @@
+import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Modal, message, Tooltip, Button } from 'antd';
+import { LeftOutlined, CheckCircleOutlined, MinusCircleOutlined, StarFilled, ClockCircleFilled, ClockCircleOutlined, HighlightOutlined, GlobalOutlined, ExportOutlined, ShareAltOutlined, DeleteOutlined } from '@ant-design/icons';
+import { useDb } from '../contexts/DbContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { useArticle } from '../contexts/ArticleContext';
+import { useSelection } from '../contexts/SelectionContext';
+import styles from './ArticleDetail.module.css';
+
+const ArticleDetail = () => {
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
+  const navigate = useNavigate();
+
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+
+  const db = useDb();
+  const articleId = useArticle();
+  const settings = useSettings();
+  const readingSettings = settings.reading;
+
+  const handleShare = () => {
+    if (article) {
+      const shareUrl = article.url;
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => message.success('文章链接已复制到剪贴板'))
+        .catch(() => message.error('复制链接失败'));
+    }
+  };
+
+  const handleDeleteArticle = () => {
+    if (!db || !articleId) return;
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除这篇文章吗？此操作不可撤销。',
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await db.articles.delete(articleId);
+          message.success('文章已删除');
+          onClose?.();
+          onArticleModified(articleId, { isHidden: true });
+          triggerRefresh();
+        } catch (error) {
+          console.error('删除文章失败:', error);
+          message.error('删除文章失败！');
+        }
+      },
+    });
+  };
+
+  const saveScrollPosition = useCallback(async (articleIdToSave: string, position: number) => {
+    if (!db || !articleIdToSave) return;
+    // ... existing code ...
+  }, []);
+
+  const renderArticleContent = () => {
+    const contentToRender = processedContent || article?.content;
+    // ... existing code ...
+    return null;
+  };
+
+  const articleStyle = {
+    // ... existing code ...
+  };
+
+  return (
+    <div className={styles.articleDetailContainer} style={articleStyle}>
+      <div className={`${styles.fixedControlsBar} ${isScrolled ? styles.scrolled : ''}`}>
+        <div className={styles.headerControls}>
+          <Tooltip title="返回列表">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<LeftOutlined />}
+              onClick={() => navigate('/')}
+            />
+          </Tooltip>
+          
+          <div className={styles.controlSeparator}></div>
+          
+          <Tooltip title={article.isRead === 'true' ? "标记为未读" : "标记为已读"}>
+            <Button 
+              type="text" 
+              icon={article.isRead === 'true' ? <CheckCircleOutlined /> : <MinusCircleOutlined />}
+              onClick={handleToggleReadStatus}
+            />
+          </Tooltip>
+
+          <Tooltip title={article.isStarred === 'true' ? '取消收藏' : '添加收藏'}>
+            <Button
+              type="text"
+              shape="circle"
+              icon={
+                article.isStarred === 'true' ? (
+                  <StarFilled style={{ color: '#fadb14' }} />
+                ) : (
+                  <UnstarIcon />
+                )
+              }
+              onClick={handleToggleStar}
+            />
+          </Tooltip>
+
+          <Tooltip title={article.isReadLater === 'true' ? '从"稍后读"移除' : '添加到"稍后读"'}>
+            <Button
+              type="text"
+              icon={article.isReadLater === 'true' ? <ClockCircleFilled /> : <ClockCircleOutlined />}
+              onClick={handleToggleReadLater}
+            />
+          </Tooltip>
+
+          <div className={styles.controlSeparator}></div>
+
+          <Tooltip title="笔记和高亮">
+            <Button type="text" shape="circle" icon={<HighlightOutlined />} onClick={handleToggleSidebar} />
+          </Tooltip>
+
+          <Tooltip title="访问原址">
+            <Button 
+              type="text" 
+              icon={<GlobalOutlined />} 
+              onClick={() => handleViewModeChange('web')}
+            />
+          </Tooltip>
+          
+          <Tooltip title="浏览器打开">
+            <Button 
+              type="text" 
+              icon={<ExportOutlined />} 
+              onClick={handleOpenInBrowser} 
+            />
+          </Tooltip>
+
+          <Tooltip title="分享">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ShareAltOutlined />}
+              onClick={handleShare}
+            />
+          </Tooltip>
+
+          <Tooltip title="删除文章">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<DeleteOutlined />}
+              onClick={handleDeleteArticle}
+            />
+          </Tooltip>
+
+        </div>
+      </div>
+
+      <div className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
+        <div ref={scrollableContentRef} className={styles.scrollableContent}>
+          {selectionPopup.visible && (
+            <div
+              // ... existing code ...
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default ArticleDetail;
+
+// File: src/components/ArticleDetail.module.css
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; /* For AnnotationSidebar absolute positioning */
+  overflow: hidden;
+  transition: margin-right 0.3s ease-in-out;
+}
+
+.scrollableContent {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: margin-right 0.3s ease-in-out; /* 添加过渡效果 */
+}
+
+.mainContentArea.isSidebarVisible .scrollableContent {
+  /* 当侧边栏可见时，给滚动区域一个右边距，把内容往左推 */
+  margin-right: 340px; 
+}
+
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+.sidebar {
+  /*
+    使用 position: absolute 在 ArticleDetail 的容器内定位。
+    如果侧边栏是 "挤入" 模式，其父容器需要是 flex 布局。
+    如果侧边栏是 "浮层" 模式，这套样式也可以工作。
+    我们暂时保持浮层模式的样式，后续在 HomePage 中处理布局切换。
+   */
+  /* position: absolute; */ /* 移除绝对定位，让它参与 flex 布局 */
+  /* top: 0; */
+  /* right: 0; */
+  width: 340px;
+  flex-shrink: 0; /* 防止侧边栏被压缩 */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transform: translateX(100%);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  position: fixed; /* 改为 fixed 定位，相对于视口 */
+  top: 0;
+  right: -340px; /* 初始状态在屏幕外 */
+  transition: right 0.3s ease-in-out;
+}
+
+.sidebar.visible {
+  /* transform: translateX(0); */
+  right: 0; /* 滑入屏幕 */
+}
+
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  // ... existing code ...
+}
+
+.mainContentArea {
+  display: flex;
+  flex: 1;
+  position: relative; 
+  overflow: hidden;
+  /* transition for the push effect */
+  transition: margin-right 0.3s ease-in-out;
+}
+
+/* This new class will be toggled from the component */
+.mainContentArea.isSidebarVisible {
+  /* This is a bit of a trick. Instead of moving the content, we "squish" it by
+     giving the container a negative margin that equals the sidebar width,
+     but the inner content will be pushed by the sidebar's presence.
+     Let's try a different approach, a simpler one.
+     We will make the main area itself a flex container.
+  */
+}
+
+.scrollableContent {
+  flex-grow: 1; /* Takes up all available space */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative; /* For selectionPopup absolute positioning */
+  padding: 1rem 3rem 3rem 3rem;
+  scroll-behavior: smooth;
+  transition: width 0.3s ease-in-out;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  // ... existing code ...
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* When the AnnotationSidebar is visible, it will just "be there" and take up space.
+   No more absolute positioning needed for the "push" effect.
+*/
+.sidebar {
+  width: 340px;
+  flex-shrink: 0; /* Prevent the sidebar from shrinking */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  transition: transform 0.3s ease-in-out;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  /* Start transformed off-screen to the right */
+  transform: translateX(100%);
+}
+
+.sidebar.visible {
+  /* Move back to its original position in the flex container */
+  transform: translateX(0);
+}
+
+/* 自定义高亮 <

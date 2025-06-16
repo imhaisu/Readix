@@ -56,6 +56,31 @@ const SidebarLayout: React.FC = () => {
   const [starredCount, setStarredCount] = useState(0);
   const [readLaterCount, setReadLaterCount] = useState(0);
 
+  // 监听笔记侧边栏的开关事件，实现"专注模式"
+  useEffect(() => {
+    const handleAnnotationSidebarToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isVisible: boolean }>;
+      if (!customEvent.detail) return;
+      
+      const { isVisible } = customEvent.detail;
+      
+      if (siderPanelRef.current) {
+        const isSiderCollapsed = siderPanelRef.current.isCollapsed();
+        if (isVisible && !isSiderCollapsed) {
+          siderPanelRef.current.collapse();
+        } else if (!isVisible && isSiderCollapsed) {
+          siderPanelRef.current.expand();
+        }
+      }
+    };
+
+    document.addEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
+
+    return () => {
+      document.removeEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
+    };
+  }, []); // 空依赖数组，确保只在组件挂载和卸载时运行
+
   // 日志：监控弹窗状态变化
   useEffect(() => {
     console.log(`[SidebarLayout] isDiscoverModalOpen 状态变为: ${isDiscoverModalOpen}`);

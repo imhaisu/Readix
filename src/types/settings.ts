@@ -15,6 +15,7 @@ export interface Settings {
         textColor: string;
         titleColor: string;
         titleFontSize: number;
+        autoMarkAsRead: boolean;
     };
     advanced: {
         maxArticlesPerFeed: number; // 0 for indefinite
@@ -50,6 +51,7 @@ export const defaultSettings: Settings = {
         textColor: '#333333',
         titleColor: '#333333',
         titleFontSize: 24,
+        autoMarkAsRead: true,
     },
     advanced: {
         maxArticlesPerFeed: 0,

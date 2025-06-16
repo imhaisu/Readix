@@ -14,9 +14,9 @@ export const presetFeeds: PresetFeedCategory[] = [
     title: '科技资讯',
     feeds: [
       {
-        name: '少数派',
-        url: 'https://sspai.com/feed',
-        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=sspai.com',
+        name: '虎嗅',
+        url: 'https://www.huxiu.com/rss/0.xml',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=huxiu.com',
       },
       {
         name: '36氪',
@@ -24,35 +24,40 @@ export const presetFeeds: PresetFeedCategory[] = [
         favicon: 'https://www.google.com/s2/favicons?sz=64&domain=36kr.com',
       },
       {
-        name: '爱范儿',
-        url: 'https://www.ifanr.com/feed',
-        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=ifanr.com',
+        name: 'IT之家',
+        url: 'https://www.ithome.com/rss/',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=ithome.com',
       },
       {
-        name: 'Engadget 中国版',
-        url: 'https://cn.engadget.com/rss.xml',
-        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=engadget.com',
-      }
+        name: '极客公园',
+        url: 'https://www.geekpark.net/rss',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=geekpark.net',
+      },
+      {
+        name: '少数派',
+        url: 'https://sspai.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=sspai.com',
+      },
     ],
   },
   {
-    title: '独立博客',
+    title: '编程技术',
     feeds: [
       {
         name: '阮一峰的网络日志',
-        url: 'http://www.ruanyifeng.com/blog/atom.xml',
+        url: 'https://www.ruanyifeng.com/blog/atom.xml',
         favicon: 'https://www.google.com/s2/favicons?sz=64&domain=ruanyifeng.com',
       },
       {
-        name: '月光博客',
-        url: 'https://www.williamlong.info/rss.xml',
-        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=williamlong.info',
+        name: '美团技术团队',
+        url: 'https://tech.meituan.com/feed/',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=meituan.com',
       },
       {
-        name: 'MacinTalk',
-        url: 'https://www.macintosh.cn/feed',
-        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=macintosh.cn',
-      }
+        name: '酷壳',
+        url: 'https://coolshell.cn/feed',
+        favicon: 'https://www.google.com/s2/favicons?sz=64&domain=coolshell.cn',
+      },
     ],
   },
   {

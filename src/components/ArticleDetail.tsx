@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Skeleton, Typography, Tag, Tooltip, Spin, Empty, message } from 'antd';
+import { Button, Skeleton, Typography, Tag, Tooltip, Spin, Empty, message, Modal } from 'antd';
 import { 
   StarOutlined, 
   StarFilled,
@@ -12,16 +12,18 @@ import {
   ArrowLeftOutlined,
   ShareAltOutlined,
   DeleteOutlined,
-  LeftOutlined
+  LeftOutlined,
+  HighlightOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
-import { useDatabase, Article, FeedSource } from '../contexts/DatabaseContext';
+import { useDatabase, Article, FeedSource, Annotation } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { debounce } from '../utils/helpers';
 import styles from './ArticleDetail.module.css';
 import { useNavigate } from 'react-router-dom';
-import UnstarIcon from './icons/UnstarIcon';
+import AnnotationSidebar from './AnnotationSidebar';
 // import BionicReadingToggle from '../components/BionicReadingToggle'; // Temporarily commented out
 
 // const { Title, Text } = Typography; // 移除未使用的 Typography 成员
@@ -41,12 +43,62 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [processedContent, setProcessedContent] = useState<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollableContentRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const navigate = useNavigate();
 
+  const [annotations, setAnnotations] = useState<Annotation[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [autoEditNoteId, setAutoEditNoteId] = useState<string | null>(null);
+  const [pendingAnnotation, setPendingAnnotation] = useState<Annotation | null>(null);
+  const [selectionPopup, setSelectionPopup] = useState<{
+    visible: boolean;
+    top: number;
+    left: number;
+    range: Range | null;
+  }>({
+    visible: false,
+    top: 0,
+    left: 0,
+    range: null,
+  });
+
   const readingSettings = settings.reading;
+
+  const handleShare = () => {
+    if (article) {
+      const shareUrl = article.url;
+      navigator.clipboard.writeText(shareUrl)
+        .then(() => message.success('文章链接已复制到剪贴板'))
+        .catch(() => message.error('复制链接失败'));
+    }
+  };
+
+  const handleDeleteArticle = () => {
+    if (!db || !articleId) return;
+    Modal.confirm({
+      title: '确认删除',
+      content: '确定要删除这篇文章吗？此操作不可撤销。',
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await db.articles.delete(articleId);
+          message.success('文章已删除');
+          onClose?.(); 
+          onArticleModified(articleId, { isHidden: true }); 
+          triggerRefresh();
+        } catch (error) {
+          console.error('删除文章失败:', error);
+          message.error('删除文章失败！');
+        }
+      },
+    });
+  };
 
   const saveScrollPosition = useCallback(async (articleIdToSave: string, position: number) => {
     if (!db || !articleIdToSave) return;
@@ -64,82 +116,96 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     [saveScrollPosition]
   );
 
+  const applyHighlights = useCallback((content: string, annotationsToApply: Annotation[]): string => {
+    let newContent = content;
+    annotationsToApply.forEach(anno => {
+      // 创建一个唯一的 ID，方便后续交互 (滚动、删除等)
+      // 使用全局类名 'customHighlight'，因为它在 CSS 中是 :global 定义的
+      const markTag = `<mark id="annotation-${anno.id}" class="customHighlight">`;
+      
+      // 使用前缀和后缀来精确定位，避免错误替换
+      const searchString = `${anno.prefix}${anno.text}${anno.suffix}`;
+      const replacementString = `${anno.prefix}${markTag}${anno.text}</mark>${anno.suffix}`;
+
+      // 必须在原始的、未被处理过的内容上查找和替换，防止因 <mark> 标签导致 innerText 变化而找不到位置
+      // 这里我们简化处理，直接在 newContent 上替换。在更复杂的场景下，可能需要更鲁棒的定位策略。
+      if (newContent.includes(searchString)) {
+        newContent = newContent.replace(searchString, replacementString);
+      }
+    });
+    return newContent;
+  }, []);
+
   useEffect(() => {
-    if (articleId) {
-      const loadArticleAndProcess = async () => {
-        if (!db) return;
-
-        if (viewMode !== 'web' || !article || article.id !== articleId) {
-          setLoading(true);
-          setArticle(undefined);
-          setSourceTitle(undefined);
-
-          try {
-            const currentArticleData = await db.articles.get(articleId);
-
-            if (currentArticleData) {
-              setArticle(currentArticleData);
-
-              if (viewMode !== 'web' && currentArticleData.isRead === 'false') {
-                await db.articles.update(articleId, { isRead: 'true' });
-                setArticle(prev => prev ? { ...prev, isRead: 'true' } : null);
+    const loadArticle = async () => {
+      if (articleId) {
+        if (db) {
+          if (!db) return;
+  
+          // 仅当文章ID变化或从网页视图切换回来时才完全重新加载
+          if (viewMode !== 'web' || !article || article.id !== articleId) {
+            setLoading(true);
+            setArticle(undefined);
+            setSourceTitle(undefined);
+            setProcessedContent('');
+  
+            try {
+              const currentArticleData = await db.articles.get(articleId);
+  
+              if (currentArticleData) {
+                // 先加载笔记和高亮
+                const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
+                setAnnotations(annos); 
                 
-                if (currentArticleData.sourceId) {
-                  const feed = await db.feeds.get(currentArticleData.sourceId);
-                  if (feed) {
-                    const newUnreadCount = await db.articles.where({ sourceId: currentArticleData.sourceId, isRead: 'false' }).count();
-                    await db.feeds.update(currentArticleData.sourceId, { unreadCount: newUnreadCount });
-                    console.log(`[ArticleDetail autoMarkRead] Feed ${currentArticleData.sourceId} unread count updated to ${newUnreadCount}`);
-                    onArticleModified(articleId, { isRead: 'true' });
-                    triggerRefresh();
-                  }
-                } else {
-                  onArticleModified(articleId, { isRead: 'true' });
-                  triggerRefresh();
+                // 再应用高亮到内容
+                const contentWithHighlights = applyHighlights(currentArticleData.content, annos);
+                setProcessedContent(contentWithHighlights);
+
+                setArticle(currentArticleData);
+  
+                const source = await db.feeds.get(currentArticleData.sourceId);
+                if (source) {
+                  setSourceTitle(source.title);
                 }
-              }
 
-              if (currentArticleData.sourceId) {
-                const feed = await db.feeds.get(currentArticleData.sourceId);
-                setSourceTitle(feed?.title);
+                // 自动标记为已读
+                if (currentArticleData.isRead === 'false' && settings.reading.autoMarkAsRead) {
+                  await db.articles.update(articleId, { isRead: 'true' });
+                  console.log(`文章 ${articleId} 已自动标记为已读。`);
+                }
+              } else {
+                setArticle(null);
               }
-              
-              if (viewMode === 'full' && contentRef.current && currentArticleData.scrollPosition !== undefined && currentArticleData.scrollPosition > 0) {
-                setTimeout(() => {
-                  if (contentRef.current) {
-                    contentRef.current.scrollTop = currentArticleData.scrollPosition!;
-                  }
-                }, 0);
-              } else if (contentRef.current) {
-                contentRef.current.scrollTop = 0;
-              }
-
-            } else {
+            } catch (error) {
+              console.error('加载文章详情或高亮失败:', error);
               setArticle(null);
+            } finally {
+              if (viewMode !== 'web') {
+                setLoading(false);
+              }
             }
-          } catch (error) {
-            console.error('加载文章详情或自动标记已读失败:', error);
-            setArticle(null);
-          } finally {
-            if (viewMode !== 'web') {
-              setLoading(false);
-            }
+          } else if (viewMode === 'web' && article && contentRef.current) {
+            contentRef.current.scrollTop = 0;
+            setLoading(false);
+          } else if (viewMode !== 'web' && article && article.id === articleId) {
+            setLoading(false);
           }
-        } else if (viewMode === 'web' && article && contentRef.current) {
-          contentRef.current.scrollTop = 0;
-          setLoading(false);
-        } else if (viewMode !== 'web' && article && article.id === articleId) {
-          setLoading(false);
         }
-      };
-      loadArticleAndProcess();
-    } else {
-      setArticle(null);
-      setSourceTitle(undefined);
-      setLoading(false);
-      if (contentRef.current) contentRef.current.scrollTop = 0;
-    }
-  }, [db, articleId, viewMode]);
+      } else {
+        setArticle(null);
+        setLoading(false);
+      }
+    };
+
+    loadArticle();
+
+    // 当组件卸载或 articleId 改变时，保存当前滚动位置
+    return () => {
+      if (articleId && scrollableContentRef.current) {
+        saveScrollPosition(articleId, scrollableContentRef.current.scrollTop);
+      }
+    };
+  }, [db, articleId, viewMode, settings.reading.autoMarkAsRead, saveScrollPosition, applyHighlights]);
 
   useEffect(() => {
     const contentElement = contentRef.current;
@@ -265,6 +331,219 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   };
 
+  const loadAnnotations = useCallback(async () => {
+    if (!db || !articleId) return;
+    const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
+    setAnnotations(annos);
+    return annos;
+  }, [db, articleId]);
+
+  const handleSelection = () => {
+    // 如果侧边栏是打开的，并且用户可能是在侧边栏里选择文本，则不显示弹窗
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0) {
+      const range = selection.getRangeAt(0);
+      const container = range.commonAncestorContainer;
+
+      // 检查选区是否在文章内容之内
+      if (scrollableContentRef.current && scrollableContentRef.current.contains(container)) {
+        if (!selection.isCollapsed && selection.toString().trim().length > 0) {
+          const rect = range.getBoundingClientRect();
+          const containerRect = scrollableContentRef.current?.getBoundingClientRect();
+          if (!containerRect) return;
+    
+          // 计算弹窗位置
+          const top = rect.top - containerRect.top + scrollableContentRef.current!.scrollTop - 40;
+          const left = rect.left - containerRect.left + rect.width / 2;
+    
+          setSelectionPopup({ visible: true, top, left, range });
+        } else {
+          setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
+        }
+        return;
+      }
+    }
+    // 如果选区不在文章内部，或者没有选区，则隐藏弹窗
+    setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
+  };
+
+  const handleHighlightClick = async () => {
+    if (!selectionPopup.range || !articleId || !db) return;
+
+    const range = selectionPopup.range;
+    const text = range.toString().trim();
+    if (!text) return;
+
+    // 提取上下文
+    const prefixRange = document.createRange();
+    prefixRange.setStart(range.startContainer, Math.max(0, range.startOffset - 20));
+    prefixRange.setEnd(range.startContainer, range.startOffset);
+    const prefix = prefixRange.toString();
+
+    const suffixRange = document.createRange();
+    suffixRange.setStart(range.endContainer, range.endOffset);
+    suffixRange.setEnd(range.endContainer, Math.min(range.endContainer.textContent?.length || 0, range.endOffset + 20));
+    const suffix = suffixRange.toString();
+
+    const newAnnotation: Annotation = {
+      id: `annotation-${Date.now()}`,
+      articleId: articleId,
+      type: 'highlight',
+      text,
+      prefix,
+      suffix,
+      createdAt: Date.now()
+    };
+
+    try {
+      await db.annotations.add(newAnnotation);
+      await loadAnnotations();
+      setProcessedContent(prevContent => applyHighlights(prevContent, [newAnnotation]));
+      message.success("高亮已保存");
+    } catch (error) {
+      console.error("保存高亮失败:", error);
+      message.error("保存高亮失败！");
+    } finally {
+      window.getSelection()?.removeAllRanges();
+      setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
+    }
+  };
+  
+  const handleNoteClick = async () => {
+    if (!selectionPopup.range || !articleId || !db) return;
+
+    const range = selectionPopup.range;
+    const text = range.toString().trim();
+    if (!text) return;
+
+    // 提取上下文
+    const prefixRange = document.createRange();
+    prefixRange.setStart(range.startContainer, Math.max(0, range.startOffset - 20));
+    prefixRange.setEnd(range.startContainer, range.startOffset);
+    const prefix = prefixRange.toString();
+
+    const suffixRange = document.createRange();
+    suffixRange.setStart(range.endContainer, range.endOffset);
+    suffixRange.setEnd(range.endContainer, Math.min(range.endContainer.textContent?.length || 0, range.endOffset + 20));
+    const suffix = suffixRange.toString();
+
+    const tempAnnotation: Annotation = {
+      id: `pending-${Date.now()}`,
+      articleId: articleId,
+      type: 'note',
+      text,
+      prefix,
+      suffix,
+      noteContent: '',
+      createdAt: Date.now()
+    };
+
+    setPendingAnnotation(tempAnnotation);
+    
+    // 打开侧边栏并自动进入编辑模式
+    if (!isSidebarVisible) {
+      handleToggleSidebar();
+    }
+    setAutoEditNoteId(tempAnnotation.id);
+
+    window.getSelection()?.removeAllRanges();
+    setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
+  };
+  
+  const handleToggleSidebar = () => {
+    const newVisibility = !isSidebarVisible;
+    setIsSidebarVisible(newVisibility);
+    // 派发全局事件，通知 HomePage 调整布局
+    document.dispatchEvent(new CustomEvent('annotationSidebarToggled', {
+      detail: { isVisible: newVisibility }
+    }));
+  };
+
+  const handleSaveNote = async (annotationId: string, content: string) => {
+    if (!db || !articleId) return;
+    try {
+      if (annotationId.startsWith('pending-')) {
+        const newAnnotationData = { ...pendingAnnotation!, noteContent: content, id: `annotation-${Date.now()}` };
+        
+        await db.annotations.add(newAnnotationData);
+        setPendingAnnotation(null);
+        
+        setProcessedContent(prevContent => applyHighlights(prevContent, [newAnnotationData]));
+        message.success("笔记已创建");
+      } else {
+        await db.annotations.update(annotationId, { noteContent: content });
+        message.success("笔记已保存");
+      }
+      await loadAnnotations();
+    } catch (error) {
+      console.error("保存笔记失败:", error);
+      message.error("保存笔记失败！");
+    }
+  };
+
+  const handleDeleteAnnotation = async (annotationId: string) => {
+    if (!db || !articleId) return;
+    try {
+      await db.annotations.delete(annotationId);
+      
+      // 从 DOM 中移除高亮
+      const highlightElement = document.getElementById(`annotation-${annotationId}`);
+      if (highlightElement) {
+        const fragment = document.createDocumentFragment();
+        while (highlightElement.firstChild) {
+          fragment.appendChild(highlightElement.firstChild);
+        }
+        highlightElement.parentNode?.replaceChild(fragment, highlightElement);
+      }
+      
+      message.success("删除成功");
+      await loadAnnotations(); // 重新加载以更新侧边栏
+    } catch (error) {
+      console.error("删除失败:", error);
+      message.error("删除失败！");
+    }
+  };
+
+  const handleScrollToAnnotation = (annotationId: string) => {
+    const element = document.getElementById(annotationId);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const handleAutoEditApplied = () => {
+    setAutoEditNoteId(null);
+  };
+
+  const renderArticleContent = () => {
+    const contentToRender = processedContent || article?.content;
+    if (article) {
+      return (
+        <div
+          ref={contentRef}
+          className={styles.articleContent}
+          style={{
+            fontSize: `${readingSettings.fontSize}px`,
+            lineHeight: readingSettings.lineHeight,
+            fontFamily: readingSettings.fontFamily,
+          }}
+          dangerouslySetInnerHTML={{ __html: contentToRender || '' }}
+        />
+      );
+    }
+    return null;
+  };
+
+  const articleStyle = {
+    '--article-bg-color': readingSettings.backgroundColor,
+    '--article-text-color': readingSettings.textColor,
+    '--article-title-color': readingSettings.titleColor,
+    '--article-font-size-body': `${readingSettings.fontSize}px`,
+    '--article-font-size-title': `${readingSettings.titleFontSize}px`,
+    '--article-line-height-body': readingSettings.lineHeight,
+    fontFamily: readingSettings.fontFamily,
+  } as React.CSSProperties;
+
   if (loading && (!article || viewMode !== 'web')) {
     return (
       <div className={styles.loadingContainer}>
@@ -320,30 +599,19 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     );
   }
 
-  const renderArticleContent = () => {
-    const contentToRender = article.content;
-    return (
-      <div
-        ref={viewMode === 'full' ? contentRef : null}
-        className={`${styles.articleContent}`}
-        dangerouslySetInnerHTML={{ __html: contentToRender || '' }}
-      />
-    );
-  };
-
-  const articleStyle = {
-    '--article-bg-color': readingSettings.backgroundColor,
-    '--article-text-color': readingSettings.textColor,
-    '--article-title-color': readingSettings.titleColor,
-    '--article-font-size-body': `${readingSettings.fontSize}px`,
-    '--article-font-size-title': `${readingSettings.titleFontSize}px`,
-    '--article-line-height-body': readingSettings.lineHeight,
-    fontFamily: readingSettings.fontFamily,
-  } as React.CSSProperties;
-
   return (
-    <div className={styles.container} style={articleStyle}>
+    <div className={styles.articleDetailContainer} style={articleStyle}>
       <div className={`${styles.fixedControlsBar} ${isScrolled ? styles.scrolled : ''}`}>
+        <Tooltip title="关闭">
+          <Button
+            type="text"
+            shape="circle"
+            icon={<CloseOutlined />}
+            onClick={onClose}
+            className={styles.toolbarButton}
+          />
+        </Tooltip>
+        
         <div className={styles.headerControls}>
           <Tooltip title={article.isRead === 'true' ? "标记为未读" : "标记为已读"}>
             <Button 
@@ -353,16 +621,24 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               className={styles.toolbarButton}
             />
           </Tooltip>
-          <Tooltip title={article.isStarred === 'true' ? "取消收藏" : "收藏"}>
+
+          <Tooltip title={article.isStarred === 'true' ? '取消收藏' : '添加收藏'}>
             <Button
+              type="text"
               shape="circle"
-              icon={article.isStarred === 'true' ? <UnstarIcon /> : <StarOutlined />}
+              icon={
+                article.isStarred === 'true' ? (
+                  <StarFilled />
+                ) : (
+                  <StarOutlined />
+                )
+              }
               onClick={handleToggleStar}
               className={styles.toolbarButton}
-              type="text"
             />
           </Tooltip>
-          <Tooltip title={article.isReadLater === 'true' ? "从稍后阅读移除" : "添加到稍后阅读"}>
+
+          <Tooltip title={article.isReadLater === 'true' ? '从"稍后读"移除' : '添加到"稍后读"'}>
             <Button
               type="text"
               icon={article.isReadLater === 'true' ? <ClockCircleFilled /> : <ClockCircleOutlined />}
@@ -370,7 +646,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               className={styles.toolbarButton}
             />
           </Tooltip>
+
           <div className={styles.controlSeparator}></div>
+
+          <Tooltip title="笔记和高亮">
+            <Button type="text" shape="circle" icon={<HighlightOutlined />} onClick={handleToggleSidebar} className={styles.toolbarButton}/>
+          </Tooltip>
+
           <Tooltip title="访问原址">
             <Button 
               type="text" 
@@ -379,6 +661,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               className={styles.toolbarButton}
             />
           </Tooltip>
+          
           <Tooltip title="浏览器打开">
             <Button 
               type="text" 
@@ -387,24 +670,62 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               className={styles.toolbarButton}
             />
           </Tooltip>
+
+          <Tooltip title="分享">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ShareAltOutlined />}
+              onClick={handleShare}
+              className={styles.toolbarButton}
+            />
+          </Tooltip>
         </div>
       </div>
 
-      <div className={styles.content} ref={scrollableContentRef}>
-        <article className={styles.article}>
-          <header className={styles.header}>
-            {article.publishDate && (
-              <p className={styles.publishDate}>
-                {format(new Date(article.publishDate), 'EEEE, MMMM d, yyyy \'at\' HH:mm', { locale: zhCN })}
-              </p>
-            )}
-            <h1 className={styles.title}>{article.title}</h1>
-            {sourceTitle && <p className={styles.sourceName}>{sourceTitle}</p>}
-          </header>
+      <div className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
+        <div ref={scrollableContentRef} className={styles.scrollableContent}>
+          {selectionPopup.visible && (
+            <div
+              className={styles.selectionPopup}
+              style={{ top: `${selectionPopup.top}px`, left: `${selectionPopup.left}px` }}
+            >
+              <Button size="small" onMouseDown={(e) => { e.preventDefault(); handleHighlightClick(); }}>高亮</Button>
+              <Button size="small" style={{ marginLeft: 8 }} onMouseDown={(e) => { e.preventDefault(); handleNoteClick(); }}>笔记</Button>
+            </div>
+          )}
           
-          {renderArticleContent()}
+          <article className={styles.article}>
+            <header className={styles.header}>
+              {article.publishDate && (
+                <p className={styles.publishDate}>
+                  {format(new Date(article.publishDate), 'EEEE, MMMM d, yyyy \'at\' HH:mm')}
+                </p>
+              )}
+              <h1 className={styles.title}>{article.title}</h1>
+              {sourceTitle && <p className={styles.sourceName}>{sourceTitle}</p>}
+            </header>
+            
+            {renderArticleContent()}
+          </article>
+        </div>
 
-        </article>
+        {isSidebarVisible && (
+          <AnnotationSidebar
+            isVisible={isSidebarVisible}
+            annotations={annotations}
+            pendingAnnotation={pendingAnnotation}
+            onClose={() => {
+              handleToggleSidebar();
+              setPendingAnnotation(null);
+            }}
+            onSaveNote={handleSaveNote}
+            onDelete={handleDeleteAnnotation}
+            onItemClick={handleScrollToAnnotation}
+            autoEditNoteId={autoEditNoteId}
+            onAutoEditApplied={handleAutoEditApplied}
+          />
+        )}
       </div>
     </div>
   );

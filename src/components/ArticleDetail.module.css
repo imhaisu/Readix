@@ -1,4 +1,4 @@
-.container {
+.articleDetailContainer {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -8,11 +8,12 @@
 }
 
 .fixedControlsBar {
-  padding: 8px 24px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--article-bg-color);
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .headerControls {
@@ -48,17 +49,61 @@
   color: var(--text-primary); /* Darken icon on hover */
 }
 
-.content {
+.mainContentArea {
+  display: flex;
   flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.scrollableContent {
+  flex-grow: 1;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
-  background-color: var(--bg-primary);
-  padding-top: 48px;
-  padding-bottom: 3em;
+  padding: 1rem 3rem 3rem 3rem;
   scroll-behavior: smooth;
-  position: relative;
-  padding: 1rem 0;
+}
+
+/* 浮动工具条 */
+.selectionPopup {
+  position: absolute;
+  background: #222;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 6px;
+  z-index: 1050;
+  display: flex;
+  gap: 8px;
+  transform: translateX(-50%);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+.selectionPopup button {
+  pointer-events: auto;
+}
+
+/* 浮动工具条下方的小三角 */
+.selectionPopup::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #222;
+}
+
+/* 自定义高亮 <mark> 标签样式 */
+:global(.customHighlight) {
+  background-color: #ffe58f;
+  border-radius: 3px;
+  padding: 2px 1px;
 }
 
 .loadingContainer,
@@ -73,8 +118,7 @@
 }
 
 .article {
-  /* No direct styles needed here, it's a semantic wrapper */
-  padding: 0 3rem; /* Add some padding for smaller screens where margins might collapse */
+  padding: 0;
 }
 
 .header {
@@ -110,7 +154,7 @@
 
 .metaLine,
 .metaSeparator {
-  display: none; /* Hide old meta display elements */
+  display: none;
 }
 
 .meta {
@@ -170,7 +214,7 @@
 .articleContent blockquote,
 .articleContent figure,
 .articleContent pre {
-  margin-bottom: 0.8em; /* 减少段落等块级元素下间距 */
+  margin-bottom: 0.8em;
 }
 
 .articleContent ul,
@@ -180,13 +224,13 @@
 
 .articleContent li > ul,
 .articleContent li > ol {
-  margin-bottom: 0.3em; /* 减少列表项内嵌列表的下间距 */
+  margin-bottom: 0.3em;
 }
 
 .articleContent img {
   max-width: 100%;
   height: auto;
-  margin: 1.2em auto; /* 减少图片上下间距 */
+  margin: 1.2em auto;
   display: block;
   border-radius: 4px;
 }
@@ -242,7 +286,7 @@
 .articleContent hr {
   border: 0;
   border-top: 1px solid var(--border-color);
-  margin: 1.5em 0; /* 减少 HR 上下间距 */
+  margin: 1.5em 0;
 }
 
 .articleContent pre {
@@ -366,7 +410,7 @@
   flex-direction: column;
   height: 100%; 
   overflow: hidden; 
-  background-color: var(--bg-primary); /* 添加背景色以防透明 */
+  background-color: var(--bg-primary);
 }
 
 .webViewHeader {
@@ -375,7 +419,7 @@
   padding: 8px 12px; 
   background-color: var(--bg-secondary, #f0f2f5); 
   border-bottom: 1px solid var(--border-color, #e8e8e8); 
-  flex-shrink: 0; /* 防止头部被压缩 */
+  flex-shrink: 0;
 }
 
 .webViewBackButton {
@@ -398,11 +442,10 @@
 }
 
 .webFrameFullPage {
-  flex-grow: 1;    /* 主要靠这个伸展 */
-  flex-shrink: 1;  /* 允许缩小 */
-  flex-basis: auto;  /* 自动基准大小 */
-  min-height: 0;   /* 关键：允许 flex item 缩小到0，而不是被其内容撑开 */
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: auto;
+  min-height: 0;
   border: none; 
   width: 100%;
-  /* 移除固定的 height: 100% */
 } 

@@ -1,0 +1,119 @@
+/* src/components/AnnotationSidebar.module.css */
+.sidebar {
+  /*
+    使用 position: absolute 在 ArticleDetail 的容器内定位。
+    如果侧边栏是 "挤入" 模式，其父容器需要是 flex 布局。
+    如果侧边栏是 "浮层" 模式，这套样式也可以工作。
+    我们暂时保持浮层模式的样式，后续在 HomePage 中处理布局切换。
+   */
+  width: 340px; /* 固定宽度 */
+  height: 100%;
+  background-color: #ffffff;
+  border-left: 1px solid #e8e8e8;
+  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.05);
+  z-index: 1001; /* 确保在文章内容之上 */
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0; /* 防止在 flex 布局中被压缩 */
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.annotationList {
+  padding: 8px 16px;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.annotationItem {
+  margin-bottom: 16px;
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #f0f0f0;
+  transition: background-color 0.2s;
+}
+
+.annotationItem:hover {
+  background-color: #fafafa;
+}
+
+.quote {
+  font-style: italic;
+  color: #595959;
+  border-left: 3px solid #1890ff;
+  padding-left: 12px;
+  margin: 0 0 8px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: pointer;
+}
+
+.noteContent {
+  color: #262626;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 14px;
+}
+
+.noteEditor {
+  margin-top: 8px;
+}
+
+.noteEditor textarea {
+  width: 100%;
+  min-height: 80px;
+  border-radius: 4px;
+  border: 1px solid #d9d9d9;
+  padding: 8px;
+  margin-bottom: 8px;
+  resize: vertical;
+}
+
+.editorActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.actions {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+
+.editButton,
+.deleteButton {
+  color: #8c8c8c;
+  cursor: pointer;
+  font-size: 14px;
+}
+.editButton:hover,
+.deleteButton:hover {
+  color: #1677ff; /* Ant Design Primary Color */
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  color: #8c8c8c;
+  padding: 20px;
+  text-align: center;
+} 

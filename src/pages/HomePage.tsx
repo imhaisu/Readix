@@ -79,6 +79,32 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
 
+  // 监听笔记侧边栏的开关事件，实现"专注模式"
+  useEffect(() => {
+    const handleAnnotationSidebarToggle = (event: Event) => {
+      const customEvent = event as CustomEvent<{ isVisible: boolean }>;
+      if (!customEvent.detail) return;
+
+      const { isVisible } = customEvent.detail;
+      
+      // 只在三栏布局下才折叠文章列表
+      if (settings.general.layoutMode === 'three-column' && listPanelRef.current) {
+        const isListCollapsed = listPanelRef.current.isCollapsed();
+        if (isVisible && !isListCollapsed) {
+          listPanelRef.current.collapse();
+        } else if (!isVisible && isListCollapsed) {
+          listPanelRef.current.expand();
+        }
+      }
+    };
+
+    document.addEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
+
+    return () => {
+      document.removeEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
+    };
+  }, [settings.general.layoutMode]); // 依赖布局模式，以便在切换布局后行为正确
+
   // 新增一个 ref 来跟踪初始刷新是否已完成
   const initialRefreshDoneRef = useRef(false);
 
@@ -202,6 +228,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     setSelectedArticleId(articleId);
     setArticleDetailViewMode('full'); 
   }, []);
+
+  const handleCloseArticle = () => {
+    setSelectedArticleId(null);
+  };
 
   const handleArticleModified = (articleId: string, changes: Partial<Article>) => {
     setLastUpdatedArticleInfo({ id: articleId, changes });
@@ -638,8 +668,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                 articleId={selectedArticleId} 
                 viewMode={articleDetailViewMode} 
                 onChangeViewMode={handleArticleDetailViewModeChange}
-                onClose={() => setSelectedArticleId(null)} 
-                onNavigate={(nextOrPrevArticleId: string) => setSelectedArticleId(nextOrPrevArticleId)}
+                onClose={handleCloseArticle}
                 onArticleModified={handleArticleModified}
               />
             ) : (

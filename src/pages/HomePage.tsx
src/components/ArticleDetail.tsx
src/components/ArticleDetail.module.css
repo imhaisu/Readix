@@ -1,0 +1,47 @@
+import React, { useCallback } from 'react';
+import { useRouter } from 'next/router';
+import { useDatabase, Article, FeedSource, Annotation } from '../contexts/DatabaseContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { Panel } from 'react-resizable-panels';
+import { Empty } from 'antd';
+import { WelcomePage } from './WelcomePage';
+import { ArticleDetail } from '../components/ArticleDetail';
+
+const HomePage: React.FC = () => {
+  const router = useRouter();
+  const { articles, setSelectedArticleId, selectedArticleId, setArticleDetailViewMode, articleDetailViewMode } = useDatabase();
+  const { handleAddFirstFeed } = useSettings();
+
+  const handleArticleSelect = useCallback((articleId: string) => {
+    setSelectedArticleId(articleId);
+    setArticleDetailViewMode('full'); 
+  }, []);
+
+  const handleCloseArticle = () => {
+    setSelectedArticleId(null);
+  };
+
+  const handleArticleModified = (articleId: string, changes: Partial<Article>) => {
+    setLastUpdatedArticleInfo({ id: articleId, changes });
+  };
+
+  return (
+    <div>
+      <Panel ref={detailPanelRef} defaultSize={70} minSize={30} id="detail-panel">
+        {selectedArticleId ? (
+          <ArticleDetail
+            articleId={selectedArticleId}
+            viewMode={articleDetailViewMode}
+            onChangeViewMode={handleArticleDetailViewModeChange}
+            onArticleModified={handleArticleModified}
+            onClose={handleCloseArticle}
+          />
+        ) : (
+          <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
+        )}
+      </Panel>
+    </div>
+  );
+};
+
+export default HomePage; 
