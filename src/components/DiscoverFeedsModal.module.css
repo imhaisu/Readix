@@ -1,0 +1,80 @@
+/* All styles are now handled by Ant Design components */
+
+.category {
+  margin-bottom: 24px;
+}
+
+.category-title {
+  font-size: 1.2rem;
+  font-weight: 500;
+  margin-bottom: 12px;
+  color: #555555; /* 较深的灰色标题 */
+}
+
+.feeds-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+
+.feed-item {
+  display: flex;
+  align-items: center;
+  background-color: #fafafa; /* 极浅灰色背景 */
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid #e8e8e8;
+  transition: background-color 0.2s;
+}
+
+.feed-item:hover {
+  background-color: #f0f0f0; /* 悬浮时变深一点 */
+}
+
+.feed-favicon {
+  width: 24px;
+  height: 24px;
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.feed-name {
+  flex-grow: 1;
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-button {
+  padding: 6px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.9rem;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.add-button {
+  background-color: #1890ff; /* Ant Design 主色蓝 */
+  color: white;
+  border-color: #1890ff;
+}
+
+.add-button:hover {
+  background-color: #40a9ff;
+  border-color: #40a9ff;
+}
+
+.remove-button {
+  background-color: #f0f0f0; /* 浅灰色背景 */
+  color: #555;
+  border-color: #d9d9d9;
+}
+
+.remove-button:hover {
+  background-color: #e0e0e0;
+  border-color: #bfbfbf;
+} 

@@ -194,13 +194,38 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   };
 
   const handleRenameGroupOk = async () => {
-    if (!db || !renamingGroupData || !newGroupName.trim()) return;
+    if (!db || !renamingGroupData || !newGroupName.trim()) {
+      return;
+    }
+
+    const trimmedName = newGroupName.trim();
+    if (trimmedName === renamingGroupData.currentName) {
+      setIsRenameGroupModalVisible(false);
+      return;
+    }
+
     try {
-      await db.groups.update(renamingGroupData.id, { name: newGroupName.trim() });
-      triggerDbRefresh();
-      message.success("分组已重命名");
+      // 检查新分组名是否已存在
+      const existingGroup = await db.groups.where('name').equalsIgnoreCase(trimmedName).first();
+      if (existingGroup && existingGroup.id !== renamingGroupData.id) {
+        message.error('该分组名称已存在，请使用其他名称。');
+        return;
+      }
+
+      // 执行更新
+      const updatedCount = await db.groups.update(renamingGroupData.id, { name: trimmedName });
+      
+      // 根据影响的行数判断是否成功
+      if (updatedCount > 0) {
+        triggerDbRefresh();
+        message.success("分组已重命名");
+      } else {
+        // 这种情况很少见，但可能发生（例如，在另一处删除了该分组）
+        message.error("重命名失败，未找到该分组。");
+      }
     } catch (error) {
-      message.error("重命名失败");
+      console.error("重命名分组失败:", error);
+      message.error("重命名失败，发生未知错误。");
     } finally {
       setIsRenameGroupModalVisible(false);
       setRenamingGroupData(null);

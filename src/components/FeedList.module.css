@@ -98,6 +98,8 @@
 /* Group-specific styles */
 .groupItem {
   font-weight: bold;
+  /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
+  /* margin-top: 8px; */ /* 取消这条线带来的间距 */
 }
 
 .expanderIcon {
@@ -126,6 +128,7 @@
   flex-shrink: 0;
   width: 16px !important;
   height: 16px !important;
+  margin-right: 2px !important;
 }
 
 /* This is the key for indenting feeds within a group */
@@ -210,16 +213,15 @@
 
 /* Group-specific styles */
 .groupItem {
-  border-top: 1px solid var(--border-color);
-  margin-top: 8px;
-  padding-top: 8px;
+  /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
+  /* margin-top: 8px; */ /* 取消这条线带来的间距 */
 }
 
 /* 第一个分组去掉顶部边框和间距 */
 .feedListContainer > div:first-child .groupItem {
-  border-top: none;
-  margin-top: 0;
-  padding-top: 0;
+  /* border-top: none; */ /* 取消这条线 */
+  /* margin-top: 0; */ /* 取消这条线带来的间距 */
+  /* padding-top: 0; */ /* 取消这条线带来的间距 */
 }
 
 /* Feed-specific styles */
@@ -246,9 +248,9 @@
 .leftPart {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px !important; /* 从 6px 调整为 4px，进一步缩小间距 */
   min-width: 0;
-  flex-grow: 1; /* Key for right part alignment */
+  flex-grow: 1; /* This is the key fix for alignment */
 }
 
 /* Indent ONLY for feeds inside a group */
@@ -840,14 +842,14 @@
 
 /* 为分组行增加顶部边框作为分隔线 */
 .groupRow {
-  border-top: 1px solid var(--border-color);
+  /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
   margin-top: 4px; /* 与上一个条目或分组隔开 */
 }
 
 /* 第一个分组不需要上边框和边距 */
 .feedTree .ant-tree-treenode:first-child .groupRow {
   margin-top: 0;
-  border-top: none;
+  /* border-top: none; */ /* 取消这条线 */
 }
 
 .groupRowLeft, .feedRowLeft {
@@ -917,14 +919,13 @@
 }
 
 .groupItem {
-  border-top: 1px solid var(--border-color);
-  margin-top: 8px;
-  padding-top: 8px;
+  /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
+  /* margin-top: 8px; */ /* 取消这条线带来的间距 */
 }
 .groupContainer:first-child .groupItem {
-  border-top: none;
-  margin-top: 0;
-  padding-top: 0;
+  /* border-top: none; */ /* 取消这条线 */
+  /* margin-top: 0; */ /* 取消这条线带来的间距 */
+  /* padding-top: 0; */ /* 取消这条线带来的间距 */
 }
 
 .feedItem.rootFeedItem {
@@ -945,7 +946,7 @@
 .leftPart {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px !important; /* 从 6px 调整为 4px，进一步缩小间距 */
   min-width: 0;
   flex-grow: 1; /* This is the key fix for alignment */
 }

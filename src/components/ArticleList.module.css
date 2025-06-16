@@ -605,19 +605,19 @@
 .sourceInfoListNew { /* 图标和来源名称容器 */
   display: flex;
   align-items: center;
-  margin-bottom: 4px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 2px !important; /* 设置更紧凑的垂直间距 */
 }
 
 .sourceIconListNew {
-  width: 18px !important; /* 缩小图标 */
-  height: 18px !important;
-  min-width: 18px !important; /* 防止压缩 */
+  width: 16px;
+  height: 16px;
+  min-width: 16px !important; /* 防止压缩 */
   font-size: 16px !important; /* Antd Icon 尺寸 */
-  line-height: 18px !important;
-  margin-right: 6px;
+  line-height: 16px !important;
   border-radius: 3px;
-  /* 对于 img 类型的图标，可以加上 object-fit */
-  /* img { object-fit: contain; } */
+  margin-right: 5px !important; /* 设置更紧凑的水平间距 */
 }
 
 .sourceNameListNew {
@@ -912,19 +912,18 @@
 }
 
 .mainTextContentV5 {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center; /* 垂直居中文本内容 */
-  min-width: 0; /* Flex item A 重要：防止文本内容过长时不换行而挤压图片 */
+  gap: 2px !important; /* 减小标题和上方元信息的垂直间距 */
+  flex-grow: 1;
+  min-width: 0;
 }
 
 /* 左侧主文本区域容器 */
 .itemHeaderV5 {
   display: flex;
   align-items: center;
-  margin-bottom: 4px;            /* 头部和下方标题/摘要的间距 */
-  font-size: 12px;               /* 头部文字大小 */
+  gap: 6px !important; /* 减小来源图标、名称、时间之间的间距 */
 }
 
 .sourceIconV5 {

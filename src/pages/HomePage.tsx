@@ -458,6 +458,16 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
   }, [isPullRefreshing, handlePullToRefresh]);
 
+  useEffect(() => {
+    // 这个 effect 专门用于响应全局刷新信号
+    // 当 refreshTrigger 变化时 (通常意味着后台数据已更新)，
+    // 我们通过更新 key 来强制 ArticleList 组件重新获取和渲染数据。
+    if (refreshTrigger > 0) { // 仅在实际触发后执行，避免初始加载时触发
+      console.log(`[HomePage] Global refresh triggered (refreshTrigger: ${refreshTrigger}). Forcing ArticleList to re-render.`);
+      handleManualListRefresh();
+    }
+  }, [refreshTrigger]);
+
   // Initial loading state for the entire page if db isn't ready or basic feeds haven't loaded yet
   // This is a simplified check; you might have a more robust loading indicator in a real app
   if (!db || (feeds.length === 0 && !(feedId || groupId || filter || isTodayView))) {

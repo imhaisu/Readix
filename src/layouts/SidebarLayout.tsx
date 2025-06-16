@@ -19,6 +19,7 @@ import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'rea
 import FeedList from '../components/FeedList';
 import AddFeedModal from '../components/AddFeedModal';
 import AddGroupModal from '../components/AddGroupModal';
+import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { FeedSource, Group, Article as DbArticle } from '../contexts/DatabaseContext';
@@ -40,6 +41,7 @@ const SidebarLayout: React.FC = () => {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
   const [showAddGroupModal, setShowAddGroupModal] = useState(false);
+  const [isDiscoverModalOpen, setIsDiscoverModalOpen] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -53,6 +55,11 @@ const SidebarLayout: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [starredCount, setStarredCount] = useState(0);
   const [readLaterCount, setReadLaterCount] = useState(0);
+
+  // 日志：监控弹窗状态变化
+  useEffect(() => {
+    console.log(`[SidebarLayout] isDiscoverModalOpen 状态变为: ${isDiscoverModalOpen}`);
+  }, [isDiscoverModalOpen]);
 
   useEffect(() => {
     if (dbInitialized && settingsInitialized && db && !startupTasksDone.current) {
@@ -126,14 +133,21 @@ const SidebarLayout: React.FC = () => {
     }
 
     const reloadFeedsForRefresh = async () => {
-      console.log(`[SidebarLayout] refreshTrigger changed to ${refreshTrigger}. Reloading feeds for UI update.`);
+      console.log(`[SidebarLayout] refreshTrigger changed to ${refreshTrigger}. Reloading feeds and groups for UI update.`);
       try {
-        const feedsData = await db.feeds.toArray();
-        console.log('[SidebarLayout] Fetched feeds after refresh trigger. Count:', feedsData.length, 'IDs:', feedsData.map(f => f.id));
+        const [feedsData, groupsData] = await Promise.all([
+          db.feeds.toArray(),
+          db.groups.toArray()
+        ]);
+
+        console.log('[SidebarLayout] Fetched data after refresh trigger. Feeds count:', feedsData.length, 'Groups count:', groupsData.length);
         
         // 处理订阅源图标
         const processedFeedsData = await processFeedIcons(feedsData);
+        
         setFeeds(processedFeedsData);
+        setGroups(groupsData.sort((a, b) => a.order - b.order));
+
       } catch (error) {
         console.error('[SidebarLayout] Error reloading feeds after refresh trigger:', error);
       }
@@ -421,21 +435,6 @@ const SidebarLayout: React.FC = () => {
     setGroups(updatedGroups.sort((a,b) => a.order - b.order));
   };
 
-  const addMenuItems = [
-    {
-      key: 'addFeed',
-      icon: <PlusOutlined />,
-      label: '添加订阅源',
-      onClick: () => setShowAddFeedModal(true)
-    },
-    {
-      key: 'addGroup',
-      icon: <FolderAddOutlined />,
-      label: '添加分组',
-      onClick: () => setShowAddGroupModal(true)
-    }
-  ];
-
   const handleSiderCollapseToggle = (collapsed: boolean) => {
     setIsPanelCollapsed(collapsed);
     if (collapsed) {
@@ -473,7 +472,29 @@ const SidebarLayout: React.FC = () => {
               />
             </Tooltip>
           ) : (
-            <Dropdown menu={{ items: addMenuItems }} trigger={['click']} placement="bottomRight">
+            <Dropdown
+              overlay={
+                <Menu>
+                  <Menu.Item key="add-feed" icon={<EditOutlined />} onClick={() => setShowAddFeedModal(true)}>
+                    添加订阅源
+                  </Menu.Item>
+                  <Menu.Item key="add-group" icon={<FolderAddOutlined />} onClick={() => setShowAddGroupModal(true)}>
+                    添加分组
+                  </Menu.Item>
+                  <Menu.Item 
+                    key="discover-feeds" 
+                    icon={<AppstoreOutlined />} 
+                    onClick={() => {
+                      console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
+                      setIsDiscoverModalOpen(true);
+                    }}
+                  >
+                    发现订阅源
+                  </Menu.Item>
+                </Menu>
+              }
+              trigger={['click']}
+            >
               <Button
                 type="text"
                 icon={<PlusOutlined />}
@@ -598,6 +619,11 @@ const SidebarLayout: React.FC = () => {
           existingGroups={groups}
         />
       )}
+      <DiscoverFeedsModal 
+        isOpen={isDiscoverModalOpen} 
+        onClose={() => setIsDiscoverModalOpen(false)}
+        existingFeeds={feeds} 
+      />
     </PanelGroup>
   );
 };
