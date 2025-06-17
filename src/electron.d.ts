@@ -28,7 +28,8 @@ declare global {
       saveSettings: (settings: any) => void;
       
       // 订阅源、文章、内容抓取
-      fetchAndParseFeed: (url: string) => Promise<any>; // 替换为具体的 Feed 解析结果类型
+      parseRssFeed: (url: string) => Promise<any>;
+      getRssFeedInfo: (url: string) => Promise<any>;
       addFeed: (feedData: FeedSource) => Promise<any>; // 替换为具体的返回值类型
       deleteFeed: (feedId: string) => Promise<void>;
       updateFeed: (feedId: string, updates: Partial<FeedSource>) => Promise<void>;
@@ -42,7 +43,7 @@ declare global {
       // 系统交互
       shellOpenExternal: (url: string) => Promise<void>;
       getSystemIcon: (type: 'folder' | 'file') => Promise<string>; // 假设返回 base64 字符串
-      readIconFile: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+      getLocalIconBase64: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
 
       // 通信与事件监听
       onMessage: (channel: string, callback: (...args: any[]) => void) => () => void;

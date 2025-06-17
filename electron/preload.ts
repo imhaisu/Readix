@@ -30,7 +30,8 @@ contextBridge.exposeInMainWorld('electron', {
   saveSettings: (settings: any) => ipcRenderer.send('save-settings', settings),
   
   // 订阅源、文章、内容抓取
-  fetchAndParseFeed: (url: string) => ipcRenderer.invoke('fetch-and-parse-feed', url),
+  parseRssFeed: (url: string) => ipcRenderer.invoke('parse-rss-feed', url),
+  getRssFeedInfo: (url: string) => ipcRenderer.invoke('get-rss-feed-info', url),
   addFeed: (feedData: FeedSource) => ipcRenderer.invoke('add-feed', feedData),
   deleteFeed: (feedId: string) => ipcRenderer.invoke('delete-feed', feedId),
   updateFeed: (feedId: string, updates: Partial<FeedSource>) => ipcRenderer.invoke('update-feed', feedId, updates),
@@ -44,7 +45,7 @@ contextBridge.exposeInMainWorld('electron', {
   // 系统交互
   shellOpenExternal: (url: string) => ipcRenderer.invoke('shell-open-external', url),
   getSystemIcon: (type: 'folder' | 'file') => ipcRenderer.invoke('get-system-icon', type),
-  readIconFile: (filePath: string) => ipcRenderer.invoke('read-icon-file', filePath),
+  getLocalIconBase64: (filePath: string) => ipcRenderer.invoke('get-local-icon-base64', filePath),
 
   // 通信与事件监听
   onMessage: (channel: string, callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => {

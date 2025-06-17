@@ -144,6 +144,10 @@
   padding: 2px 1px;
 }
 
+:global(.customHighlight:hover) {
+  cursor: pointer;
+}
+
 .loadingContainer,
 .errorContainer {
   padding: 24px;

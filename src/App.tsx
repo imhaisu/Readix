@@ -12,20 +12,21 @@ import { useDatabase } from './contexts/DatabaseContext';
 import { TitleBarProvider, useTitleBar } from './contexts/TitleBarContext';
 import { FilterProvider } from './contexts/FilterContext';
 import PulsingLoader from './components/PulsingLoader';
+import { LayoutProvider } from './contexts/LayoutContext';
 
 const AppContent: React.FC = () => {
-  const { initialized } = useSettings();
+  const { isInitialized } = useSettings();
   const { initDatabase } = useDatabase();
   const { customControls } = useTitleBar();
 
-  console.log('[App] AppContent 渲染，initialized:', initialized);
+  console.log('[App] AppContent 渲染，isInitialized:', isInitialized);
 
   useEffect(() => {
     console.log('[App] 开始初始化数据库...');
     initDatabase();
   }, [initDatabase]);
 
-  if (!initialized) {
+  if (!isInitialized) {
     console.log('[App] 设置未初始化，显示加载中...');
     return <PulsingLoader />;
   }
@@ -59,9 +60,11 @@ const App: React.FC = () => {
   return (
     <FilterProvider>
       <TitleBarProvider>
-        <div className={`app-container ${theme === 'dark' ? 'dark-theme' : ''}`}>
-          <AppContent />
-        </div>
+        <LayoutProvider>
+          <div className={`app-container ${theme === 'dark' ? 'dark-theme' : ''}`}>
+            <AppContent />
+          </div>
+        </LayoutProvider>
       </TitleBarProvider>
     </FilterProvider>
   );

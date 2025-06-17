@@ -1,23 +1,41 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Layout, Tabs, Form, InputNumber, Switch, Button, Space, Typography, message, Select, Slider, ColorPicker } from 'antd';
+import { Layout, Tabs, Form, InputNumber, Switch, Button, Space, Typography, message, Select, Slider, ColorPicker, Input, Divider } from 'antd';
 import { SaveOutlined, ReloadOutlined, CloseOutlined, ExportOutlined, ImportOutlined } from '@ant-design/icons';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import styles from './SettingsPage.module.css';
 import { Settings } from '../types/settings';
+import { FeedSource } from '../contexts/DatabaseContext';
 
 const { Header, Content } = Layout;
 const { TabPane } = Tabs;
 const { Title, Text } = Typography;
 const { Option } = Select;
 
+const generateOpml = (feeds: FeedSource[]): string => {
+  let opmlDoc = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n    <title>Readix Subscriptions</title>\n  </head>\n  <body>\n`;
+  feeds.forEach(feed => {
+    opmlDoc += `    <outline type="rss" text="${feed.title}" title="${feed.title}" xmlUrl="${feed.url}" />\n`;
+  });
+  opmlDoc += `  </body>\n</opml>`;
+  return opmlDoc;
+};
+
 const SettingsPage: React.FC = () => {
-  const { settings, updateGeneralSettings, updateReadingSettings, updateAdvancedSettings, resetSettings } = useSettings();
+  const { settings, updateGeneralSettings, updateReadingSettings, updateAdvancedSettings, resetSettings, isInitialized } = useSettings();
   const navigate = useNavigate();
   const [appForm] = Form.useForm();
   const [readingForm] = Form.useForm();
   const { db, triggerRefresh } = useDatabase();
+  const [importing, setImporting] = useState(false);
+
+  useEffect(() => {
+    if (isInitialized) {
+      appForm.setFieldsValue({ ...settings.general, ...settings.advanced });
+      readingForm.setFieldsValue(settings.reading);
+    }
+  }, [settings, isInitialized, appForm, readingForm]);
 
   const handleAppSubmit = (values: any) => {
     const generalSettings = {
@@ -46,165 +64,51 @@ const SettingsPage: React.FC = () => {
 
   const handleExportOpml = async () => {
     if (!db) {
-      message.error('数据库未准备好，请稍后再试。');
+      message.error('数据库未初始化，无法导出。');
       return;
     }
-  
     try {
       const feeds = await db.feeds.toArray();
-      const groups = await db.groups.toArray();
+      const opmlDoc = generateOpml(feeds);
       
-      let opmlDoc = `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head>\n    <title>Readix Subscriptions</title>\n  </head>\n  <body>\n`;
-  
-      const groupedFeeds = new Set();
-      for (const group of groups) {
-        opmlDoc += `    <outline text="${group.name}" title="${group.name}">\n`;
-        const feedsInGroup = feeds.filter(f => f.groupId === group.id);
-        feedsInGroup.forEach(feed => {
-          opmlDoc += `      <outline type="rss" text="${feed.title}" title="${feed.title}" xmlUrl="${feed.url}" />\n`;
-          if (feed.id) groupedFeeds.add(feed.id);
-        });
-        opmlDoc += `    </outline>\n`;
-      }
-  
-      const ungroupedFeeds = feeds.filter(f => !f.groupId || !groupedFeeds.has(f.id!));
-      ungroupedFeeds.forEach(feed => {
-        opmlDoc += `    <outline type="rss" text="${feed.title}" title="${feed.title}" xmlUrl="${feed.url}" />\n`;
-      });
-  
-      opmlDoc += `  </body>\n</opml>`;
-  
-      if (window.electronAPI && window.electronAPI.exportOpml) {
-        const result = await window.electronAPI.exportOpml(opmlDoc);
-        if (result.success) {
-          message.success(`订阅已成功导出到: ${result.path}`);
-        } else if (!result.canceled) {
-          message.error(`导出失败: ${result.error}`);
-        }
+      if (window.electron && window.electron.exportOpml) {
+        await window.electron.exportOpml(opmlDoc);
       } else {
-        message.error('未找到导出功能，请确保您在Electron环境内。');
+        message.error('导出功能仅在Electron环境中可用。');
       }
-    } catch (error) {
-      console.error('生成OPML文件时出错:', error);
-      message.error('生成OPML文件时出错。');
+    } catch (error: any) {
+      message.error(`导出失败: ${error.message}`);
     }
   };
-  
+
   const handleImportOpml = async () => {
-    if (!db) {
-      message.error('数据库未准备好，请稍后再试。');
-      return;
-    }
-  
-    if (!window.electronAPI || !window.electronAPI.importOpml) {
-      message.error('未找到导入功能，请确保您在Electron环境内。');
-      return;
-    }
-  
-    const result = await window.electronAPI.importOpml();
-  
-    if (!result.success || result.canceled) {
-      if (result.error && !result.canceled) {
-        message.error(`导入失败: ${result.error}`);
-      }
-      return;
-    }
-  
-    const opmlContent = result.content;
-    if (!opmlContent) {
-      message.error('未能读取文件内容。');
-      return;
-    }
-  
     try {
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(opmlContent, 'text/xml');
-      const body = xmlDoc.querySelector('body');
-      if (!body) {
-        message.error('无效的 OPML 文件：缺少 <body> 标签。');
+      setImporting(true);
+      message.info('正在导入OPML文件...');
+
+      if (!window.electron || !window.electron.importOpml) {
+        message.error('未找到导入功能，请确保在Electron环境中运行。');
+        setImporting(false);
         return;
       }
-  
-      const existingFeeds = await db.feeds.toArray();
-      const existingFeedUrls = new Set(existingFeeds.map(f => f.url));
-      let newFeedsCount = 0;
-      let newGroupsCount = 0;
-  
-      const processOutline = async (outlineElement: Element, parentGroupId?: number) => {
-        const xmlUrl = outlineElement.getAttribute('xmlUrl');
-        const text = outlineElement.getAttribute('text') || outlineElement.getAttribute('title');
-        const children = Array.from(outlineElement.children).filter(
-          (c) => c.tagName.toLowerCase() === 'outline'
-        );
+      
+      const result = await window.electron.importOpml();
 
-        // It's a feed if it has an xmlUrl
-        if (xmlUrl) {
-          if (!existingFeedUrls.has(xmlUrl)) {
-            await db.feeds.add({
-              url: xmlUrl,
-              title: text || '无标题',
-              groupId: parentGroupId,
-              updateFrequency: 30,
-              lastUpdated: new Date(0),
-              viewMode: 'full',
-              unreadCount: 0,
-              active: true,
-              bionicReading: false,
-            });
-            existingFeedUrls.add(xmlUrl);
-            newFeedsCount++;
-          }
-        } 
-        // It's a group if it has a title and child outline elements
-        else if (text && children.length > 0) {
-          let group = await db.groups.where({ name: text }).first();
-          let currentGroupId: number;
-          if (!group) {
-            const order = (await db.groups.count()) + 1;
-            const newGroupId = await db.groups.add({
-              name: text,
-              collapsed: false,
-              order: order,
-            });
-            currentGroupId = newGroupId as number;
-            newGroupsCount++;
-          } else {
-            currentGroupId = group.id!;
-          }
-
-          for (const child of children) {
-            await processOutline(child, currentGroupId);
-          }
-        } 
-        // It could also be a container for ungrouped feeds
-        else {
-          for (const child of children) {
-            await processOutline(child, parentGroupId); // Pass the parent's group id
-          }
-        }
-      };
-  
-      for (const outline of Array.from(body.children)) {
-        if (outline.tagName.toLowerCase() === 'outline') {
-          await processOutline(outline);
-        }
+      if (result && !result.success) {
+        message.error(result.error || '导入失败，未知错误。');
       }
-  
-      let successMessage = '';
-      if (newFeedsCount > 0) successMessage += `成功导入 ${newFeedsCount} 个新订阅源。`;
-      if (newGroupsCount > 0) successMessage += ` 创建了 ${newGroupsCount} 个新分组。`;
-  
-      if (successMessage) {
-        message.success(successMessage.trim());
-        triggerRefresh();
-      } else {
-        message.info('没有发现新的订阅源或分组可以导入。');
-      }
-    } catch (error) {
-      console.error('解析OPML文件时出错:', error);
-      message.error('解析OPML文件时出错，文件格式可能不正确。');
+      // Success message is handled by main process after feeds are added.
+      triggerRefresh();
+    } catch (error: any) {
+      message.error(`导入失败: ${error.message}`);
+    } finally {
+      setImporting(false);
     }
   };
+
+  if (!isInitialized) {
+    return <div>加载设置中...</div>;
+  }
 
   return (
     <Layout className={styles.settingsLayout}>
@@ -252,10 +156,10 @@ const SettingsPage: React.FC = () => {
                   help="将您的所有订阅源导出为 OPML 文件，以便在其他阅读器或本应用中进行备份和恢复。"
                 >
                   <Space>
-                    <Button icon={<ExportOutlined />} onClick={handleExportOpml}>
+                    <Button icon={<ExportOutlined />} onClick={handleExportOpml} loading={importing}>
                       导出为 OPML
                     </Button>
-                    <Button icon={<ImportOutlined />} onClick={handleImportOpml}>
+                    <Button icon={<ImportOutlined />} onClick={handleImportOpml} loading={importing}>
                       从 OPML 导入
                     </Button>
                   </Space>

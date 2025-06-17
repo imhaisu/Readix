@@ -27,6 +27,7 @@ import { FeedSource, Article } from '../contexts/DatabaseContext';
 import { getTodayRange } from '../utils/helpers';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
+import { useLayout } from '../contexts/LayoutContext';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
@@ -53,7 +54,7 @@ const viewIcons: { [key: string]: React.ReactNode } = {
 
 const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const { db, refreshTrigger, triggerRefresh, isInitialized: dbInitialized, initialLoadRefreshed, setInitialLoadRefreshed } = useDatabase();
-  const { settings, initialized: settingsInitialized } = useSettings();
+  const { settings, isInitialized: settingsInitialized } = useSettings();
   const { filter: activeListFilter, setFilter } = useFilter();
   const navigate = useNavigate();
   const { feedId, groupId } = useParams<{ feedId?: string; groupId?: string }>();
@@ -78,6 +79,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const listPanelRef = useRef<ImperativePanelHandle>(null);
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
+  const { isArticleListVisible } = useLayout();
 
   // 监听笔记侧边栏的开关事件，实现"专注模式"
   useEffect(() => {
@@ -223,6 +225,17 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         }
     }
   }, [selectedArticleId, settings.general.layoutMode]);
+
+  useEffect(() => {
+    if (listPanelRef.current) {
+        const isCollapsed = listPanelRef.current.isCollapsed();
+        if (isArticleListVisible && isCollapsed) {
+            listPanelRef.current.expand();
+        } else if (!isArticleListVisible && !isCollapsed) {
+            listPanelRef.current.collapse();
+        }
+    }
+  }, [isArticleListVisible]);
 
   const handleArticleSelect = useCallback((articleId: string) => {
     setSelectedArticleId(articleId);

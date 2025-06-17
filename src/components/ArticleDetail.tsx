@@ -260,6 +260,46 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     loadArticleRef.current = loadArticle;
   }, [loadArticle]);
 
+  // 在组件挂载时调用 loadArticle
+  useEffect(() => {
+    loadArticle();
+  }, [articleId, loadArticle]);
+
+  useEffect(() => {
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      
+      if (target.tagName === 'MARK' && target.classList.contains('customHighlight')) {
+        const annotationId = target.id.replace('annotation-', '');
+        
+        // 1. 设置状态以显示侧边栏，并传递标注ID
+        setIsSidebarVisible(true);
+        setAutoEditNoteId(annotationId);
+
+        // 2. 如果侧边栏之前是隐藏的，则发送通知，以便其他组件（如主布局）可以响应
+        if (!isSidebarVisible) {
+            document.dispatchEvent(new CustomEvent('annotationSidebarToggled', {
+              detail: { 
+                isVisible: true,
+                articleId: articleId
+              }
+            }));
+        }
+      }
+    };
+
+    contentElement.addEventListener('click', handleClick);
+
+    return () => {
+      if (contentElement) {
+        contentElement.removeEventListener('click', handleClick);
+      }
+    };
+  }, [articleId, processedContent, isSidebarVisible]); // 添加 isSidebarVisible 作为依赖
+
   // 处理获取全文的点击事件，包含智能提示逻辑
   const handleFetchAndUpgradeArticle = useCallback(async (articleToUpgrade: Article) => {
     // 如果已经有笔记，则弹窗确认
@@ -679,6 +719,18 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [selectionPopup.visible]);
+
+  const restoreScrollPosition = useCallback(() => {
+    if (article && articleId && scrollableContentRef.current) {
+      // 确保在内容实际渲染并且滚动条出现后执行
+      const currentScrollableRef = scrollableContentRef.current;
+      setTimeout(() => {
+        if (db) {
+          db.articles.update(articleId, { scrollPosition: currentScrollableRef.scrollTop });
+        }
+      }, 100);
+    }
+  }, [article, articleId, db]);
 
   if (viewMode === 'web') {
     if (!articleId || !article || !article.url) {

@@ -32,7 +32,7 @@ const AddFeedModal: React.FC<AddFeedModalProps> = ({ visible, onOk, onCancel, gr
     }
     setLoading(true);
     try {
-      const parsedFeed = await window.electron.fetchAndParseFeed(url);
+      const parsedFeed = await window.electron.parseRssFeed(url);
       if (parsedFeed && parsedFeed.title) {
         setFeedInfo({ title: parsedFeed.title, url });
         form.setFieldsValue({

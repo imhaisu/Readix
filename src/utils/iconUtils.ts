@@ -20,9 +20,9 @@ export const processIconUrl = async (iconUrl: string | undefined): Promise<strin
   // 如果是file://协议的本地路径，需要转换为base64
   if (iconUrl.startsWith('file://')) {
     // 检查是否在Electron环境中
-    if (typeof window !== 'undefined' && window.electronAPI && window.electronAPI.getLocalIconBase64) {
+    if (typeof window !== 'undefined' && window.electron && window.electron.getLocalIconBase64) {
       try {
-        const result = await window.electronAPI.getLocalIconBase64(iconUrl);
+        const result = await window.electron.getLocalIconBase64(iconUrl);
         if (result.success && result.data) {
           return result.data;
         } else {
@@ -35,7 +35,7 @@ export const processIconUrl = async (iconUrl: string | undefined): Promise<strin
       }
     } else {
       // 如果不在Electron环境中或API不可用，返回undefined
-      console.warn('electronAPI.getLocalIconBase64 not available, skipping file:// icon processing');
+      console.warn('electron.getLocalIconBase64 not available, skipping file:// icon processing');
       return undefined;
     }
   }

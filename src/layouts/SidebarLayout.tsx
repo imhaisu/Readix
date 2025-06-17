@@ -29,13 +29,14 @@ import { getTodayRange } from '../utils/helpers';
 import { processFeedIcons } from '../utils/iconUtils';
 import { useFilter } from '../contexts/FilterContext';
 import styles from './SidebarLayout.module.css';
+import { useLayout } from '../contexts/LayoutContext';
 
 const { Content } = Layout;
 
 const SidebarLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, initialized: settingsInitialized } = useSettings();
+  const { settings, isInitialized: settingsInitialized } = useSettings();
   const { db, refreshTrigger, isInitialized: dbInitialized, triggerRefresh } = useDatabase();
   const { filter } = useFilter();
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
@@ -55,6 +56,9 @@ const SidebarLayout: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [starredCount, setStarredCount] = useState(0);
   const [readLaterCount, setReadLaterCount] = useState(0);
+
+  const { isFeedListVisible, setIsFeedListVisible, setIsArticleListVisible } = useLayout();
+  const layoutRef = useRef<HTMLDivElement>(null);
 
   // 监听笔记侧边栏的开关事件，实现"专注模式"
   useEffect(() => {
@@ -80,6 +84,53 @@ const SidebarLayout: React.FC = () => {
       document.removeEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
     };
   }, []); // 空依赖数组，确保只在组件挂载和卸载时运行
+
+  useEffect(() => {
+    const container = layoutRef.current;
+    if (!container) return;
+
+    const observer = new ResizeObserver(entries => {
+        if (entries[0]) {
+            const width = entries[0].contentRect.width;
+            
+            // Define min widths
+            const minWidthCol1 = 250; // px
+            const minWidthCol2 = 350; // px
+            const minWidthCol3 = 450; // px
+
+            const minWidthCols23 = minWidthCol2 + minWidthCol3;
+            const minWidthAllCols = minWidthCol1 + minWidthCol2 + minWidthCol3;
+
+            if (width < minWidthCols23) {
+                setIsFeedListVisible(false);
+                setIsArticleListVisible(false);
+            } else if (width < minWidthAllCols) {
+                setIsFeedListVisible(false);
+                setIsArticleListVisible(true);
+            } else {
+                setIsFeedListVisible(true);
+                setIsArticleListVisible(true);
+            }
+        }
+    });
+
+    observer.observe(container);
+
+    return () => {
+        observer.unobserve(container);
+    };
+  }, [setIsFeedListVisible, setIsArticleListVisible]);
+
+  useEffect(() => {
+    if (siderPanelRef.current) {
+        const isCollapsed = siderPanelRef.current.isCollapsed();
+        if (isFeedListVisible && isCollapsed) {
+            siderPanelRef.current.expand();
+        } else if (!isFeedListVisible && !isCollapsed) {
+            siderPanelRef.current.collapse();
+        }
+    }
+  }, [isFeedListVisible]);
 
   // 日志：监控弹窗状态变化
   useEffect(() => {
@@ -470,186 +521,188 @@ const SidebarLayout: React.FC = () => {
   };
 
   return (
-    <PanelGroup direction="horizontal" className={styles.layoutContainer_rH}>
-      <Panel
-        ref={siderPanelRef}
-        defaultSize={20}
-        minSize={15}
-        maxSize={35}
-        collapsible={true}
-        collapsedSize={0}
-        onCollapse={() => handleSiderCollapseToggle(true)}
-        onExpand={() => handleSiderCollapseToggle(false)}
-        id="sider-main-panel"
-        className={styles.sider}
-      >
-        <div className={styles.siderHeader}>
-          <div className={styles.siderTitle}>
-            {!isPanelCollapsed && <h3>Readix</h3>}
-          </div>
-          {isPanelCollapsed ? (
-            <Tooltip title="添加" placement="right">
-              <Button
-                type="text"
-                icon={<PlusOutlined />}
-                onClick={() => setShowAddFeedModal(true)}
-                className={styles.addButton}
-              />
-            </Tooltip>
-          ) : (
-            <Dropdown
-              overlay={
-                <Menu>
-                  <Menu.Item key="add-feed" icon={<EditOutlined />} onClick={() => setShowAddFeedModal(true)}>
-                    添加订阅源
-                  </Menu.Item>
-                  <Menu.Item key="add-group" icon={<FolderAddOutlined />} onClick={() => setShowAddGroupModal(true)}>
-                    添加分组
-                  </Menu.Item>
-                  <Menu.Item 
-                    key="discover-feeds" 
-                    icon={<AppstoreOutlined />} 
-                    onClick={() => {
-                      console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
-                      setIsDiscoverModalOpen(true);
-                    }}
-                  >
-                    发现订阅源
-                  </Menu.Item>
-                </Menu>
-              }
-              trigger={['click']}
-            >
-              <Button
-                type="text"
-                icon={<PlusOutlined />}
-                className={styles.addButton}
-              />
-            </Dropdown>
-          )}
-        </div>
-
-        <Menu
-          mode="inline"
-          selectedKeys={[getSelectedKey()]}
-          className={styles.menu}
-          inlineCollapsed={isPanelCollapsed}
-          items={[
-            {
-              key: 'home',
-              icon: <HomeOutlined />,
-              label: (
-                <div className={styles.menuItemContainer}>
-                  <span>今日</span>
-                  {todayCount > 0 && <span className={styles.menuItemBadge}>{todayCount}</span>}
-                </div>
-              ),
-              onClick: () => {
-                if (location.pathname === '/') {
-                  navigate('/', { replace: true }); 
-                } else {
-                  navigate('/');
+    <Layout ref={layoutRef} className={styles.sidebarLayout}>
+      <PanelGroup direction="horizontal" className={styles.layoutContainer_rH}>
+        <Panel
+          ref={siderPanelRef}
+          defaultSize={20}
+          minSize={15}
+          maxSize={35}
+          collapsible={true}
+          collapsedSize={0}
+          onCollapse={() => handleSiderCollapseToggle(true)}
+          onExpand={() => handleSiderCollapseToggle(false)}
+          id="sider-main-panel"
+          className={styles.sider}
+        >
+          <div className={styles.siderHeader}>
+            <div className={styles.siderTitle}>
+              {!isPanelCollapsed && <h3>Readix</h3>}
+            </div>
+            {isPanelCollapsed ? (
+              <Tooltip title="添加" placement="right">
+                <Button
+                  type="text"
+                  icon={<PlusOutlined />}
+                  onClick={() => setShowAddFeedModal(true)}
+                  className={styles.addButton}
+                />
+              </Tooltip>
+            ) : (
+              <Dropdown
+                overlay={
+                  <Menu>
+                    <Menu.Item key="add-feed" icon={<EditOutlined />} onClick={() => setShowAddFeedModal(true)}>
+                      添加订阅源
+                    </Menu.Item>
+                    <Menu.Item key="add-group" icon={<FolderAddOutlined />} onClick={() => setShowAddGroupModal(true)}>
+                      添加分组
+                    </Menu.Item>
+                    <Menu.Item 
+                      key="discover-feeds" 
+                      icon={<AppstoreOutlined />} 
+                      onClick={() => {
+                        console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
+                        setIsDiscoverModalOpen(true);
+                      }}
+                    >
+                      发现订阅源
+                    </Menu.Item>
+                  </Menu>
                 }
-              }
-            },
-            {
-              key: 'all',
-              icon: <AppstoreOutlined />,
-              label: (
-                <div className={styles.menuItemContainer}>
-                  <span>所有</span>
-                  {allCount > 0 && <span className={styles.menuItemBadge}>{allCount}</span>}
-                </div>
-              ),
-              onClick: () => navigate('/all')
-            },
-            {
-              key: 'readlater',
-              icon: <ClockCircleOutlined />,
-              label: (
-                <div className={styles.menuItemContainer}>
-                  <span>稍后读</span>
-                  {readLaterCount > 0 && <span className={styles.menuItemBadge}>{readLaterCount}</span>}
-                </div>
-              ),
-              onClick: () => navigate('/readlater')
-            }
-          ]}
-        />
-
-        <div className={styles.feedsContainer}>
-          <div className={`${styles.feedsHeader} ${isPanelCollapsed ? styles.feedsHeaderCollapsed : ''}`}>
-            {!isPanelCollapsed && (
-              <span className={styles.feedsTitle}>订阅</span>
+                trigger={['click']}
+              >
+                <Button
+                  type="text"
+                  icon={<PlusOutlined />}
+                  className={styles.addButton}
+                />
+              </Dropdown>
             )}
-            <Tooltip title="刷新全部">
-              <Button 
-                type="text" 
-                icon={<ReloadOutlined spin={refreshing} />} 
-                size="small"
-                onClick={() => handleRefreshAll(false)}
-                disabled={refreshing || feeds.length === 0}
-              />
-            </Tooltip>
           </div>
-          <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
-        </div>
 
-        <div className={`${styles.siderFooter} ${isPanelCollapsed ? styles.siderFooterCollapsed : ''}`}>
-          {isPanelCollapsed ? (
-            <Tooltip title="设置" placement="right">
+          <Menu
+            mode="inline"
+            selectedKeys={[getSelectedKey()]}
+            className={styles.menu}
+            inlineCollapsed={isPanelCollapsed}
+            items={[
+              {
+                key: 'home',
+                icon: <HomeOutlined />,
+                label: (
+                  <div className={styles.menuItemContainer}>
+                    <span>今日</span>
+                    {todayCount > 0 && <span className={styles.menuItemBadge}>{todayCount}</span>}
+                  </div>
+                ),
+                onClick: () => {
+                  if (location.pathname === '/') {
+                    navigate('/', { replace: true }); 
+                  } else {
+                    navigate('/');
+                  }
+                }
+              },
+              {
+                key: 'all',
+                icon: <AppstoreOutlined />,
+                label: (
+                  <div className={styles.menuItemContainer}>
+                    <span>所有</span>
+                    {allCount > 0 && <span className={styles.menuItemBadge}>{allCount}</span>}
+                  </div>
+                ),
+                onClick: () => navigate('/all')
+              },
+              {
+                key: 'readlater',
+                icon: <ClockCircleOutlined />,
+                label: (
+                  <div className={styles.menuItemContainer}>
+                    <span>稍后读</span>
+                    {readLaterCount > 0 && <span className={styles.menuItemBadge}>{readLaterCount}</span>}
+                  </div>
+                ),
+                onClick: () => navigate('/readlater')
+              }
+            ]}
+          />
+
+          <div className={styles.feedsContainer}>
+            <div className={`${styles.feedsHeader} ${isPanelCollapsed ? styles.feedsHeaderCollapsed : ''}`}>
+              {!isPanelCollapsed && (
+                <span className={styles.feedsTitle}>订阅</span>
+              )}
+              <Tooltip title="刷新全部">
+                <Button 
+                  type="text" 
+                  icon={<ReloadOutlined spin={refreshing} />} 
+                  size="small"
+                  onClick={() => handleRefreshAll(false)}
+                  disabled={refreshing || feeds.length === 0}
+                />
+              </Tooltip>
+            </div>
+            <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
+          </div>
+
+          <div className={`${styles.siderFooter} ${isPanelCollapsed ? styles.siderFooterCollapsed : ''}`}>
+            {isPanelCollapsed ? (
+              <Tooltip title="设置" placement="right">
+                <Button
+                  type="text"
+                  icon={<SettingOutlined />}
+                  onClick={() => navigate('/settings')}
+                  className={`${styles.settingsButton} ${styles.settingsButtonCollapsed}`}
+                />
+              </Tooltip>
+            ) : (
               <Button
                 type="text"
                 icon={<SettingOutlined />}
                 onClick={() => navigate('/settings')}
-                className={`${styles.settingsButton} ${styles.settingsButtonCollapsed}`}
-              />
-            </Tooltip>
-          ) : (
-            <Button
-              type="text"
-              icon={<SettingOutlined />}
-              onClick={() => navigate('/settings')}
-              className={styles.settingsButton}
-            >
-              设置
-            </Button>
-          )}
-        </div>
-      </Panel>
+                className={styles.settingsButton}
+              >
+                设置
+              </Button>
+            )}
+          </div>
+        </Panel>
 
-      <PanelResizeHandle className={styles.siderResizeHandle_rH} />
+        <PanelResizeHandle className={styles.siderResizeHandle_rH} />
 
-      <Panel defaultSize={80} minSize={30}>
-        <Layout className={styles.contentLayout_rH}>
-          <Content className={styles.content_rH}>
-            <Outlet />
-          </Content>
-        </Layout>
-      </Panel>
+        <Panel defaultSize={80} minSize={30}>
+          <Layout className={styles.contentLayout_rH}>
+            <Content className={styles.content_rH}>
+              <Outlet />
+            </Content>
+          </Layout>
+        </Panel>
 
-      {showAddFeedModal && (
-        <AddFeedModal
-          visible={showAddFeedModal}
-          onCancel={() => setShowAddFeedModal(false)}
-          onSuccess={handleAddFeedSuccess}
-          groups={groups}
+        {showAddFeedModal && (
+          <AddFeedModal
+            visible={showAddFeedModal}
+            onCancel={() => setShowAddFeedModal(false)}
+            onOk={handleAddFeedSuccess}
+            groups={groups}
+          />
+        )}
+        {showAddGroupModal && (
+          <AddGroupModal
+            visible={showAddGroupModal}
+            onCancel={() => setShowAddGroupModal(false)}
+            onSuccess={handleAddGroupSuccess}
+            existingGroups={groups}
+          />
+        )}
+        <DiscoverFeedsModal 
+          isOpen={isDiscoverModalOpen} 
+          onClose={() => setIsDiscoverModalOpen(false)}
+          existingFeeds={feeds} 
         />
-      )}
-      {showAddGroupModal && (
-        <AddGroupModal
-          visible={showAddGroupModal}
-          onCancel={() => setShowAddGroupModal(false)}
-          onSuccess={handleAddGroupSuccess}
-          existingGroups={groups}
-        />
-      )}
-      <DiscoverFeedsModal 
-        isOpen={isDiscoverModalOpen} 
-        onClose={() => setIsDiscoverModalOpen(false)}
-        existingFeeds={feeds} 
-      />
-    </PanelGroup>
+      </PanelGroup>
+    </Layout>
   );
 };
 

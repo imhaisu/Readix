@@ -5,13 +5,13 @@ import { Settings, defaultSettings } from '../types/settings';
 // 设置上下文类型
 interface SettingsContextType {
   settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => void;
+  updateSettings: (newSettings: Partial<Settings>, isSilent?: boolean) => void;
   updateGeneralSettings: (newSettings: Partial<Settings['general']>) => void;
   updateReadingSettings: (newSettings: Partial<Settings['reading']>) => void;
   updateAdvancedSettings: (newSettings: Partial<Settings['advanced']>) => void;
   updateReadLaterSettings: (newSettings: Partial<Settings['readLater']>) => void;
   resetSettings: () => void;
-  initialized: boolean;
+  isInitialized: boolean;
 }
 
 // 创建上下文
@@ -37,21 +37,18 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
     const initializeSettings = async () => {
       console.log('[SettingsContext] 开始初始化设置...');
-      console.log('[SettingsContext] window.electronAPI 是否存在:', !!window.electronAPI);
+      console.log('[SettingsContext] window.electron 是否存在:', !!window.electron);
       
-      if (window.electronAPI) {
-        console.log('[SettingsContext] 使用 Electron API 获取设置 (异步)');
+      if (window.electron) {
+        console.log('[SettingsContext] 使用 Electron Store 获取设置');
         try {
-          // 现在是异步调用
-          const savedSettings = await window.electronAPI.getSettings();
-          console.log('[SettingsContext] 从 Electron 获取的设置:', savedSettings);
-          if (savedSettings) {
-            const mergedSettings = deepMerge(defaultSettings, savedSettings);
-            console.log('[SettingsContext] 合并后的设置:', mergedSettings);
-            setSettings(mergedSettings);
+          const savedSettings = await window.electron.getSettings();
+          if (savedSettings && Object.keys(savedSettings).length > 0) {
+            console.log('[SettingsContext] 从 Electron Store 加载的设置:', savedSettings);
+            setSettings(savedSettings);
           }
         } catch (error) {
-          console.error('[SettingsContext] 从 Electron API 获取设置时出错:', error);
+          console.error('[SettingsContext] 从 Electron Store 获取设置时出错:', error);
         }
       } else {
         console.log('[SettingsContext] 使用 localStorage 获取设置');
@@ -77,14 +74,14 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
 
   // 保存设置到存储
   const saveSettings = (newSettings: Settings) => {
-    if (window.electronAPI) {
-      window.electronAPI.saveSettings(newSettings);
+    if (window.electron) {
+      window.electron.saveSettings(newSettings);
     } else {
       localStorage.setItem('settings', JSON.stringify(newSettings));
     }
   };
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
+  const updateSettings = (newSettings: Partial<Settings>, isSilent?: boolean) => {
     const updatedSettings = deepMerge(settings, newSettings);
     setSettings(updatedSettings);
     saveSettings(updatedSettings);
@@ -139,25 +136,11 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     updateAdvancedSettings,
     updateReadLaterSettings,
     resetSettings,
-    initialized
+    isInitialized: initialized
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 };
-
-// 为 window 添加 electronAPI 类型 (此声明已移至 src/electron.d.ts)
-/*
-declare global {
-  interface Window {
-    electronAPI?: {
-      getSettings: () => any;
-      saveSettings: (settings: any) => void;
-      restartApp: () => void;
-      onMessage: (callback: (event: any, message: any) => void) => void;
-    };
-  }
-}
-*/
 
 // 自定义钩子，用于组件中获取设置上下文
 export const useSettings = (): SettingsContextType => {

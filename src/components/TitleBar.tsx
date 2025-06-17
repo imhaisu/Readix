@@ -15,49 +15,48 @@ interface TitleBarProps {
 
 const TitleBar: React.FC<TitleBarProps> = ({ customControls }) => {
   const [isMaximized, setIsMaximized] = useState(false);
-  const [platform, setPlatform] = useState<NodeJS.Platform | null>(null);
+  const [platform, setPlatform] = useState<'darwin' | 'win32' | 'linux' | null>(null);
 
   useEffect(() => {
-    const checkMaximized = async () => {
-      if (window.electronWindowAPI) {
-        const maximized = await window.electronWindowAPI.isMaximized();
-        setIsMaximized(maximized);
-      }
-    };
-    checkMaximized();
-
-    const fetchPlatform = async () => {
-      if (window.electronAPI && window.electronAPI.getPlatform) {
+    const checkPlatform = async () => {
+      if (window.electron && window.electron.getPlatform) {
         try {
-          const currentPlatform = await window.electronAPI.getPlatform();
+          const currentPlatform = await window.electron.getPlatform();
           setPlatform(currentPlatform);
         } catch (error) {
-          console.error('Failed to get platform:', error);
+          console.error("Failed to get platform:", error);
         }
       }
     };
-    fetchPlatform();
+
+    const checkMaximized = async () => {
+      if (window.electron && window.electron.windowControls) {
+        try {
+          const maximized = await window.electron.windowControls.isMaximized();
+          setIsMaximized(maximized);
+        } catch (error) {
+          console.error("Failed to check if window is maximized:", error);
+        }
+      }
+    };
+
+    checkPlatform();
+    checkMaximized();
+
+    const removeListener = window.electron?.onMessage('window-state-changed', (_event, state) => {
+      if (state.isMaximized !== undefined) {
+        setIsMaximized(state.isMaximized);
+      }
+    });
+
+    return () => {
+      removeListener?.();
+    };
   }, []);
 
-  const handleMinimize = () => {
-    if (window.electronWindowAPI) {
-      window.electronWindowAPI.minimize();
-    }
-  };
-
-  const handleMaximize = async () => {
-    if (window.electronWindowAPI) {
-      await window.electronWindowAPI.maximize();
-      const maximized = await window.electronWindowAPI.isMaximized();
-      setIsMaximized(maximized);
-    }
-  };
-
-  const handleClose = () => {
-    if (window.electronWindowAPI) {
-      window.electronWindowAPI.close();
-    }
-  };
+  const handleMinimize = () => window.electron?.windowControls.minimize();
+  const handleMaximize = () => window.electron?.windowControls.maximize();
+  const handleClose = () => window.electron?.windowControls.close();
 
   const titleBarStyleOverrides: React.CSSProperties = platform === 'darwin' 
     ? { 

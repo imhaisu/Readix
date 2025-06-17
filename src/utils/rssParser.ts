@@ -9,12 +9,12 @@ import { generateUniqueId } from './helpers';
  * @returns 解析后的文章列表
  */
 export const fetchRssFeed = async (feedSource: FeedSource): Promise<Article[]> => {
-  if (!window.electronAPI) {
+  if (!window.electron) {
     console.error('Electron API 不可用');
     return [];
   }
   try {
-    const result = await window.electronAPI.parseRssFeed(feedSource.url);
+    const result = await window.electron.parseRssFeed(feedSource.url);
     if (!result || !result.success || !result.data) {
       console.error(`解析RSS源失败 (来自主进程): ${feedSource.url}`, result?.error);
       return [];
@@ -124,12 +124,12 @@ export const refreshAllFeeds = async (
  * @returns 源信息 (包含 title, url, iconUrl)
  */
 export const getFeedInfo = async (url: string): Promise<Partial<FeedSource> | null> => {
-  if (!window.electronAPI) {
+  if (!window.electron) {
     console.error('Electron API 不可用');
     return null;
   }
   try {
-    const result = await window.electronAPI.getRssFeedInfo(url);
+    const result = await window.electron.getRssFeedInfo(url);
     if (!result || !result.success || !result.data) {
       console.error(`获取RSS源信息失败 (来自主进程): ${url}`, result?.error);
       throw new Error(result?.error || '无法获取该RSS源信息');
