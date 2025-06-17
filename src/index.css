@@ -77,8 +77,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  /* Unified Firefox Scrollbar */
-  scrollbar-width: none; /* 直接隐藏 Firefox 滚动条 */
+  /* 移除全局滚动条隐藏规则 */
+  /* scrollbar-width: none; */
   /* scrollbar-color 在 scrollbar-width: none 时不再需要 */
   /* scrollbar-color: var(--scrollbar-thumb-hover-color) transparent; */
 }
@@ -92,22 +92,19 @@ html, body, #root {
   transition: background-color 0.3s, color 0.3s;
 }
 
-/* Unified Webkit Scrollbar Styles */
+/* 移除全局滚动条隐藏规则 */
+/* 
 ::-webkit-scrollbar {
-  width: 1px; /* 保持一个极小值，以确保滚动功能，但几乎不可见 */
-  height: 1px; /* 保持一个极小值 */
+  width: 1px; 
+  height: 1px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: transparent !important; /* 强制始终透明 */
-  /* border-radius: 3px; */ /* 透明时圆角无意义 */
+  background: transparent !important;
 }
-/* 移除 hover 状态，因为希望始终不可见 */
-/* ::-webkit-scrollbar-thumb:hover {
-  background: var(--scrollbar-thumb-hover-color); 
-} */
+*/
 
 /* 全局卡片样式 */
 .card {

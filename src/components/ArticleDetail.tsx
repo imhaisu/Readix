@@ -47,6 +47,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const [processedContent, setProcessedContent] = useState<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollableContentRef = useRef<HTMLDivElement>(null);
+  const mainContentAreaRef = useRef<HTMLDivElement>(null);
+  const articleDetailContainerRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isSidebarVisible, setIsSidebarVisible] = useState(false);
   const navigate = useNavigate();
@@ -279,6 +281,42 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       contentEl.removeEventListener('scroll', checkScroll);
     };
   }, [articleId, viewMode]);
+
+  // 新增：处理滚动条"滚动时显示"的逻辑
+  useEffect(() => {
+    const scrollableElement = scrollableContentRef.current;
+    if (!scrollableElement) {
+      return;
+    }
+
+    let scrollTimeout: NodeJS.Timeout | null = null;
+
+    const handleScroll = () => {
+      // 1. 添加 'scrolling' 类，让 CSS 把滚动条显示出来
+      scrollableElement.classList.add(styles.scrolling);
+
+      // 2. 清除上一个计时器（如果存在）
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+
+      // 3. 设置一个新的计时器，1.5秒后移除 'scrolling' 类
+      scrollTimeout = setTimeout(() => {
+        scrollableElement.classList.remove(styles.scrolling);
+      }, 1500);
+    };
+
+    // 监听滚动事件
+    scrollableElement.addEventListener('scroll', handleScroll, { passive: true });
+
+    // 组件卸载时，清理事件监听和计时器
+    return () => {
+      scrollableElement.removeEventListener('scroll', handleScroll);
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+    };
+  }, [articleId, viewMode, loading]);
 
   const handleToggleStar = async () => {
     if (!db || !article || !articleId) return;
@@ -639,7 +677,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   }
 
   return (
-    <div className={styles.articleDetailContainer} style={articleStyle}>
+    <div ref={articleDetailContainerRef} className={styles.articleDetailContainer} style={articleStyle}>
       <div className={`${styles.fixedControlsBar} ${isScrolled ? styles.scrolled : ''}`}>
         <Tooltip title="关闭">
           <Button
@@ -722,7 +760,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         </div>
       </div>
 
-      <div className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
+      <div ref={mainContentAreaRef} className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
         <div ref={scrollableContentRef} className={styles.scrollableContent}>
           {selectionPopup.visible && (
             <div
