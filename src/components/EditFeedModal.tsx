@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid } from 'antd';
+import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid, Radio } from 'antd';
 import { InfoCircleOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons';
 import { useDatabase, FeedSource, Group } from '../contexts/DatabaseContext';
 import type { RcFile, UploadProps } from 'antd/es/upload/interface';
@@ -51,7 +51,8 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
       form.setFieldsValue({
         title: feed.title,
         url: feed.url,
-        groupId: feed.groupId || null,
+        groupId: feed.groupId,
+        defaultViewMode: feed.defaultViewMode || 'summary',
         iconUrlInput: feed.iconUrl || '',
       });
       setCurrentIconUrl(feed.iconUrl || '');
@@ -101,8 +102,9 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
 
       const updates: Partial<FeedSource> = {
         title: values.title,
-        groupId: values.groupId === null ? undefined : values.groupId,
-        iconUrl: finalIconUrl, 
+        groupId: values.groupId,
+        iconUrl: finalIconUrl,
+        defaultViewMode: values.defaultViewMode,
       };
 
       await db.feeds.update(feed.id, updates);
@@ -239,6 +241,13 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
               </div>
             ))}
           </div>
+        </Form.Item>
+
+        <Form.Item name="defaultViewMode" label="默认阅读模式">
+          <Radio.Group>
+            <Radio.Button value="summary">摘要</Radio.Button>
+            <Radio.Button value="fulltext">全文</Radio.Button>
+          </Radio.Group>
         </Form.Item>
 
       </Form>

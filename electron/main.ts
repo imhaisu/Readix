@@ -541,4 +541,34 @@ ipcMain.handle('get-local-icon-base64', async (_, iconPath: string) => {
     console.error(`[Main Process] Failed to read local icon file: ${iconPath}`, error);
     return { success: false, error: error.message || 'Unknown error reading icon file' };
   }
-}); 
+});
+
+ipcMain.handle('fetch-article-content', async (event, url) => {
+  try {
+    const { JSDOM } = await import('jsdom');
+    const { Readability } = await import('@mozilla/readability');
+    
+    const dom = await JSDOM.fromURL(url, {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      referrer: url,
+    });
+    
+    const reader = new Readability(dom.window.document);
+    const article = reader.parse();
+    
+    if (article) {
+      return {
+        title: article.title,
+        content: article.content,
+      };
+    } else {
+      return null;
+    }
+  } catch (error) {
+    console.error('Failed to fetch and parse article:', error);
+    return null;
+  }
+});
+
+// In this file you can include the rest of your app's specific main process
+// code. You can also put them in separate files and import them here. 

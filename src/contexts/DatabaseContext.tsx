@@ -13,14 +13,26 @@ export class RssDatabase extends Dexie {
     super('RssDatabase');
     
     // 定义数据库结构
-    this.version(8).stores({
-      feeds: 'id, groupId, title, url, lastUpdated, unreadCount, active, order, viewMode, bionicReading',
-      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, [sourceId+isRead]',
+    this.version(9).stores({
+      feeds: 'id, groupId, title, url, lastUpdated, unreadCount, active, order, viewMode, bionicReading, defaultViewMode',
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, [sourceId+isRead]',
       groups: 'id, name, order, collapsed',
       savedLinks: 'id, url, title, addedDate, isRead',
       annotations: 'id, articleId, createdAt'
     }).upgrade(async (tx) => {
-      console.log("数据库升级: 版本 6->7。为 articles 添加了 fetchDate 索引。如果这是全新创建，则无需迁移。");
+      console.log("数据库从旧版本升级到版本 9。");
+      // 对于版本 9，我们为 feeds 表增加了 defaultViewMode，为 articles 表增加了 isFullText。
+      // Dexie 会自动处理新字段的添加，但我们可以为现有数据设置默认值。
+      await tx.table('feeds').toCollection().modify(feed => {
+        if (feed.defaultViewMode === undefined) {
+          feed.defaultViewMode = 'summary'; // 默认为摘要模式
+        }
+      });
+      await tx.table('articles').toCollection().modify(article => {
+        if (article.isFullText === undefined) {
+          article.isFullText = false; // 默认都不是全文
+        }
+      });
     });
     
     // 定义类型
@@ -46,6 +58,7 @@ export interface FeedSource {
   active: boolean;
   bionicReading: boolean;
   order?: number;
+  defaultViewMode?: 'summary' | 'fulltext';
 }
 
 export interface Article {
@@ -67,6 +80,7 @@ export interface Article {
   tags?: string[];
   guid?: string;
   scrollPosition?: number;
+  isFullText?: boolean;
 }
 
 export interface Group {

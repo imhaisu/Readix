@@ -1,58 +1,53 @@
 // src/electron.d.ts
 
-// 定义通过 preload.ts 暴露到渲染进程的 electronAPI 的类型
-export interface IElectronAPI {
-  getSettings: () => any; // 同步获取设置
-  saveSettings: (settings: any) => void;
-  restartApp: () => void;
-  
-  // 特定于 'refresh-all' 事件的监听器
-  onRefreshAll: (callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => () => void;
-  
-  // 通用消息监听器
-  onMessage: (channel: string, callback: (event: Electron.IpcRendererEvent, ...args: any[]) => void) => () => void;
-  
-  // 发送消息到主进程的 'app-message' 通道
-  sendAppMessage: (payload: { type: string; data?: any }) => void;
-
-  // RSS 解析相关
-  parseRssFeed: (feedUrl: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-  getRssFeedInfo: (feedUrl: string) => Promise<{ success: boolean; data?: { title?: string; url?: string; description?: string; icon?: string }; error?: string }>;
-  getLocalIconBase64: (iconPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
-  
-  // 新增：获取平台信息
-  getPlatform: () => Promise<'darwin' | 'win32' | 'linux'>;
-  // 新增：在外部浏览器打开链接的API
-  shellOpenExternal: (url: string) => Promise<void>;
-  
-  // 窗口控制 (这些可能实际上在 window.electronWindow 上)
-  minimizeWindow: () => void;
-  maximizeWindow: () => void;
-  closeWindow: () => void;
-  isWindowMaximized: () => Promise<boolean>;
-
-  // 新增：导出OPML
-  exportOpml: (opmlContent: string) => Promise<{ success: boolean; path?: string; error?: string; canceled?: boolean; }>;
-  importOpml: () => Promise<{ success: boolean; content?: string; error?: string; canceled?: boolean; }>;
-}
-
-// 为 electronWindowAPI 添加类型定义
-export interface IElectronWindowAPI {
-  minimize: () => void;
-  maximize: () => void;
-  close: () => void;
-  isMaximized: () => Promise<boolean>;
+interface FeedSource {
+  id?: string;
+  title: string;
+  url: string;
+  iconUrl?: string;
+  groupId?: string;
 }
 
 declare global {
   interface Window {
-    electronAPI: IElectronAPI;
-    electronWindow?: {
-      minimize: () => void;
-      maximize: () => void;
-      close: () => void;
-      isMaximized: () => Promise<boolean>;
+    electron: {
+      // 应用信息
+      getAppVersion: () => Promise<string>;
+      getPlatform: () => Promise<'darwin' | 'win32' | 'linux'>;
+
+      // 窗口控制
+      windowControls: {
+        minimize: () => void;
+        maximize: () => void;
+        close: () => void;
+        isMaximized: () => Promise<boolean>;
+      };
+      
+      // 设置
+      getSettings: () => Promise<any>; // 这里的 any 可以替换为更具体的 Settings 类型
+      saveSettings: (settings: any) => void;
+      
+      // 订阅源、文章、内容抓取
+      fetchAndParseFeed: (url: string) => Promise<any>; // 替换为具体的 Feed 解析结果类型
+      addFeed: (feedData: FeedSource) => Promise<any>; // 替换为具体的返回值类型
+      deleteFeed: (feedId: string) => Promise<void>;
+      updateFeed: (feedId: string, updates: Partial<FeedSource>) => Promise<void>;
+      getFeeds: () => Promise<FeedSource[]>; // 假设返回 FeedSource 数组
+      fetchArticleContent: (url: string) => Promise<{ title: string; content: string } | null>;
+
+      // OPML
+      importOpml: () => Promise<any>; // 替换为具体的 OPML 导入结果类型
+      exportOpml: (opmlContent: string) => Promise<void>;
+
+      // 系统交互
+      shellOpenExternal: (url: string) => Promise<void>;
+      getSystemIcon: (type: 'folder' | 'file') => Promise<string>; // 假设返回 base64 字符串
+      readIconFile: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
+
+      // 通信与事件监听
+      onMessage: (channel: string, callback: (...args: any[]) => void) => () => void;
     };
-    electronWindowAPI: IElectronWindowAPI;
   }
-} 
+}
+
+export {}; 

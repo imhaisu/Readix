@@ -44,6 +44,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
+  const [fetchingFullText, setFetchingFullText] = useState(false);
   const [processedContent, setProcessedContent] = useState<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollableContentRef = useRef<HTMLDivElement>(null);
@@ -154,68 +155,132 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return newContent;
   }, []);
 
+  const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
-    const loadArticle = async () => {
-      if (articleId) {
-        if (db) {
-          if (!db) return;
-  
-          // 仅当文章ID变化或从网页视图切换回来时才完全重新加载
-          if (viewMode !== 'web' || !article || article.id !== articleId) {
-            setLoading(true);
-            setArticle(undefined);
-            setSourceTitle(undefined);
-            setProcessedContent('');
-  
-            try {
-              const currentArticleData = await db.articles.get(articleId);
-  
-              if (currentArticleData) {
-                // 先加载笔记和高亮
-                const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
-                setAnnotations(annos); 
-                
-                // 再应用高亮到内容
-                const contentWithHighlights = applyHighlights(currentArticleData.content, annos);
-                setProcessedContent(contentWithHighlights);
+    setIsMounted(true);
+  }, []);
 
-                setArticle(currentArticleData);
-  
-                const source = await db.feeds.get(currentArticleData.sourceId);
-                if (source) {
-                  setSourceTitle(source.title);
-                }
+  // 使用 useRef 来持有 loadArticle 的最新引用，打破 useCallback 依赖循环
+  const loadArticleRef = useRef<((forceReload?: boolean) => Promise<void>) | null>(null);
 
-                // 自动标记为已读
-                if (currentArticleData.isRead === 'false' && settings.reading.autoMarkAsRead) {
-                  await db.articles.update(articleId, { isRead: 'true' });
-                  console.log(`文章 ${articleId} 已自动标记为已读。`);
-                }
-              } else {
-                setArticle(null);
-              }
-            } catch (error) {
-              console.error('加载文章详情或高亮失败:', error);
-              setArticle(null);
-            } finally {
-              if (viewMode !== 'web') {
-                setLoading(false);
-              }
+  // 核心：执行文章升级的函数
+  const performUpgrade = useCallback(async (articleToUpgrade: Article) => {
+    if (!articleToUpgrade || !articleToUpgrade.url || !db || !isMounted) return;
+
+    setFetchingFullText(true);
+    try {
+      const result = await window.electron.fetchArticleContent(articleToUpgrade.url);
+      if (result && result.content) {
+        await db.articles.update(articleToUpgrade.id, {
+          content: result.content,
+          title: result.title,
+          isFullText: true,
+        });
+        if (loadArticleRef.current) {
+          await loadArticleRef.current(true); // 强制重新加载文章
+        }
+      } else {
+        message.error('无法获取文章全文，目标网站可能不支持。');
+      }
+    } catch (error: any) {
+      console.error("获取全文失败:", error);
+      message.error(`获取全文时发生错误: ${error.message}`);
+    } finally {
+      if (isMounted) {
+        setFetchingFullText(false);
+      }
+    }
+  }, [db, isMounted]);
+
+  // 将 loadArticle 定义为一个 useCallback，并将其存入 ref
+  const loadArticle = useCallback(async (forceReload = false) => {
+    if (articleId && db) {
+      if (forceReload || !article || article.id !== articleId) {
+        setLoading(true);
+        setArticle(undefined);
+        setSourceTitle(undefined);
+        setProcessedContent('');
+  
+        try {
+          const currentArticleData = await db.articles.get(articleId);
+  
+          if (currentArticleData) {
+            const source = await db.feeds.get(currentArticleData.sourceId);
+            setSourceTitle(source?.title);
+
+            // 检查是否需要自动获取全文
+            if (!currentArticleData.isFullText && source?.defaultViewMode === 'fulltext') {
+              await performUpgrade(currentArticleData);
+              return; // performUpgrade 内部会触发重载
             }
-          } else if (viewMode === 'web' && article && contentRef.current) {
-            contentRef.current.scrollTop = 0;
-            setLoading(false);
-          } else if (viewMode !== 'web' && article && article.id === articleId) {
+            
+            // 先加载笔记和高亮
+            const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
+            setAnnotations(annos); 
+            
+            // 再应用高亮到内容
+            const contentWithHighlights = applyHighlights(currentArticleData.content, annos);
+            setProcessedContent(contentWithHighlights);
+
+            setArticle(currentArticleData);
+  
+            if (source) {
+              setSourceTitle(source.title);
+            }
+
+            // 自动标记为已读
+            if (currentArticleData.isRead === 'false' && settings.reading.autoMarkAsRead) {
+              await db.articles.update(articleId, { isRead: 'true' });
+              console.log(`文章 ${articleId} 已自动标记为已读。`);
+            }
+          } else {
+            setArticle(null);
+          }
+        } catch (error) {
+          console.error('加载文章详情失败:', error);
+          setArticle(null);
+        } finally {
+          if (isMounted) {
             setLoading(false);
           }
         }
-      } else {
-        setArticle(null);
+      } else if (viewMode === 'web' && article && contentRef.current) {
+        contentRef.current.scrollTop = 0;
+        setLoading(false);
+      } else if (viewMode !== 'web' && article && article.id === articleId) {
         setLoading(false);
       }
-    };
+    } else {
+      setArticle(null);
+      setLoading(false);
+    }
+  }, [articleId, db, article, isMounted, performUpgrade, applyHighlights]);
 
-    loadArticle();
+  useEffect(() => {
+    loadArticleRef.current = loadArticle;
+  }, [loadArticle]);
+
+  // 处理获取全文的点击事件，包含智能提示逻辑
+  const handleFetchAndUpgradeArticle = useCallback(async (articleToUpgrade: Article) => {
+    // 如果已经有笔记，则弹窗确认
+    if (annotations.length > 0) {
+      Modal.confirm({
+        title: '确认获取全文',
+        content: '当前文章已有笔记或高亮。获取全文会替换内容，并可能导致笔记定位不准确。是否继续？',
+        okText: '继续获取',
+        cancelText: '取消',
+        onOk: () => performUpgrade(articleToUpgrade),
+      });
+    } else {
+      // 如果没有笔记，则直接执行
+      performUpgrade(articleToUpgrade);
+    }
+  }, [annotations, performUpgrade]);
+
+  useEffect(() => {
+    if (isMounted) {
+      loadArticle();
+    }
 
     // 当组件卸载或 articleId 改变时，保存当前滚动位置
     return () => {
@@ -223,7 +288,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         saveScrollPosition(articleId, scrollableContentRef.current.scrollTop);
       }
     };
-  }, [db, articleId, viewMode, settings.reading.autoMarkAsRead, saveScrollPosition, applyHighlights]);
+  }, [isMounted, loadArticle, saveScrollPosition]);
 
   useEffect(() => {
     const contentElement = contentRef.current;
@@ -256,7 +321,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         db.articles.update(articleId, { scrollPosition: contentElement.scrollTop });
       }
     };
-  }, [article, articleId, db, viewMode]);
+  }, [article, articleId, db, viewMode, isMounted]);
 
   useEffect(() => {
     if (viewMode === 'web') {
@@ -280,7 +345,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return () => {
       contentEl.removeEventListener('scroll', checkScroll);
     };
-  }, [articleId, viewMode]);
+  }, [articleId, viewMode, isMounted]);
 
   // 新增：处理滚动条"滚动时显示"的逻辑
   useEffect(() => {
@@ -316,7 +381,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         clearTimeout(scrollTimeout);
       }
     };
-  }, [articleId, viewMode, loading]);
+  }, [articleId, viewMode, isMounted]);
 
   const handleToggleStar = async () => {
     if (!db || !article || !articleId) return;
@@ -374,14 +439,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   };
 
   const handleOpenInBrowser = () => {
-    if (article && article.url) {
-      if (window.electronAPI && window.electronAPI.shellOpenExternal) {
-        window.electronAPI.shellOpenExternal(article.url);
-      } else {
-        // Fallback for non-Electron environments or if API is not exposed
-        console.warn('electronAPI.shellOpenExternal is not available. Opening in new tab as fallback.');
-        window.open(article.url, '_blank', 'noopener,noreferrer');
-      }
+    if (article?.url) {
+      window.electron.shellOpenExternal(article.url);
     }
   };
 
@@ -621,14 +680,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     };
   }, [selectionPopup.visible]);
 
-  if (loading && (!article || viewMode !== 'web')) {
-    return (
-      <div className={styles.loadingContainer}>
-        <Spin size="large" />
-      </div>
-    );
-  }
-
   if (viewMode === 'web') {
     if (!articleId || !article || !article.url) {
         return (
@@ -670,8 +721,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
   if (!article) {
     return (
-      <div className={styles.errorContainer}>
-        <Empty description={articleId ? "文章加载失败或不存在" : "未选择文章"} />
+      <div className={styles.loadingContainer}>
+        {loading ? <Spin size="large" /> : <Empty description={articleId ? "文章加载失败或不存在" : "未选择文章"} />}
       </div>
     );
   }
@@ -718,6 +769,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           <Tooltip title={article.isReadLater === 'true' ? '从"稍后读"移除' : '添加到"稍后读"'}>
             <Button
               type="text"
+              shape="circle"
               icon={article.isReadLater === 'true' ? <ClockCircleFilled /> : <ClockCircleOutlined />}
               onClick={handleToggleReadLater}
               className={styles.toolbarButton}
@@ -738,7 +790,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               className={styles.toolbarButton}
             />
           </Tooltip>
+
+          {article && !article.isFullText && (
+            <Tooltip title="获取全文">
+              <Button 
+                type="text"
+                shape="circle"
+                icon={<ReadOutlined />} 
+                onClick={() => handleFetchAndUpgradeArticle(article)}
+                loading={fetchingFullText}
+                className={styles.toolbarButton}
+              />
+            </Tooltip>
+          )}
           
+          <div className={styles.controlSeparator}></div>
+
           <Tooltip title="浏览器打开">
             <Button 
               type="text" 
@@ -762,41 +829,49 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
       <div ref={mainContentAreaRef} className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
         <div ref={scrollableContentRef} className={styles.scrollableContent}>
-          {selectionPopup.visible && (
-            <div
-              ref={popupRef}
-              className={styles.selectionPopup}
-              style={{ top: `${selectionPopup.top}px`, left: `${selectionPopup.left}px` }}
-            >
-              <div
-                className={styles.popupActions}
-                onMouseDown={(e) => e.preventDefault()}
-              >
-                <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleHighlightClick(); }}>
-                  <HighlightOutlined className={styles.popupIcon} />
-                  <span className={styles.popupLabel}>高亮</span>
-                </div>
-                <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleNoteClick(); }}>
-                  <ReadOutlined className={styles.popupIcon} />
-                  <span className={styles.popupLabel}>笔记</span>
-                </div>
-              </div>
+          {loading ? (
+            <div className={styles.loadingContainer}>
+              <Spin size="large" />
             </div>
-          )}
-          
-          <article className={styles.article}>
-            <header className={styles.header}>
-              {article.publishDate && (
-                <p className={styles.publishDate}>
-                  {format(new Date(article.publishDate), 'EEEE, MMMM d, yyyy \'at\' HH:mm')}
-                </p>
+          ) : (
+            <>
+              {selectionPopup.visible && (
+                <div
+                  ref={popupRef}
+                  className={styles.selectionPopup}
+                  style={{ top: `${selectionPopup.top}px`, left: `${selectionPopup.left}px` }}
+                >
+                  <div
+                    className={styles.popupActions}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleHighlightClick(); }}>
+                      <HighlightOutlined className={styles.popupIcon} />
+                      <span className={styles.popupLabel}>高亮</span>
+                    </div>
+                    <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleNoteClick(); }}>
+                      <ReadOutlined className={styles.popupIcon} />
+                      <span className={styles.popupLabel}>笔记</span>
+                    </div>
+                  </div>
+                </div>
               )}
-              <h1 className={styles.title}>{article.title}</h1>
-              {sourceTitle && <p className={styles.sourceName}>{sourceTitle}</p>}
-            </header>
-            
-            {renderArticleContent()}
-          </article>
+              
+              <article className={styles.article}>
+                <header className={styles.header}>
+                  {article.publishDate && (
+                    <p className={styles.publishDate}>
+                      {format(new Date(article.publishDate), "EEEE, MMMM d, yyyy 'at' HH:mm")}
+                    </p>
+                  )}
+                  <h1 className={styles.title}>{article.title}</h1>
+                  {sourceTitle && <p className={styles.sourceName}>{sourceTitle}</p>}
+                </header>
+                
+                {renderArticleContent()}
+              </article>
+            </>
+          )}
         </div>
 
         {isSidebarVisible && (

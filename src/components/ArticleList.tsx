@@ -445,22 +445,15 @@ const ArticleList: React.FC<ArticleListProps> = ({
       
       // 同步更新feeds的未读计数
       if (article.sourceId) {
-        const newUnreadCount = await db.articles.where({ sourceId: article.sourceId, isRead: 'false' }).count();
-        const feedInfo = feedInfoMap.get(article.sourceId);
-        if (feedInfo && feedInfo.id) {
-          await db.feeds.update(feedInfo.id, { unreadCount: newUnreadCount });
-        console.log(`[ArticleList] handleToggleRead: Feed ${article.sourceId} unread count updated to ${newUnreadCount}`);
-        
-        // 更新本地feedInfoMap中的计数
-          const updatedFeedInfo = { ...feedInfo, unreadCount: newUnreadCount };
-          setFeedInfoMap(prev => new Map(prev.set(article.sourceId, updatedFeedInfo)));
-        }
+        const newUnreadCount = await db.articles
+          .where({ sourceId: article.sourceId, isRead: 'false' })
+          .count();
+        await db.feeds.update(article.sourceId, { unreadCount: newUnreadCount });
       }
       
       message.success(newReadStatus === 'true' ? '已标记为已读' : '已标记为未读');
-      triggerRefresh(); // 正确的函数名
     } catch (error) {
-      console.error('更新文章读取状态失败:', error);
+      console.error('更新文章已读状态失败:', error);
       message.error('操作失败');
     }
   };

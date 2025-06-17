@@ -1,254 +1,145 @@
-import React, { useState } from 'react';
-import { Modal, Form, Input, Button, Select, message, Avatar } from 'antd';
-import { LinkOutlined, GlobalOutlined } from '@ant-design/icons';
+import React, { useState, useEffect } from 'react';
+import { Modal, Form, Input, Button, Select, message, Spin, Radio, Tooltip } from 'antd';
+import { LinkOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { useDatabase, FeedSource, Group } from '../contexts/DatabaseContext';
-import { getFeedInfo } from '../utils/rssParser';
-import { generateUniqueId } from '../utils/helpers';
-
-const { Option } = Select;
 
 interface AddFeedModalProps {
   visible: boolean;
+  onOk: (feed: FeedSource) => void;
   onCancel: () => void;
-  onSuccess: (feed: FeedSource) => void;
   groups: Group[];
 }
 
-// 辅助函数：确保URL有协议头
-const ensureProtocol = (url: string): string => {
-  if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    return `https://${url}`;
-  }
-  return url;
-};
-
-const AddFeedModal: React.FC<AddFeedModalProps> = ({ 
-  visible, 
-  onCancel, 
-  onSuccess,
-  groups
-}) => {
-  const { db } = useDatabase();
+const AddFeedModal: React.FC<AddFeedModalProps> = ({ visible, onOk, onCancel, groups }) => {
   const [form] = Form.useForm();
+  const { db } = useDatabase();
   const [loading, setLoading] = useState(false);
-  const [fetchingInfo, setFetchingInfo] = useState(false);
-  const [previewIconUrl, setPreviewIconUrl] = useState<string>('');
+  const [feedInfo, setFeedInfo] = useState<{ title: string; url: string } | null>(null);
 
-  // 获取订阅源信息
-  const handleGetFeedInfo = async () => {
-    let url = form.getFieldValue('url');
-    if (!url) {
-      message.error('请输入RSS订阅源URL');
+  useEffect(() => {
+    if (!visible) {
+      form.resetFields();
+      setFeedInfo(null);
+      setLoading(false);
+    }
+  }, [visible, form]);
+
+  const handleFetchInfo = async () => {
+    const url = form.getFieldValue('url');
+    if (!url || !url.startsWith('http')) {
+      message.error('请输入一个有效的 URL');
       return;
     }
-    url = ensureProtocol(url); // 确保有协议头
-    form.setFieldsValue({ url }); // 更新表单中的URL，以防用户输入的是无协议头的
-
-    setFetchingInfo(true);
+    setLoading(true);
     try {
-      const feedInfo = await getFeedInfo(url); // 使用处理过的URL
-      if (feedInfo && feedInfo.title) { // 检查 feedInfo 是否为 null 以及是否有 title
-        form.setFieldsValue({ 
-          title: feedInfo.title,
-          iconUrl: feedInfo.iconUrl || '' // 自动填充 iconUrl，如果不存在则为空字符串
+      const parsedFeed = await window.electron.fetchAndParseFeed(url);
+      if (parsedFeed && parsedFeed.title) {
+        setFeedInfo({ title: parsedFeed.title, url });
+        form.setFieldsValue({
+          title: parsedFeed.title,
         });
-        setPreviewIconUrl(feedInfo.iconUrl || '');
-        message.success('获取订阅源信息成功');
       } else {
-        // 如果 feedInfo 为 null 或者没有 title，也视为获取失败
-        message.error('获取订阅源信息失败，请检查URL或该源不包含标题');
+        message.error('无法解析此链接，请确认它是一个有效的 RSS/Atom/JSON Feed');
+        setFeedInfo(null);
       }
-    } catch (error) {
-      message.error('获取订阅源信息失败，请检查URL');
-    } finally {
-      setFetchingInfo(false);
-    }
-  };
-
-  // 处理图标URL输入变化
-  const handleIconUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    form.setFieldsValue({ iconUrl: value });
-    setPreviewIconUrl(value);
-  };
-
-  // 提交表单
-  const handleSubmit = async () => {
-    try {
-      const values = await form.validateFields();
-      setLoading(true);
-
-      if (!db) {
-        message.error('数据库未初始化');
-        setLoading(false); 
-        return;
-      }
-      
-      const finalUrl = ensureProtocol(values.url); 
-
-      // 检查订阅源是否已存在
-      const existingFeed = await db.feeds.where('url').equals(finalUrl).first();
-      if (existingFeed) {
-        message.error('该订阅源已存在！');
-        setLoading(false);
-        return;
-      }
-
-      // 构建订阅源对象
-      const feed: FeedSource = {
-        id: generateUniqueId(),
-        title: values.title,
-        url: finalUrl, // 使用处理过的URL
-        iconUrl: values.iconUrl || undefined,
-        groupId: values.groupId || undefined,
-        updateFrequency: values.updateFrequency || 30,
-        lastUpdated: new Date(),
-        viewMode: values.viewMode || 'full',
-        unreadCount: 0,
-        active: true,
-        bionicReading: false
-      };
-
-      // 添加到数据库
-      await db.feeds.add(feed);
-      
-      message.success('添加订阅源成功');
-      onSuccess(feed);
-      form.resetFields();
-      setPreviewIconUrl('');
-    } catch (error) {
-      console.error('添加订阅源失败:', error);
-      message.error('添加订阅源失败');
+    } catch (error: any) {
+      message.error(`解析失败: ${error.message}`);
+      setFeedInfo(null);
     } finally {
       setLoading(false);
     }
   };
 
-  // 处理模态框关闭
-  const handleCancel = () => {
-    form.resetFields();
-    setPreviewIconUrl('');
-    onCancel();
+  const handleOk = async () => {
+    try {
+      const values = await form.validateFields();
+      const newFeed: FeedSource = {
+        // id will be generated by Dexie
+        title: values.title,
+        url: values.url,
+        groupId: values.groupId || undefined,
+        updateFrequency: 3600, // 默认1小时
+        lastUpdated: new Date(0), // 立即刷新
+        unreadCount: 0,
+        active: true,
+        bionicReading: false,
+        viewMode: 'full', // 旧字段，保留默认值
+        defaultViewMode: values.defaultViewMode, // 新增字段
+      };
+
+      if (db) {
+        const id = await db.feeds.add(newFeed);
+        onOk({ ...newFeed, id: id as string });
+        form.resetFields();
+      }
+    } catch (error) {
+      console.error('Failed to add feed:', error);
+    }
   };
 
   return (
     <Modal
-      title="添加RSS订阅源"
-      open={visible}
-      onCancel={handleCancel}
-      footer={[
-        <Button key="cancel" onClick={handleCancel}>
-          取消
-        </Button>,
-        <Button 
-          key="submit" 
-          type="primary" 
-          loading={loading}
-          onClick={handleSubmit}
-        >
-          添加
-        </Button>
-      ]}
+      title="添加订阅源"
+      visible={visible}
+      onOk={handleOk}
+      onCancel={onCancel}
+      confirmLoading={loading}
     >
-      <Form
-        form={form}
-        layout="vertical"
-      >
-        <Form.Item
-          label="RSS订阅源URL"
-          name="url"
-          rules={[{ required: true, message: '请输入RSS订阅源URL' }]}
-        >
-          <Input 
-            prefix={<LinkOutlined />} 
-            placeholder="https://example.com/feed.xml"
-            addonAfter={
-              <Button 
-                type="link" 
-                size="small" 
-                onClick={handleGetFeedInfo}
-                loading={fetchingInfo}
-              >
-                获取信息
-              </Button>
-            }
-          />
-        </Form.Item>
-
-        <Form.Item
-          label="标题"
-          name="title"
-          rules={[{ required: true, message: '请输入订阅源标题' }]}
-        >
-          <Input placeholder="订阅源标题" />
-        </Form.Item>
-
-        <Form.Item
-          label="分组"
-          name="groupId"
-        >
-          <Select placeholder="选择分组（可选）" allowClear>
-            {groups.map(group => (
-              <Option key={group.id} value={group.id}>{group.name}</Option>
-            ))}
-          </Select>
-        </Form.Item>
-
-        <Form.Item label="图标预览">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-            <Avatar 
-              src={previewIconUrl} 
-              size={32} 
-              icon={<GlobalOutlined />}
-              style={{ 
-                border: '1px solid #f0f0f0',
-                backgroundColor: '#fafafa'
-              }}
+      <Spin spinning={loading} tip="正在解析链接...">
+        <Form form={form} layout="vertical" name="add_feed_form">
+          <Form.Item
+            name="url"
+            label="订阅源链接"
+            rules={[{ required: true, message: '请输入订阅源链接' }]}
+          >
+            <Input.Search
+              placeholder="https://example.com/feed.xml"
+              enterButton="解析"
+              onSearch={handleFetchInfo}
             />
-            <span style={{ color: '#666', fontSize: '14px' }}>
-              {previewIconUrl ? '图标预览' : '暂无图标'}
-            </span>
-          </div>
-        </Form.Item>
+          </Form.Item>
 
-        <Form.Item
-          label="图标URL"
-          name="iconUrl"
-        >
-          <Input 
-            placeholder="图标URL（可选，点击'获取信息'自动填充）" 
-            onChange={handleIconUrlChange}
-          />
-        </Form.Item>
+          {feedInfo && (
+            <>
+              <Form.Item
+                name="title"
+                label="标题"
+                rules={[{ required: true, message: '请输入标题' }]}
+              >
+                <Input />
+              </Form.Item>
 
-        <Form.Item
-          label="更新频率（分钟）"
-          name="updateFrequency"
-          initialValue={30}
-        >
-          <Select>
-            <Option value={15}>15分钟</Option>
-            <Option value={30}>30分钟</Option>
-            <Option value={60}>1小时</Option>
-            <Option value={120}>2小时</Option>
-            <Option value={240}>4小时</Option>
-            <Option value={720}>12小时</Option>
-            <Option value={1440}>24小时</Option>
-          </Select>
-        </Form.Item>
+              <Form.Item name="groupId" label="添加到分组">
+                <Select placeholder="不选择则为根目录">
+                  {groups.map((g) => (
+                    <Select.Option key={g.id} value={g.id}>
+                      {g.name}
+                    </Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
 
-        <Form.Item
-          label="默认视图模式"
-          name="viewMode"
-          initialValue="full"
-        >
-          <Select>
-            <Option value="full">全文模式</Option>
-            <Option value="web">网页模式</Option>
-            <Option value="original">原始模式</Option>
-          </Select>
-        </Form.Item>
-      </Form>
+              <Form.Item 
+                name="defaultViewMode" 
+                label={
+                  <span>
+                    默认阅读模式&nbsp;
+                    <Tooltip title="摘要模式只显示Feed提供的简介，全文模式会尝试抓取原文所有内容。此项可在之后编辑。">
+                      <InfoCircleOutlined />
+                    </Tooltip>
+                  </span>
+                }
+                initialValue="summary"
+              >
+                <Radio.Group>
+                  <Radio.Button value="summary">摘要</Radio.Button>
+                  <Radio.Button value="fulltext">全文</Radio.Button>
+                </Radio.Group>
+              </Form.Item>
+            </>
+          )}
+        </Form>
+      </Spin>
     </Modal>
   );
 };
