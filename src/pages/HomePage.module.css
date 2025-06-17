@@ -389,7 +389,7 @@
   opacity: 0;
   max-height: 0;
   transition: opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease;
-  background-color: transparent !important;
+  background-color: var(--bg-primary);
 }
 
 .pullToRefreshIndicatorContainer.visible {
@@ -432,11 +432,12 @@
 
 /* NEW Styles for the Search Input container within the Panel */
 .panelSearchInputContainer {
-  padding: 4px 6px; 
-  background-color: #e9e9e9;
+  padding: 4px 16px;
+  background-color: var(--bg-primary);
   flex-shrink: 0;
-  margin: 0 8px 0px 8px;
-  border-radius: 6px;
+  margin: 0;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
 }
 
 /* Targeting the Ant Design Input component itself within our container */

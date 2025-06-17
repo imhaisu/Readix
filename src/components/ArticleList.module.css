@@ -1,7 +1,7 @@
 .scrollableArticleListContainer {
   height: 100%; /* 确保它填满父容器的高度 */
   overflow-y: auto; /* 当内容超出时显示垂直滚动条 */
-  padding: 0; /* 改为0，由内部 List 组件或各项自己控制边距 */
+  padding: 8px 0; /* 增加上下内边距，解决卡片遮挡问题 */
   box-sizing: border-box; /* padding 不会增加元素的总宽度/高度 */
 }
 
