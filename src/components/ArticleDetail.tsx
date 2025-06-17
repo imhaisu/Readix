@@ -15,6 +15,7 @@ import {
   LeftOutlined,
   HighlightOutlined,
   CloseOutlined,
+  ReadOutlined,
 } from '@ant-design/icons';
 import { useDatabase, Article, FeedSource, Annotation } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
@@ -66,6 +67,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     range: null,
   });
 
+  const popupRef = useRef<HTMLDivElement>(null);
+
   const readingSettings = settings.reading;
 
   const handleShare = () => {
@@ -116,19 +119,32 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     [saveScrollPosition]
   );
 
+  const handleScrollToAnnotation = (annotationId: string) => {
+    const element = document.getElementById(`annotation-${annotationId}`);
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+        inline: 'nearest'
+      });
+      // 可选：给元素一个短暂的视觉反馈，比如闪烁一下
+      element.style.transition = 'background-color 0.3s ease';
+      element.style.backgroundColor = '#fadd87'; // 一个更亮的高亮色
+      setTimeout(() => {
+        element.style.backgroundColor = ''; // 恢复原来的颜色
+      }, 1200);
+    }
+  };
+
   const applyHighlights = useCallback((content: string, annotationsToApply: Annotation[]): string => {
     let newContent = content;
     annotationsToApply.forEach(anno => {
-      // 创建一个唯一的 ID，方便后续交互 (滚动、删除等)
-      // 使用全局类名 'customHighlight'，因为它在 CSS 中是 :global 定义的
+      // 确保高亮标签有唯一的 ID
       const markTag = `<mark id="annotation-${anno.id}" class="customHighlight">`;
       
-      // 使用前缀和后缀来精确定位，避免错误替换
       const searchString = `${anno.prefix}${anno.text}${anno.suffix}`;
       const replacementString = `${anno.prefix}${markTag}${anno.text}</mark>${anno.suffix}`;
-
-      // 必须在原始的、未被处理过的内容上查找和替换，防止因 <mark> 标签导致 innerText 变化而找不到位置
-      // 这里我们简化处理，直接在 newContent 上替换。在更复杂的场景下，可能需要更鲁棒的定位策略。
+      
       if (newContent.includes(searchString)) {
         newContent = newContent.replace(searchString, replacementString);
       }
@@ -353,10 +369,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           if (!containerRect) return;
     
           // 计算弹窗位置
-          const top = rect.top - containerRect.top + scrollableContentRef.current!.scrollTop - 40;
-          const left = rect.left - containerRect.left + rect.width / 2;
+          const top = rect.top - containerRect.top + scrollableContentRef.current!.scrollTop;
+          const left = rect.left - containerRect.left + scrollableContentRef.current!.scrollLeft + (rect.width / 2);
     
-          setSelectionPopup({ visible: true, top, left, range });
+          setSelectionPopup({
+            visible: true,
+            top,
+            left,
+            range,
+          });
         } else {
           setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
         }
@@ -504,13 +525,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   };
 
-  const handleScrollToAnnotation = (annotationId: string) => {
-    const element = document.getElementById(annotationId);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
   const handleAutoEditApplied = () => {
     setAutoEditNoteId(null);
   };
@@ -543,6 +557,31 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     '--article-line-height-body': readingSettings.lineHeight,
     fontFamily: readingSettings.fontFamily,
   } as React.CSSProperties;
+
+  // 处理点击外部区域关闭弹窗的逻辑
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        if (selectionPopup.visible) {
+          // 在隐藏弹窗之前，短暂延迟以允许选区变化先生效
+          setTimeout(() => {
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed) {
+              setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
+            }
+          }, 100);
+        }
+      }
+    };
+
+    if (selectionPopup.visible) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [selectionPopup.visible]);
 
   if (loading && (!article || viewMode !== 'web')) {
     return (
@@ -687,11 +726,23 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         <div ref={scrollableContentRef} className={styles.scrollableContent}>
           {selectionPopup.visible && (
             <div
+              ref={popupRef}
               className={styles.selectionPopup}
               style={{ top: `${selectionPopup.top}px`, left: `${selectionPopup.left}px` }}
             >
-              <Button size="small" onMouseDown={(e) => { e.preventDefault(); handleHighlightClick(); }}>高亮</Button>
-              <Button size="small" style={{ marginLeft: 8 }} onMouseDown={(e) => { e.preventDefault(); handleNoteClick(); }}>笔记</Button>
+              <div
+                className={styles.popupActions}
+                onMouseDown={(e) => e.preventDefault()}
+              >
+                <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleHighlightClick(); }}>
+                  <HighlightOutlined className={styles.popupIcon} />
+                  <span className={styles.popupLabel}>高亮</span>
+                </div>
+                <div className={styles.popupAction} onMouseDown={(e) => { e.preventDefault(); handleNoteClick(); }}>
+                  <ReadOutlined className={styles.popupIcon} />
+                  <span className={styles.popupLabel}>笔记</span>
+                </div>
+              </div>
             </div>
           )}
           
@@ -715,10 +766,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             isVisible={isSidebarVisible}
             annotations={annotations}
             pendingAnnotation={pendingAnnotation}
-            onClose={() => {
-              handleToggleSidebar();
-              setPendingAnnotation(null);
-            }}
+            onClose={handleToggleSidebar}
             onSaveNote={handleSaveNote}
             onDelete={handleDeleteAnnotation}
             onItemClick={handleScrollToAnnotation}

@@ -68,36 +68,66 @@
 /* 浮动工具条 */
 .selectionPopup {
   position: absolute;
-  background: #222;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 6px;
   z-index: 1050;
-  display: flex;
-  gap: 8px;
-  transform: translateX(-50%);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  pointer-events: none;
-  border-right: 6px solid transparent;
-  border-top: 6px solid #222;
+  pointer-events: none; /* 容器本身不响应鼠标事件 */
+  /* left/top are set by inline style based on selection */
+  transform: translateX(-50%) translateY(calc(-100% - 2px)); /* 调整与选中文字的距离为 2px */
 }
-.selectionPopup button {
+
+.popupActions {
+  display: flex;
+  align-items: center;
+  background-color: #ffffff; /* 1. 改为浅色背景 */
+  color: #333333;             /* 1. 改为深色文字 */
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 2px;
   pointer-events: auto;
+  position: relative;
+  border: 1px solid rgba(0,0,0,0.08);
 }
 
 /* 浮动工具条下方的小三角 */
-.selectionPopup::after {
+.popupActions::after {
   content: '';
   position: absolute;
-  bottom: -5px;
+  top: 100%;
   left: 50%;
   transform: translateX(-50%);
   width: 0;
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 6px solid #222;
+  border-top: 6px solid #ffffff; /* 1. 三角颜色与背景一致 */
+  filter: drop-shadow(0 1px 1px rgba(0,0,0,0.05));
 }
+
+.popupAction {
+  display: flex;
+  align-items: center;
+  padding: 5px 8px;   /* 2. 减小内边距 */
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  gap: 5px;           /* 2. 减小间距 */
+}
+
+.popupAction:hover {
+  background-color: #f0f0f0; /* 1. hover颜色也要是浅色 */
+}
+
+.popupIcon {
+  font-size: 14px; /* 2. 减小图标大小 */
+  display: flex;
+  align-items: center;
+}
+
+.popupLabel {
+  font-size: 13px; /* 2. 减小字体大小 */
+  line-height: 1;
+  user-select: none; /* 禁止选择文本 */
+}
+
 
 /* 自定义高亮 <mark> 标签样式 */
 :global(.customHighlight) {

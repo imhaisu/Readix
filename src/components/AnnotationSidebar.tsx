@@ -86,12 +86,22 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
     }
   };
 
+  // 处理键盘事件，实现回车保存
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // isComposing 用于防止在输入法组合字符过程中触发
+    if (event.key === 'Enter' && !event.shiftKey && !(event.nativeEvent as any).isComposing) {
+      event.preventDefault(); // 阻止默认的回车换行行为
+      handleSave();
+    }
+  };
+
   // 渲染笔记的编辑界面
   const renderNoteEditor = () => (
     <div className={styles.noteEditor}>
       <TextArea
         value={editContent}
         onChange={(e) => setEditContent(e.target.value)}
+        onKeyDown={handleKeyDown}
         autoSize={{ minRows: 4 }}
         autoFocus
       />

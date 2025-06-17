@@ -418,7 +418,7 @@ const ArticleList: React.FC<ArticleListProps> = ({
             }
           }
         }
-        triggerRefresh();
+        // triggerRefresh();
       } catch (error) {
         console.error("Error marking article as read:", error);
       }
