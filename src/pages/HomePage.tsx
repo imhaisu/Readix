@@ -16,7 +16,7 @@ import {
   CheckSquareOutlined,
   AppstoreAddOutlined
 } from '@ant-design/icons';
-import ArticleList from '../components/ArticleList';
+import ArticleList, { ArticleListHandle } from '../components/ArticleList';
 import ArticleDetail from '../components/ArticleDetail';
 import WelcomePage from '../components/WelcomePage';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -75,11 +75,50 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   // 新增：下拉刷新状态 和 ref
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const articleListContainerRef = useRef<HTMLDivElement>(null);
+  const articleListRef = useRef<ArticleListHandle>(null); // New ref for ArticleList component
+  const pullStartY = useRef(0);
+  const isPulling = useRef(false);
+  const isAtTop = useRef(true); // 新增一个 ref 来跟踪是否在顶部
+
+  // Use a ref to hold all dependencies for handleRefreshAll to stabilize its identity
+  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey });
+  useEffect(() => {
+    refreshDependenciesRef.current = { db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey };
+  }, [db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey]);
 
   const listPanelRef = useRef<ImperativePanelHandle>(null);
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
   const { isArticleListVisible } = useLayout();
+
+  const handleScrollCapture = (event: React.UIEvent<HTMLDivElement>) => {
+    console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
+  };
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    // 1. Check if the feature is enabled
+    if (!settings.advanced.gestures.pullToRefresh) return;
+    
+    // 2. Get the real scrollable element from ArticleList
+    const scrollableElement = articleListRef.current?.getScrollableElement();
+    if (!scrollableElement) {
+      console.log("[PullToRefresh DEBUG] Scrollable element not available.");
+      return;
+    }
+
+    const { scrollTop } = scrollableElement;
+    const { deltaY } = event;
+
+    // console.log(`[PullToRefresh DEBUG] Wheel event. deltaY: ${deltaY}, scrollTop: ${scrollTop}`);
+    
+    // 3. Check conditions: scrolling up at the very top AND not already refreshing
+    if (deltaY < 0 && scrollTop === 0 && !isPullRefreshing) {
+      console.log("[PullToRefresh] Conditions met. Refreshing...");
+      // Prevent the default "overscroll" behavior
+      event.preventDefault();
+      handleRefreshAll();
+    }
+  };
 
   // 监听笔记侧边栏的开关事件，实现"专注模式"
   useEffect(() => {
@@ -188,7 +227,61 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     prevFilterPropRef.current = filter;
 
   }, [filter, feedId, groupId]); // 依赖项保持不变
+  
+  const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
+    const { db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey } = refreshDependenciesRef.current;
+    if (!db) return; // 增加对 db 的检查
 
+    if (!options?.silent) {
+      setLoading(true);
+      setIsPullRefreshing(true); // 确保下拉刷新指示器也显示
+    }
+
+    let feedsToRefresh: FeedSource[] = [];
+
+    if (feedId) {
+      const feed = await db.feeds.get(feedId);
+      if (feed) feedsToRefresh = [feed];
+    } else if (groupId) {
+      feedsToRefresh = await db.feeds.where('groupId').equals(groupId).toArray();
+    } else {
+      // 对于其他所有视图（如 all, unread, starred, today），刷新全部
+      feedsToRefresh = await db.feeds.toArray();
+    }
+
+    try {
+      if (feedsToRefresh.length > 0) {
+        console.log(`Refreshing ${feedsToRefresh.length} feeds...`);
+        await refreshAllFeeds(feedsToRefresh, undefined, (results) => {
+          console.log('Refresh results:', results);
+          triggerRefresh(); // 这会更新侧边栏的计数
+          setArticleListRefreshKey(prev => prev + 1); // 这会强制刷新文章列表
+        });
+      } else {
+        // 如果没有找到任何需要刷新的 feeds（例如，一个空的 group），也通知一下用户
+        console.log('No feeds to refresh.');
+        // 也可以选择刷新列表以反映空状态
+        setArticleListRefreshKey(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error("Error during refresh all:", error);
+      if (!options?.silent) {
+        message.error('刷新失败');
+      }
+    } finally {
+      if (!options?.silent) {
+        // 使用一个小的延迟来确保用户能看到加载状态
+        setTimeout(() => {
+          setLoading(false);
+          setIsPullRefreshing(false);
+        }, 500);
+      } else {
+        // 对于静默刷新，也要确保重置 isPullRefreshing 状态
+        setIsPullRefreshing(false);
+      }
+    }
+  }, []); // Empty dependency array makes the function stable
+  
   // 新增 Effect 用于应用启动时自动刷新
   useEffect(() => {
     // 确保只在应用首次加载"今日"视图时执行一次
@@ -197,7 +290,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setInitialLoadRefreshed(); // 立即标记，防止重复触发
       handleRefreshAll({ silent: true });
     }
-  }, [dbInitialized, isTodayView, initialLoadRefreshed, setInitialLoadRefreshed]);
+  }, [dbInitialized, isTodayView, initialLoadRefreshed, setInitialLoadRefreshed, handleRefreshAll]);
 
   useEffect(() => {
     if (searchModeActive && searchInputRef.current) {
@@ -253,7 +346,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   };
   
   const handleManualListRefresh = () => {
-    setArticleListRefreshKey(prev => prev + 1);
+    handleRefreshAll();
   };
 
   const getArticleFilter = useCallback(() => {
@@ -307,56 +400,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   }, [feedId, groupId, activeListFilter, filter]);
 
-  const handleRefreshAll = async (options?: { silent?: boolean }) => {
-    const isSilent = options?.silent || false;
-    if (!db || loading) return;
-
-    setLoading(true);
-    if (!isSilent) {
-      message.info('正在刷新所有订阅源...');
-    }
-    try {
-      const allFeeds = await db.feeds.toArray();
-      if (allFeeds.length > 0) {
-        // 更新数据库中的文章
-        const results = await refreshAllFeeds(allFeeds);
-        await db.transaction('rw', db.articles, db.feeds, async () => {
-          for (const result of results) {
-            if (result.articles.length > 0) {
-              const existingArticleIds = new Set(
-                (await db.articles.where('sourceId').equals(result.feed.id!).toArray()).map(a => a.id)
-              );
-              const newArticles = result.articles.filter(a => !existingArticleIds.has(a.id));
-              
-              if (newArticles.length > 0) {
-                await db.articles.bulkAdd(newArticles);
-              }
-            }
-            // 更新 unreadCount
-            const unreadCount = await db.articles.where({ sourceId: result.feed.id!, isRead: 'false' }).count();
-            await db.feeds.update(result.feed.id!, { unreadCount, lastUpdated: new Date() });
-          }
-        });
-        if (!isSilent) {
-          message.success('所有订阅源已刷新');
-        }
-      } else if (!isSilent) {
-        message.info('没有需要刷新的订阅源');
-      }
-    } catch (error) {
-      console.error('刷新所有订阅源失败:', error);
-      if (!isSilent) {
-        message.error('刷新失败，请查看控制台获取详情');
-      }
-    } finally {
-      setLoading(false);
-      triggerRefresh();
-    }
-  };
-
   const handleAddFirstFeed = (feed: FeedSource) => {
-    loadFeeds(); 
     navigate(`/feed/${feed.id}`);
+    triggerRefresh();
   };
 
   const handleViewModeChange = (mode: 'list' | 'card' | 'magazine' | 'compact') => {
@@ -433,84 +479,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     </Menu>
   );
 
-  // 新增：下拉刷新处理函数
-  const handlePullToRefresh = useCallback(async () => {
-    if (isPullRefreshing || !db) return;
-
-    setIsPullRefreshing(true);
-    try {
-      let feedsToRefreshLogic = feeds; // 默认刷新所有已知 feeds
-      if (feedId) {
-          const currentFeed = await db.feeds.get(feedId);
-          if (currentFeed) feedsToRefreshLogic = [currentFeed];
-          else feedsToRefreshLogic = []; // feedId 无效则不刷新
-      } else if (groupId) {
-          feedsToRefreshLogic = await db.feeds.where('groupId').equals(groupId).toArray();
-      }
-
-      if (feedsToRefreshLogic.length > 0) {
-          console.log(`Pull to refresh: targeting ${feedsToRefreshLogic.length} feeds.`);
-          await refreshAllFeeds(feedsToRefreshLogic,
-              (_feed, _articles) => { /* item progress, optional */ },
-              (_results: any) => {
-                  triggerRefresh(); // 更新全局计数等
-                  setArticleListRefreshKey(prev => prev + 1); // 强制 ArticleList 刷新
-              }
-          );
-      } else if (!feedId && !groupId) { // 如果是聚合视图（全部、未读、收藏、今日）
-          console.log("Pull to refresh: targeting all feeds for aggregate view.");
-          const allSystemFeeds = await db.feeds.toArray(); // 获取所有 feeds
-          if (allSystemFeeds.length > 0) {
-            await refreshAllFeeds(allSystemFeeds,
-                (_feed, _articles) => {},
-                (_results: any) => {
-                    triggerRefresh();
-                    setArticleListRefreshKey(prev => prev + 1);
-                }
-            );
-          } else { // 没有订阅源的情况
-             setArticleListRefreshKey(prev => prev + 1); // 也尝试刷新列表（例如，清除空状态）
-          }
-      } else {
-          // 如果 feedsToRefreshLogic 为空 (例如无效的 feedId/groupId, 或空的分组)
-          // 仍然触发列表刷新，以防万一有本地状态需要更新
-          setArticleListRefreshKey(prev => prev + 1);
-      }
-      
-      // 确保加载动画至少显示一段时间
-      await new Promise(resolve => setTimeout(resolve, 700));
-
-    } catch (error) {
-      console.error("Error during pull to refresh:", error);
-      message.error("刷新失败");
-    } finally {
-      setIsPullRefreshing(false);
-    }
-  }, [db, feeds, feedId, groupId, isPullRefreshing, triggerRefresh, setArticleListRefreshKey]); // 依赖项中加入了 feeds
-
-  // 新增：滚轮事件处理
-  const handleWheelScroll = useCallback((event: React.WheelEvent<HTMLDivElement>) => {
-    if (articleListContainerRef.current) {
-      const { scrollTop } = articleListContainerRef.current;
-      // deltaY < 0 表示向上滚动滚轮
-      if (scrollTop === 0 && event.deltaY < 0 && !isPullRefreshing) {
-        // 可以考虑加一个小的 debounce 或者阈值，防止过于频繁触发
-        // event.preventDefault(); // 如果不希望页面因这个滚轮事件发生其他滚动，可以取消注释
-        handlePullToRefresh();
-      }
-    }
-  }, [isPullRefreshing, handlePullToRefresh]);
-
-  useEffect(() => {
-    // 这个 effect 专门用于响应全局刷新信号
-    // 当 refreshTrigger 变化时 (通常意味着后台数据已更新)，
-    // 我们通过更新 key 来强制 ArticleList 组件重新获取和渲染数据。
-    if (refreshTrigger > 0) { // 仅在实际触发后执行，避免初始加载时触发
-      console.log(`[HomePage] Global refresh triggered (refreshTrigger: ${refreshTrigger}). Forcing ArticleList to re-render.`);
-      handleManualListRefresh();
-    }
-  }, [refreshTrigger]);
-
   // Initial loading state for the entire page if db isn't ready or basic feeds haven't loaded yet
   // This is a simplified check; you might have a more robust loading indicator in a real app
   if (!db || (feeds.length === 0 && !(feedId || groupId || filter || isTodayView))) {
@@ -554,7 +522,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       </Header> */}
       <PanelGroup direction="horizontal" className={styles.contentLayout}>
         <Panel defaultSize={settings.general.sidebarWidth || 30} minSize={30} collapsible={true} collapsedSize={0} id="article-list-panel" ref={listPanelRef}>
-          <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <div 
+            style={{ display: 'flex', flexDirection: 'column', height: '100%' }} 
+            ref={articleListContainerRef} 
+            onWheel={handleWheel}
+            onScrollCapture={handleScrollCapture}
+          >
             
             {/* NEW: Header for the Article List Panel */}
             <div className={styles.articleListPanelHeader}>
@@ -613,18 +586,17 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             <div 
               className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
             >
-              <Spin size="small" />
+              <Spin />
             </div>
 
             <div 
-              className={styles.articleListContainer} 
-              ref={articleListContainerRef} 
-              onWheel={handleWheelScroll}
+              className={styles.articleListContainer}
             >
               { showWelcomePage ? (
                 <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
               ) : (
                 <ArticleList
+                  ref={articleListRef}
                   filter={articleFilterForList}
                   searchTerm={searchTerm}
                   onSelectArticle={handleArticleSelect}

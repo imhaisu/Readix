@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { List, Card, Empty, Skeleton, Badge, Tooltip, Avatar, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
@@ -13,7 +13,7 @@ import {
   ArrowDownOutlined,
   CopyOutlined
 } from '@ant-design/icons';
-import { format, isToday, formatDistanceToNowStrict } from 'date-fns';
+import { format, isToday, formatDistanceToNowStrict, isYesterday } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { Article, FeedSource } from '../contexts/DatabaseContext';
@@ -47,6 +47,12 @@ interface ArticleListProps {
   listRefreshKey?: number; // 新增 prop
 }
 
+// 辅助函数：格式化日期
+const formatDate = (date: number | Date): string => {
+  const d = new Date(date);
+  return format(d, 'yyyy-MM-dd HH:mm');
+};
+
 // 辅助函数：从 HTML 内容中提取第一张图片
 const extractFirstImage = (htmlContent: string): string | null => {
   if (!htmlContent) return null;
@@ -71,7 +77,7 @@ const extractFirstParagraphText = (htmlContent: string): string | null => {
     
     // 如果没有 <p>，尝试从 body 中提取纯文本并截取一部分作为摘要
     if (doc.body && doc.body.textContent) {
-        const text = doc.body.textContent.trim().replace(/\\s+/g, ' '); // 替换多个空白为一个空格
+        const text = doc.body.textContent.trim().replace(/\s+/g, ' '); // 替换多个空白为一个空格
         // 尝试找到一个自然的断点，比如句号，或者固定长度
         const sentenceEnd = text.indexOf('.');
         if (sentenceEnd > 0 && sentenceEnd < 150) { // 150 是一个大致的长度限制
@@ -91,7 +97,12 @@ const formatDateTime = (date: number | Date): string => {
   return format(d, 'MM-dd HH:mm', { locale: zhCN });
 };
 
-const ArticleList: React.FC<ArticleListProps> = ({ 
+export interface ArticleListHandle {
+  scrollToTop: () => void;
+  getScrollableElement: () => HTMLDivElement | null;
+}
+
+const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({ 
   viewMode, 
   filter, 
   searchTerm, // 接收 searchTerm
@@ -102,15 +113,14 @@ const ArticleList: React.FC<ArticleListProps> = ({
   currentGroupId, // 接收
   lastUpdatedArticleInfo, // 接收 prop
   listRefreshKey // 接收 prop
-}) => {
+}, ref) => {
   console.log('[ArticleList] Component rendered or re-rendered. Current filter:', filter, 'Key:', listRefreshKey);
   const { db, isInitialized, triggerRefresh } = useDatabase();
   const [loading, setLoading] = useState(true);
   const [articles, setArticles] = useState<Article[]>([]); // 重命名回 articles, 移除 displayedArticles 和 allArticlesForCurrentContext
   const [feedInfoMap, setFeedInfoMap] = useState<Map<string, FeedSource>>(new Map());
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false); // 添加初始加载标志
-
-  // 添加 ref 用于键盘事件监听
+  const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // 重新定义 prev* 变量
@@ -839,7 +849,18 @@ const ArticleList: React.FC<ArticleListProps> = ({
     );
   };
 
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = 0;
+      }
+    },
+    getScrollableElement: () => {
+      return containerRef.current;
+    }
+  }));
+
   return renderContent();
-};
+});
 
 export default ArticleList; 
