@@ -550,33 +550,30 @@ const SidebarLayout: React.FC = () => {
               </Tooltip>
             ) : (
               <Dropdown
-                overlay={
-                  <Menu>
-                    <Menu.Item key="add-feed" icon={<EditOutlined />} onClick={() => setShowAddFeedModal(true)}>
-                      添加订阅源
-                    </Menu.Item>
-                    <Menu.Item key="add-group" icon={<FolderAddOutlined />} onClick={() => setShowAddGroupModal(true)}>
-                      添加分组
-                    </Menu.Item>
-                    <Menu.Item 
-                      key="discover-feeds" 
-                      icon={<AppstoreOutlined />} 
-                      onClick={() => {
-                        console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
-                        setIsDiscoverModalOpen(true);
-                      }}
-                    >
-                      发现订阅源
-                    </Menu.Item>
-                  </Menu>
-                }
-                trigger={['click']}
+                  menu={{
+                      items: [
+                          { key: 'add-feed', icon: <EditOutlined />, label: '添加订阅源' },
+                          { key: 'add-group', icon: <FolderAddOutlined />, label: '添加分组' },
+                          { key: 'discover-feeds', icon: <AppstoreOutlined />, label: '发现订阅源' }
+                      ],
+                      onClick: ({ key }) => {
+                          if (key === 'add-feed') {
+                              setShowAddFeedModal(true);
+                          } else if (key === 'add-group') {
+                              setShowAddGroupModal(true);
+                          } else if (key === 'discover-feeds') {
+                              console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
+                              setIsDiscoverModalOpen(true);
+                          }
+                      }
+                  }}
+                  trigger={['click']}
               >
-                <Button
-                  type="text"
-                  icon={<PlusOutlined />}
-                  className={styles.addButton}
-                />
+                  <Button
+                      type="text"
+                      icon={<PlusOutlined />}
+                      className={styles.addButton}
+                  />
               </Dropdown>
             )}
           </div>
@@ -682,7 +679,7 @@ const SidebarLayout: React.FC = () => {
 
         {showAddFeedModal && (
           <AddFeedModal
-            visible={showAddFeedModal}
+            open={showAddFeedModal}
             onCancel={() => setShowAddFeedModal(false)}
             onOk={handleAddFeedSuccess}
             groups={groups}
@@ -690,7 +687,7 @@ const SidebarLayout: React.FC = () => {
         )}
         {showAddGroupModal && (
           <AddGroupModal
-            visible={showAddGroupModal}
+            open={showAddGroupModal}
             onCancel={() => setShowAddGroupModal(false)}
             onSuccess={handleAddGroupSuccess}
             existingGroups={groups}

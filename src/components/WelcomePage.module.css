@@ -1,84 +1,86 @@
 .welcomeContainer {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
   height: 100%;
   width: 100%;
-  padding: 24px;
-  background-color: #f5f5f5;
+  padding: 24px 48px;
+  background-color: var(--color-bg-subtle);
+  overflow-y: auto;
 }
 
-.welcomeCard {
-  width: 100%;
-  max-width: 800px;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.welcomeTitle {
+.welcomeHeader {
   text-align: center;
-  margin-bottom: 24px !important;
-  color: #1890ff;
+  padding: 24px 0;
+  flex-shrink: 0;
 }
 
-.welcomeContent {
+.headerActions {
   display: flex;
-  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.presetContainer {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.categorySection {
+  margin-bottom: 32px;
+}
+
+.categoryTitle {
+  margin-bottom: 16px !important;
+  padding-left: 8px;
+  border-left: 4px solid var(--color-primary);
+}
+
+.feedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.feedCard {
+  transition: all 0.2s ease-in-out;
+}
+
+.feedCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+.feedCard :global(.ant-card-body) {
+  display: flex;
   align-items: center;
-  gap: 24px;
+  justify-content: space-between;
+  padding: 16px !important;
 }
 
-.emptyIcon {
-  font-size: 64px;
-  color: #1890ff;
+.feedCard :global(.ant-card-meta) {
+  align-items: center;
+  flex-grow: 1;
+  min-width: 0; /* 防止flex item溢出 */
 }
 
-.welcomeDescription {
-  text-align: center;
-  font-size: 16px;
-  max-width: 600px;
-  line-height: 1.8;
+.feedCard :global(.ant-card-meta-title) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.welcomeSteps {
-  width: 100%;
-  max-width: 500px;
-  margin: 16px 0;
-}
-
-.welcomeActions {
-  margin: 16px 0;
-}
-
-.welcomeTips {
-  width: 100%;
-  background-color: #f9f9f9;
-  padding: 16px;
-  border-radius: 4px;
-  border-left: 4px solid #1890ff;
-}
-
-.welcomeTips ul {
-  margin-top: 16px;
-  list-style-type: disc;
-  padding-left: 20px;
-}
-
-.welcomeTips li {
-  margin-bottom: 8px;
-  line-height: 1.6;
+.addButon {
+  flex-shrink: 0;
+  margin-left: 16px;
 }
 
 /* 暗色主题适配 */
 :global(.dark-theme) .welcomeContainer {
+  background-color: #141414;
+}
+
+:global(.dark-theme) .feedCard {
   background-color: #1f1f1f;
-}
-
-:global(.dark-theme) .welcomeCard {
-  background-color: #2a2a2a;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-:global(.dark-theme) .welcomeTips {
-  background-color: #303030;
 } 

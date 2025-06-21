@@ -16,7 +16,7 @@ const { useBreakpoint } = Grid;
 
 interface EditFeedModalProps {
   feed: FeedSource | null;
-  visible: boolean;
+  open: boolean;
   groups: Group[];
   onCancel: () => void;
   onSuccess: (updatedFeed: FeedSource) => void;
@@ -39,7 +39,7 @@ const getBase64 = (file: RcFile): Promise<string> =>
     reader.onerror = error => reject(error);
   });
 
-const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, onCancel, onSuccess }) => {
+const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCancel, onSuccess }) => {
   const { db } = useDatabase();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
@@ -47,7 +47,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
   const screens = useBreakpoint();
 
   useEffect(() => {
-    if (feed && visible) {
+    if (feed && open) {
       form.setFieldsValue({
         title: feed.title,
         url: feed.url,
@@ -56,11 +56,11 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
         iconUrlInput: feed.iconUrl || '',
       });
       setCurrentIconUrl(feed.iconUrl || '');
-    } else if (!visible) {
+    } else if (!open) {
       form.resetFields();
       setCurrentIconUrl(undefined);
     }
-  }, [feed, visible, form]);
+  }, [feed, open, form]);
 
   const handleIconUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCurrentIconUrl(e.target.value);
@@ -167,14 +167,13 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, visible, groups, on
   return (
     <Modal
       title="修改订阅源信息"
-      open={visible}
+      open={open}
       onCancel={onCancel}
       confirmLoading={loading}
       onOk={handleSubmit}
       okText="保存"
       cancelText="取消"
       width={screens.md ? 600 : '90%'}
-      destroyOnHidden
     >
       <Form form={form} layout="vertical" name="editFeedForm">
         <Form.Item name="title" label="标题" rules={[{ required: true, message: '请输入订阅源标题!' }]}>

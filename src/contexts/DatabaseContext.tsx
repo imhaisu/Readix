@@ -34,6 +34,10 @@ export class RssDatabase extends Dexie {
         }
       });
     });
+
+    this.version(10).stores({
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, [sourceId+isRead], [sourceId+isStarred]'
+    });
     
     // 定义类型
     this.feeds = this.table('feeds');

@@ -1,111 +1,154 @@
 import React, { useState } from 'react';
-import { Button, Typography, Steps, Card, Empty } from 'antd';
-import { 
-  PlusOutlined, 
-  ReadOutlined, 
-  SettingOutlined,
-  StarOutlined,
-  SyncOutlined
-} from '@ant-design/icons';
-import AddFeedModal from './AddFeedModal';
-import { useDatabase } from '../contexts/DatabaseContext';
-import { FeedSource, Group } from '../contexts/DatabaseContext';
+import { Button, Typography, Card, message, Avatar } from 'antd';
+import { CheckOutlined, PlusOutlined } from '@ant-design/icons';
+import { useDatabase, FeedSource } from '../contexts/DatabaseContext';
 import styles from './WelcomePage.module.css';
+import { presetFeeds, PresetFeed } from '../data/presetFeeds';
+import AddFeedModal from './AddFeedModal';
 
-const { Title, Text, Paragraph } = Typography;
-const { Step } = Steps;
+const { Title, Paragraph } = Typography;
 
 const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({ onAddFirstFeed }) => {
   const { db } = useDatabase();
+  const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [addedFeedUrls, setAddedFeedUrls] =useState<string[]>([]);
+  const [firstAddedFeed, setFirstAddedFeed] = useState<FeedSource | null>(null);
 
-  // 处理添加订阅源成功
-  const handleAddFeedSuccess = (feed: FeedSource) => {
-    setShowAddFeedModal(false);
-    onAddFirstFeed(feed);
+  const handleAddPresetFeed = async (feed: PresetFeed) => {
+    if (!db) {
+      message.error('数据库未准备好，请稍后再试。');
+      return;
+    }
+
+    setAddingFeedUrl(feed.url);
+
+    try {
+      const existing = await db.feeds.where('url').equals(feed.url).first();
+      if (existing) {
+        message.warning(`订阅源 "${feed.name}" 已存在。`);
+        if (!addedFeedUrls.includes(feed.url)) {
+          setAddedFeedUrls(prev => [...prev, feed.url]);
+        }
+        return;
+      }
+      
+      const newFeed: FeedSource = {
+        id: crypto.randomUUID(),
+        title: feed.name,
+        url: feed.url,
+        iconUrl: feed.favicon,
+        updateFrequency: 3600,
+        lastUpdated: new Date(0),
+        unreadCount: 0,
+        active: true,
+        defaultViewMode: 'summary',
+        bionicReading: false,
+        viewMode: 'full',
+      };
+      
+      await db.feeds.add(newFeed);
+      message.success(`已成功添加订阅源 "${feed.name}"!`);
+      
+      if (!firstAddedFeed) {
+        setFirstAddedFeed(newFeed);
+      }
+      setAddedFeedUrls(prev => [...prev, feed.url]);
+
+    } catch (error) {
+      console.error('添加预设订阅源失败:', error);
+      message.error(`添加 "${feed.name}" 失败，请检查网络或稍后再试。`);
+    } finally {
+      setAddingFeedUrl(null);
+    }
+  };
+
+  const handleFinish = () => {
+    if (firstAddedFeed) {
+      onAddFirstFeed(firstAddedFeed);
+    } else {
+      message.info('请至少添加一个订阅源来开始使用。');
+    }
   };
 
   return (
     <div className={styles.welcomeContainer}>
-      <Card className={styles.welcomeCard}>
-        <Title level={2} className={styles.welcomeTitle}>
-          欢迎使用 NewReader
-        </Title>
-        
-        <div className={styles.welcomeContent}>
-          <Empty
-            image={<ReadOutlined className={styles.emptyIcon} />}
-            description={
-              <Text>您还没有添加任何RSS订阅源</Text>
-            }
-          />
-          
-          <Paragraph className={styles.welcomeDescription}>
-            NewReader 是一个轻量级的RSS阅读器，可以帮助您随时了解您关注的网站的最新内容。
-            开始使用前，请先添加您的第一个RSS订阅源。
-          </Paragraph>
-          
-          <div className={styles.welcomeSteps}>
-            <Steps direction="vertical" current={-1}>
-              <Step 
-                title="添加RSS订阅源" 
-                description="添加您喜欢的网站的RSS订阅源"
-                icon={<PlusOutlined />}
-              />
-              <Step 
-                title="阅读最新内容" 
-                description="浏览和阅读最新的文章"
-                icon={<ReadOutlined />}
-              />
-              <Step 
-                title="收藏和管理" 
-                description="收藏喜欢的文章，管理您的订阅源"
-                icon={<StarOutlined />}
-              />
-              <Step 
-                title="保持更新" 
-                description="定期刷新以获取最新内容"
-                icon={<SyncOutlined />}
-              />
-              <Step 
-                title="个性化设置" 
-                description="根据您的偏好自定义阅读体验"
-                icon={<SettingOutlined />}
-              />
-            </Steps>
-          </div>
-          
-          <div className={styles.welcomeActions}>
+      <div className={styles.welcomeHeader}>
+        <Title level={2}>欢迎使用 Readix</Title>
+        <Paragraph type="secondary">
+          选择您感兴趣的订阅源，或手动添加一个，开始您的阅读之旅。
+        </Paragraph>
+        <div className={styles.headerActions}>
             <Button 
-              type="primary" 
-              size="large" 
-              icon={<PlusOutlined />}
-              onClick={() => setShowAddFeedModal(true)}
+                type="default" 
+                size="large" 
+                icon={<PlusOutlined />}
+                onClick={() => setShowAddFeedModal(true)}
             >
-              添加您的第一个RSS订阅源
+                手动添加
             </Button>
-          </div>
-
-          <div className={styles.welcomeTips}>
-            <Title level={4}>常见RSS订阅源举例：</Title>
-            <ul>
-              <li><Text copyable>https://www.zhihu.com/rss</Text> - 知乎每日精选</li>
-              <li><Text copyable>http://www.ruanyifeng.com/blog/atom.xml</Text> - 阮一峰的网络日志</li>
-              <li><Text copyable>https://feeds.appinn.com/appinns/</Text> - 小众软件</li>
-              <li><Text copyable>https://www.ithome.com/rss</Text> - IT之家</li>
-              <li><Text copyable>https://36kr.com/feed</Text> - 36氪</li>
-            </ul>
-          </div>
+            <Button 
+                type="primary" 
+                size="large" 
+                icon={<CheckOutlined />}
+                disabled={addedFeedUrls.length === 0}
+                onClick={handleFinish}
+            >
+                完成并开始阅读
+            </Button>
         </div>
-      </Card>
+      </div>
       
-      {/* 添加订阅源模态框 */}
+      <div className={styles.presetContainer}>
+        {presetFeeds.map(category => (
+          <div key={category.title} className={styles.categorySection}>
+            <Title level={4} className={styles.categoryTitle}>{category.title}</Title>
+            <div className={styles.feedGrid}>
+              {category.feeds.map(feed => (
+                <Card key={feed.url} className={styles.feedCard} hoverable>
+                  <Card.Meta
+                    avatar={<Avatar src={feed.favicon} />}
+                    title={feed.name}
+                  />
+                  {addedFeedUrls.includes(feed.url) ? (
+                    <Button
+                      type="dashed"
+                      shape="round"
+                      icon={<CheckOutlined />}
+                      className={styles.addButon}
+                      disabled
+                    >
+                      已添加
+                    </Button>
+                  ) : (
+                    <Button
+                      type="primary"
+                      shape="round"
+                      icon={<PlusOutlined />}
+                      className={styles.addButon}
+                      loading={addingFeedUrl === feed.url}
+                      onClick={() => handleAddPresetFeed(feed)}
+                    >
+                      添加
+                    </Button>
+                  )}
+                </Card>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
       <AddFeedModal
-        visible={showAddFeedModal}
+        open={showAddFeedModal}
         onCancel={() => setShowAddFeedModal(false)}
-        onSuccess={handleAddFeedSuccess}
-        groups={groups}
+        onOk={(newFeed) => {
+          if (!firstAddedFeed) setFirstAddedFeed(newFeed);
+          setAddedFeedUrls(prev => [...prev, newFeed.url]);
+          setShowAddFeedModal(false);
+          message.success(`已成功添加订阅源 "${newFeed.title}"!`);
+        }}
+        groups={[]}
       />
     </div>
   );

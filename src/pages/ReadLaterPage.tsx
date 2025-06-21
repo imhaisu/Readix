@@ -100,35 +100,22 @@ const ReadLaterPage: React.FC = () => {
     }
   };
 
-  // 排序菜单
-  const sortMenu = (
-    <Menu
-      items={[
-        {
-          key: 'newest',
-          label: '最新添加',
-          onClick: () => setSortOrder('newest')
-        },
-        {
-          key: 'oldest',
-          label: '最早添加',
-          onClick: () => setSortOrder('oldest')
-        },
-        {
-          key: 'title',
-          label: '按标题排序',
-          onClick: () => setSortOrder('title')
-        }
-      ]}
-    />
-  );
-
   return (
     <Layout className={styles.readLaterLayout}>
       <Header className={styles.header}>
         <div className={styles.headerTitle}>稍后阅读</div>
         <div className={styles.headerControls}>
-          <Dropdown overlay={sortMenu} trigger={['click']}>
+          <Dropdown 
+            menu={{
+                items: [
+                    { key: 'newest', label: '最新添加' },
+                    { key: 'oldest', label: '最早添加' },
+                    { key: 'title', label: '按标题排序' }
+                ],
+                onClick: ({ key }) => setSortOrder(key as 'newest' | 'oldest' | 'title')
+            }}
+            trigger={['click']}
+          >
             <Button 
               type="text" 
               icon={<SortAscendingOutlined />}

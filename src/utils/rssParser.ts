@@ -64,8 +64,8 @@ export const fetchRssFeed = async (feedSource: FeedSource): Promise<Article[]> =
         contentText,
         summary,
         imageUrl,
-        isRead: 'false',
-        isStarred: 'false',
+        isRead: 'false',     // 修复：添加默认值
+        isStarred: 'false',  // 修复：添加默认值
         isHidden: false,
         tags: [],
         guid: item.guid, // 也保存原始 guid (如果存在)

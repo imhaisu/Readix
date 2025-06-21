@@ -263,25 +263,63 @@ app.on('activate', () => {
 // RSS 解析器实例
 const rssParser = new Parser();
 
-// 处理来自渲染进程的 RSS 解析请求
-ipcMain.handle('parse-rss-feed', async (event, feedUrl) => {
-  console.log(`[Main Process] Received request to parse RSS feed: ${feedUrl}`); // 记录接收到的 URL
+// 统一的、健壮的 Feed 拉取和解析逻辑
+async function fetchAndParseFeed(feedUrl: string) {
+  let normalizedUrl = feedUrl.trim();
+  if (!/^(https?):\/\//i.test(normalizedUrl)) {
+    normalizedUrl = 'https://' + normalizedUrl;
+  }
+
+  const fetchWithProtocol = async (protocolUrl: string) => {
+    const response = await axios.get(protocolUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'application/rss+xml,application/xml,text/xml,application/atom+xml',
+      },
+      responseType: 'text',
+      timeout: 15000,
+      maxRedirects: 5,
+    });
+    return response.data;
+  };
+
+  let feedText = '';
   try {
-    const feed = await rssParser.parseURL(feedUrl);
-    console.log(`[Main Process] Successfully parsed RSS feed: ${feedUrl}, found ${feed.items?.length || 0} items.`); // 记录成功和条目数
+    feedText = await fetchWithProtocol(normalizedUrl);
+  } catch (error) {
+    if (normalizedUrl.startsWith('https://')) {
+      const httpUrl = normalizedUrl.replace('https://', 'http://');
+      feedText = await fetchWithProtocol(httpUrl);
+    } else {
+      throw error;
+    }
+  }
+
+  return await rssParser.parseString(feedText);
+}
+
+// 处理来自渲染进程的 RSS 解析请求 (刷新用)
+ipcMain.handle('parse-rss-feed', async (event, feedUrl) => {
+  console.log(`[Main Process] PARSE-RSS-FEED: Request to parse: ${feedUrl}`);
+  try {
+    const feed = await fetchAndParseFeed(feedUrl);
+    console.log(`[Main Process] PARSE-RSS-FEED: Successfully parsed: ${feedUrl}, found ${feed.items?.length || 0} items.`);
     return { success: true, data: feed };
-  } catch (error: any) { // 明确错误类型为 any 或 Error
-    console.error(`[Main Process] Failed to parse RSS feed [${feedUrl}]:`, error); // 记录详细错误
+  } catch (error: any) {
+    console.error(`[Main Process] PARSE-RSS-FEED: Failed to parse: [${feedUrl}]:`, error.message);
     return { success: false, error: error.message || 'Unknown error during RSS parsing' };
   }
 });
 
-// 处理来自渲染进程的获取 RSS 源信息请求
+
+// 处理来自渲染进程的获取 RSS 源信息请求 (添加用)
 ipcMain.handle('get-rss-feed-info', async (event, feedUrl) => {
-  console.log(`[Main Process] Received request to get RSS feed info: ${feedUrl}`);
+  console.log(`[Main Process] GET-RSS-FEED-INFO: Request to get info for: "${feedUrl}"`);
   try {
-    const feed = await rssParser.parseURL(feedUrl);
-    let iconPathToReturn = ''; // 最终返回给渲染进程的图标路径
+    const feed = await fetchAndParseFeed(feedUrl);
+    console.log(`[Main Process] GET-RSS-FEED-INFO: Successfully parsed XML for "${feedUrl}"`);
+    
+    let iconPathToReturn = '';
     const originalIconUrl = feed.image?.url;
 
     // 帮助函数：下载并缓存图标
@@ -351,13 +389,13 @@ ipcMain.handle('get-rss-feed-info', async (event, feedUrl) => {
       description: feed.description,
       icon: iconPathToReturn,
     };
-    console.log(`[Main Process] Processed RSS feed info for: ${feedUrl}`, feedInfo);
+    console.log(`[Main Process] GET-RSS-FEED-INFO: Processed info for: ${feedUrl}`, feedInfo);
     return {
       success: true,
       data: feedInfo,
     };
   } catch (error: any) {
-    console.error(`[Main Process] Failed to get RSS feed info for [${feedUrl}]:`, error);
+    console.error(`[Main Process] GET-RSS-FEED-INFO: An error occurred for URL [${feedUrl}].`);
     return { success: false, error: error.message || 'Unknown error during getting feed info' };
   }
 });

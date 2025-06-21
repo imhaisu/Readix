@@ -479,122 +479,86 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     </Menu>
   );
 
-  // Initial loading state for the entire page if db isn't ready or basic feeds haven't loaded yet
-  // This is a simplified check; you might have a more robust loading indicator in a real app
-  if (!db || (feeds.length === 0 && !(feedId || groupId || filter || isTodayView))) {
-     // Show loading only if not in a specific feed/group/filter context yet and feeds are empty
-     // WelcomePage will be shown if feeds are empty AND no specific context is active
-     if (!feedId && !groupId && !filter && !isTodayView && feeds.length === 0 ) {
-        // Let WelcomePage handle the case of no feeds and no active filter/context
-     } else if (loading && feeds.length === 0) { // Added `loading` check here for clarity
-        return (
-            <Layout className={styles.homeLayout}>
-                <Header className={styles.header}>
-                <Title level={4} className={styles.headerTitle}>{/* Placeholder */}</Title>
-                </Header>
-                <Content style={{ padding: '20px', textAlign: 'center' }}>
-                <Skeleton active paragraph={{ rows: 10 }} />
-                </Content>
-            </Layout>
-        );
-     }
-  }
+  // Determine if WelcomePage should be shown. This should be decided before any rendering logic.
+  // It's shown when there are absolutely no feeds and the user isn't searching for anything.
+  const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !searchTerm;
 
-  // Determine if WelcomePage should be shown
-  const showWelcomePage = feeds.length === 0 && !feedId && !groupId && !filter && !isTodayView && !searchTerm;
+  // Initial loading skeleton
+  if (!dbInitialized || !settingsInitialized) {
+    return (
+      <Layout className={styles.homeLayout}>
+        <Header className={styles.header}>
+          <Title level={4} className={styles.headerTitle}>&nbsp;</Title>
+        </Header>
+        <Content style={{ padding: '20px', textAlign: 'center' }}>
+          <Skeleton active paragraph={{ rows: 10 }} />
+        </Content>
+      </Layout>
+    );
+  }
 
   return (
     <Layout className={styles.homeLayout}>
-      {/* <Header className={styles.header}>
-        {searchModeActive && !feedId && !groupId && !filter ? (
-            <Input
-                ref={searchInputRef}
-                placeholder="全局搜索... (如果需要)"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className={styles.mainSearchInput} 
-                allowClear
-                autoFocus
-            />
-        ) : null } 
-         <Space className={styles.headerControls}>
-        </Space>
-      </Header> */}
-      <PanelGroup direction="horizontal" className={styles.contentLayout}>
-        <Panel defaultSize={settings.general.sidebarWidth || 30} minSize={30} collapsible={true} collapsedSize={0} id="article-list-panel" ref={listPanelRef}>
-          <div 
-            style={{ display: 'flex', flexDirection: 'column', height: '100%' }} 
-            ref={articleListContainerRef} 
-            onWheel={handleWheel}
-            onScrollCapture={handleScrollCapture}
-          >
-            
-            {/* NEW: Header for the Article List Panel */}
-            <div className={styles.articleListPanelHeader}>
-              <Title level={4} className={styles.panelHeaderTitle} ellipsis>
-                {pageTitle}
-              </Title>
-              <Space className={styles.panelHeaderControls}>
-                <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
-                    <Button
-                      icon={<SearchOutlined />}
-                      type={'text'} 
-                      onClick={() => setSearchModeActive(!searchModeActive)}
-                      className={styles.controlButton}
-                    />
-                </Tooltip>
-                {/* <Popover 
-                    content={viewModeMenu} 
-                    trigger="click"
-                    open={popoverVisible} 
-                    onOpenChange={setPopoverVisible}
-                    placement="bottomRight"
-                  >
-                    <Button 
-                        type="text" 
-                        icon={viewIcons[viewMode]} 
+      {showWelcomePage ? (
+        <Content className={styles.centeredContent}>
+          <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
+        </Content>
+      ) : (
+        <PanelGroup direction="horizontal" className={styles.contentLayout}>
+          <Panel defaultSize={settings.general.sidebarWidth || 30} minSize={30} collapsible={true} collapsedSize={0} id="article-list-panel" ref={listPanelRef}>
+            <div 
+              style={{ display: 'flex', flexDirection: 'column', height: '100%' }} 
+              ref={articleListContainerRef} 
+              onWheel={handleWheel}
+              onScrollCapture={handleScrollCapture}
+            >
+              <div className={styles.articleListPanelHeader}>
+                <Title level={4} className={styles.panelHeaderTitle} ellipsis>
+                  {pageTitle}
+                </Title>
+                <Space className={styles.panelHeaderControls}>
+                  <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
+                      <Button
+                        icon={<SearchOutlined />}
+                        type={'text'} 
+                        onClick={() => setSearchModeActive(!searchModeActive)}
                         className={styles.controlButton}
-                    />
-                </Popover> */}
-                <Tooltip title="标记当前列表已读">
-                    <Button 
-                      icon={<CheckCircleOutlined />} 
-                      onClick={handleMarkAllReadLocal} 
-                      type="text" 
-                      className={styles.controlButton}
-                    />
-                </Tooltip>
-              </Space>
-            </div>
-
-            {/* Conditional Search Input Row */}
-            {searchModeActive && (
-              <div className={styles.panelSearchInputContainer}>
-                <Input
-                    ref={searchInputRef}
-                    placeholder="搜索"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className={styles.panelSearchInput}
-                    allowClear
-                    autoFocus // autoFocus when it becomes visible
-                />
+                      />
+                  </Tooltip>
+                  <Tooltip title="标记当前列表已读">
+                      <Button 
+                        icon={<CheckCircleOutlined />} 
+                        onClick={handleMarkAllReadLocal} 
+                        type="text" 
+                        className={styles.controlButton}
+                      />
+                  </Tooltip>
+                </Space>
               </div>
-            )}
 
-            {/* Pull to refresh indicator */}
-            <div 
-              className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
-            >
-              <Spin />
-            </div>
+              {searchModeActive && (
+                <div className={styles.panelSearchInputContainer}>
+                  <Input
+                      ref={searchInputRef}
+                      placeholder="搜索"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className={styles.panelSearchInput}
+                      allowClear
+                      autoFocus
+                  />
+                </div>
+              )}
 
-            <div 
-              className={styles.articleListContainer}
-            >
-              { showWelcomePage ? (
-                <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
-              ) : (
+              <div 
+                className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
+              >
+                <Spin />
+              </div>
+
+              <div 
+                className={styles.articleListContainer}
+              >
                 <ArticleList
                   ref={articleListRef}
                   filter={articleFilterForList}
@@ -608,60 +572,58 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                   lastUpdatedArticleInfo={lastUpdatedArticleInfo}
                   listRefreshKey={articleListRefreshKey}
                 />
+              </div>
+              <div className={styles.listFooterControls}>
+                <Radio.Group
+                  value={activeListFilter}
+                  onChange={(e) => {
+                    const newFilter = e.target.value as FilterType;
+                    console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
+                    setFilter(newFilter);
+                    setArticleListRefreshKey(prev => prev + 1);
+                  }}
+                  style={{ width: '100%', display: 'flex' }}
+                >
+                  <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <AppstoreAddOutlined />
+                      <span>全部</span>
+                    </div>
+                  </Radio.Button>
+                  <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <CheckCircleOutlined />
+                      <span>未读</span>
+                    </div>
+                  </Radio.Button>
+                  <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      <StarOutlined />
+                      <span>收藏</span>
+                    </div>
+                  </Radio.Button>
+                </Radio.Group>
+              </div>
+            </div>
+          </Panel>
+          <PanelResizeHandle className={styles.resizeHandle} />
+          <Panel defaultSize={100 - (settings.general.sidebarWidth || 30)} minSize={30} collapsible={true} collapsedSize={0} id="article-detail-panel" ref={detailPanelRef}>
+            <div className={styles.articleDetail}>
+              {selectedArticleId ? (
+                <ArticleDetail 
+                  articleId={selectedArticleId} 
+                  viewMode={articleDetailViewMode} 
+                  onChangeViewMode={handleArticleDetailViewModeChange}
+                  onClose={handleCloseArticle}
+                  onArticleModified={handleArticleModified}
+                />
+              ) : (
+                <Empty description="请选择一篇文章阅读" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
               )}
             </div>
-            <div className={styles.listFooterControls}>
-              <Radio.Group
-                value={activeListFilter}
-                onChange={(e) => {
-                  const newFilter = e.target.value as FilterType;
-                  console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
-                  setFilter(newFilter);
-
-                  // 重新触发文章列表的刷新，因为 activeListFilter 变了
-                  setArticleListRefreshKey(prev => prev + 1);
-                }}
-                style={{ width: '100%', display: 'flex' }}
-              >
-                <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                    <AppstoreAddOutlined />
-                    <span>全部</span>
-                  </div>
-                </Radio.Button>
-                <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                    <CheckCircleOutlined />
-                    <span>未读</span>
-                  </div>
-                </Radio.Button>
-                <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                    <StarOutlined />
-                    <span>收藏</span>
-                  </div>
-                </Radio.Button>
-              </Radio.Group>
-            </div>
-          </div>
-        </Panel>
-        <PanelResizeHandle className={styles.resizeHandle} />
-        <Panel defaultSize={100 - (settings.general.sidebarWidth || 30)} minSize={30} collapsible={true} collapsedSize={0} id="article-detail-panel" ref={detailPanelRef}>
-          <div className={styles.articleDetail}>
-            {selectedArticleId ? (
-              <ArticleDetail 
-                articleId={selectedArticleId} 
-                viewMode={articleDetailViewMode} 
-                onChangeViewMode={handleArticleDetailViewModeChange}
-                onClose={handleCloseArticle}
-                onArticleModified={handleArticleModified}
-              />
-            ) : (
-              <Empty description="请选择一篇文章阅读" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
-            )}
-          </div>
-        </Panel>
-      </PanelGroup>
+          </Panel>
+        </PanelGroup>
+      )}
     </Layout>
   );
 };

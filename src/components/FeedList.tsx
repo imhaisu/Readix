@@ -457,7 +457,6 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         open={isRenameGroupModalVisible}
         onOk={handleRenameGroupOk}
         onCancel={() => setIsRenameGroupModalVisible(false)}
-        destroyOnHidden
       >
         <Input
           value={newGroupName}
@@ -469,7 +468,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       {editingFeedData && (
         <EditFeedModal
           feed={editingFeedData}
-          visible={isEditFeedModalVisible}
+          open={isEditFeedModalVisible}
           groups={groupsFromProps}
           onSuccess={handleEditFeedSuccess}
           onCancel={handleEditFeedCancel}

@@ -6,14 +6,14 @@ import { Group } from '../contexts/DatabaseContext';
 import { generateUniqueId } from '../utils/helpers';
 
 interface AddGroupModalProps {
-  visible: boolean;
+  open: boolean;
   onCancel: () => void;
   onSuccess: (group: Group) => void;
   existingGroups: Group[];
 }
 
 const AddGroupModal: React.FC<AddGroupModalProps> = ({ 
-  visible, 
+  open, 
   onCancel, 
   onSuccess,
   existingGroups
@@ -71,7 +71,7 @@ const AddGroupModal: React.FC<AddGroupModalProps> = ({
   return (
     <Modal
       title="添加分组"
-      open={visible}
+      open={open}
       onCancel={onCancel}
       footer={[
         <Button key="cancel" onClick={onCancel}>

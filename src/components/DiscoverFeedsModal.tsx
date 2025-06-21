@@ -109,9 +109,8 @@ const DiscoverFeedsModal: React.FC<DiscoverFeedsModalProps> = ({ isOpen, onClose
       onCancel={onClose}
       footer={null}
       width={700}
-      destroyOnClose
-      // 设置弹窗内容区样式，实现内部滚动
-      bodyStyle={{ maxHeight: '60vh', overflowY: 'auto' }}
+      destroyOnHidden
+      styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
     >
       {presetFeeds.map(category => (
         <div key={category.title} style={{ marginBottom: 24 }}>

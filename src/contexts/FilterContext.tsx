@@ -22,7 +22,7 @@ export const FilterProvider: React.FC<FilterProviderProps> = ({ children }) => {
   // 从 localStorage 初始化 state，这和我们在 HomePage 中做的一样
   const [filter, setFilterState] = useState<FilterType>(() => {
     const savedFilter = localStorage.getItem('activeListFilter');
-    return (savedFilter === 'all' || savedFilter === 'unread' || savedFilter === 'starred') ? savedFilter : 'unread';
+    return (savedFilter === 'all' || savedFilter === 'unread' || savedFilter === 'starred') ? savedFilter : 'all';
   });
 
   // 当 filter 状态改变时，保存到 localStorage
