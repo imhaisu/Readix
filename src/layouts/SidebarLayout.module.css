@@ -4,12 +4,12 @@
 }
 
 .sider {
+  background: #ffffff !important;
   display: flex;
   flex-direction: column;
   height: 100%;
   overflow: hidden;
   border-right: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
   user-select: none;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -126,7 +126,7 @@
 
 /* Styles for react-resizable-panels handle */
 .siderResizeHandle_rH {
-  width: 2px;
+  width: 1px;
   background-color: transparent;
   cursor: col-resize;
   display: flex;
@@ -172,21 +172,7 @@
   /* styles for add button in header */
 }
 
-/* 暗色主题适配 */
-:global(.dark-theme) .sider {
-  border-right-color: #303030;
-  background-color: #1c1c1c;
-}
-
-:global(.dark-theme) .siderHeader,
-:global(.dark-theme) .menu,
-:global(.dark-theme) .siderFooter {
-  border-color: transparent;
-}
-
-:global(.dark-theme) .feedsHeader {
-  color: rgba(255, 255, 255, 0.45);
-}
+/* 移除所有 .dark-theme 相关样式 */
 
 @media (max-width: 768px) {
   .sider {

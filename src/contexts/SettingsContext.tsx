@@ -1,20 +1,20 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
-import { deepMerge } from '../utils/helpers';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Settings, defaultSettings } from '../types/settings';
+import { deepMerge } from '../utils/helpers'; // 假设你有一个 deepMerge 工具函数
 
 // 设置上下文类型
 interface SettingsContextType {
   settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>, isSilent?: boolean) => void;
+  updateSettings: (newSettings: Partial<Settings>) => void;
   updateGeneralSettings: (newSettings: Partial<Settings['general']>) => void;
-  updateReadingSettings: (newSettings: Partial<Settings['reading']>) => void;
+  updateAppearanceSettings: (newSettings: Partial<Settings['appearance']>) => void;
   updateAdvancedSettings: (newSettings: Partial<Settings['advanced']>) => void;
-  updateReadLaterSettings: (newSettings: Partial<Settings['readLater']>) => void;
+  updateLayoutSettings: (newSettings: Partial<Settings['layout']>) => void; // 新增
   resetSettings: () => void;
   isInitialized: boolean;
 }
 
-// 创建上下文
+// 创建上下文，并使用导入的默认设置
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined);
 
 // 提供者组件Props类型
@@ -25,103 +25,60 @@ interface SettingsProviderProps {
 // 设置提供者组件
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
-  const [initialized, setInitialized] = useState(false);
-  const didInit = useRef(false);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // 从本地存储加载设置
   useEffect(() => {
-    if (didInit.current) {
-      return;
-    }
-    didInit.current = true;
-
     const initializeSettings = async () => {
-      console.log('[SettingsContext] 开始初始化设置...');
-      console.log('[SettingsContext] window.electron 是否存在:', !!window.electron);
-      
-      if (window.electron) {
-        console.log('[SettingsContext] 使用 Electron Store 获取设置');
-        try {
-          const savedSettings = await window.electron.getSettings();
-          if (savedSettings && Object.keys(savedSettings).length > 0) {
-            console.log('[SettingsContext] 从 Electron Store 加载的设置:', savedSettings);
-            setSettings(savedSettings);
-          }
-        } catch (error) {
-          console.error('[SettingsContext] 从 Electron Store 获取设置时出错:', error);
-        }
-      } else {
-        console.log('[SettingsContext] 使用 localStorage 获取设置');
+      try {
         const savedSettings = localStorage.getItem('settings');
-        console.log('[SettingsContext] localStorage 中的设置:', savedSettings);
         if (savedSettings) {
-          try {
-            const parsedSettings = JSON.parse(savedSettings);
-            const mergedSettings = deepMerge(defaultSettings, parsedSettings);
-            console.log('[SettingsContext] 解析并合并后的设置:', mergedSettings);
-            setSettings(mergedSettings);
-          } catch (e) {
-            console.error('[SettingsContext] 解析设置时出错:', e);
-          }
+          const parsedSettings = JSON.parse(savedSettings);
+          // 使用 deepMerge 来合并，防止部分设置丢失
+          const mergedSettings = deepMerge(defaultSettings, parsedSettings);
+          setSettings(mergedSettings);
         }
+      } catch (error) {
+        console.error('[SettingsContext] Failed to load settings:', error);
+      } finally {
+        setIsInitialized(true);
       }
-      console.log('[SettingsContext] 设置初始化完成，标记为已初始化');
-      setInitialized(true);
     };
-
     initializeSettings();
   }, []);
 
-  // 保存设置到存储
   const saveSettings = (newSettings: Settings) => {
-    if (window.electron) {
-      window.electron.saveSettings(newSettings);
-    } else {
+    try {
       localStorage.setItem('settings', JSON.stringify(newSettings));
+    } catch (error) {
+      console.error('[SettingsContext] Failed to save settings:', error);
     }
   };
 
-  const updateSettings = (newSettings: Partial<Settings>, isSilent?: boolean) => {
+  const updateSettings = (newSettings: Partial<Settings>) => {
     const updatedSettings = deepMerge(settings, newSettings);
     setSettings(updatedSettings);
     saveSettings(updatedSettings);
   };
 
-  const updateGeneralSettings = (newGeneralSettings: Partial<Settings['general']>) => {
-    const newSettings = { 
-      ...settings, 
-      general: { ...settings.general, ...newGeneralSettings } 
-    };
-    setSettings(newSettings);
-    saveSettings(newSettings);
-  };
+  const createSettingUpdater = <K extends keyof Settings>(key: K) => (
+    (newValues: Partial<Settings[K]>) => {
+      const newSettings = {
+        ...settings,
+        [key]: {
+          ...settings[key],
+          ...newValues,
+        },
+      };
+      setSettings(newSettings);
+      saveSettings(newSettings);
+    }
+  );
 
-  const updateReadingSettings = (newReadingSettings: Partial<Settings['reading']>) => {
-    const newSettings = { 
-      ...settings, 
-      reading: { ...settings.reading, ...newReadingSettings } 
-    };
-    setSettings(newSettings);
-    saveSettings(newSettings);
-  };
-
-  const updateAdvancedSettings = (newAdvancedSettings: Partial<Settings['advanced']>) => {
-    const newSettings = { 
-      ...settings, 
-      advanced: { ...settings.advanced, ...newAdvancedSettings } 
-    };
-    setSettings(newSettings);
-    saveSettings(newSettings);
-  };
-
-  const updateReadLaterSettings = (newReadLaterSettings: Partial<Settings['readLater']>) => {
-    const newSettings = { 
-      ...settings, 
-      readLater: { ...settings.readLater, ...newReadLaterSettings } 
-    };
-    setSettings(newSettings);
-    saveSettings(newSettings);
-  };
+  const updateGeneralSettings = createSettingUpdater('general');
+  const updateAppearanceSettings = createSettingUpdater('appearance');
+  const updateAdvancedSettings = createSettingUpdater('advanced');
+  const updateLayoutSettings = createSettingUpdater('layout');
 
   const resetSettings = () => {
     setSettings(defaultSettings);
@@ -132,20 +89,24 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     settings,
     updateSettings,
     updateGeneralSettings,
-    updateReadingSettings,
+    updateAppearanceSettings,
     updateAdvancedSettings,
-    updateReadLaterSettings,
+    updateLayoutSettings, // 新增
     resetSettings,
-    isInitialized: initialized
+    isInitialized,
   };
 
-  return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
+  return (
+    <SettingsContext.Provider value={value}>
+      {children}
+    </SettingsContext.Provider>
+  );
 };
 
 // 自定义钩子，用于组件中获取设置上下文
 export const useSettings = (): SettingsContextType => {
   const context = useContext(SettingsContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useSettings must be used within a SettingsProvider');
   }
   return context;

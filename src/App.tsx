@@ -6,7 +6,6 @@ import TitleBar from './components/TitleBar';
 import HomePage from './pages/HomePage';
 import SettingsPage from './pages/SettingsPage';
 import ReadLaterPage from './pages/ReadLaterPage';
-import { useTheme } from './contexts/ThemeContext';
 import { useSettings } from './contexts/SettingsContext';
 import { useDatabase } from './contexts/DatabaseContext';
 import { TitleBarProvider, useTitleBar } from './contexts/TitleBarContext';
@@ -55,13 +54,11 @@ const AppContent: React.FC = () => {
 }
 
 const App: React.FC = () => {
-  const { theme } = useTheme();
-  console.log('[App] App 组件渲染，主题:', theme);
   return (
     <FilterProvider>
       <TitleBarProvider>
         <LayoutProvider>
-          <div className={`app-container ${theme === 'dark' ? 'dark-theme' : ''}`}>
+          <div className="app-container">
             <AppContent />
           </div>
         </LayoutProvider>

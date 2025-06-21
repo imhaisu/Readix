@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { List, Card, Empty, Skeleton, Badge, Tooltip, Avatar, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   StarOutlined, 
   StarFilled, 
@@ -32,7 +33,6 @@ function usePrevious<T>(value: T): T | undefined {
 }
 
 interface ArticleListProps {
-  viewMode: 'list' | 'card' | 'magazine' | 'compact';
   filter: any; // 过滤条件, HomePage.getArticleFilter() 返回的对象
   searchTerm?: string; // 新增 searchTerm prop (可选)
   onSelectArticle: (articleId: string) => void;
@@ -103,7 +103,6 @@ export interface ArticleListHandle {
 }
 
 const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({ 
-  viewMode, 
   filter, 
   searchTerm, // 接收 searchTerm
   onSelectArticle,
@@ -114,6 +113,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   lastUpdatedArticleInfo, // 接收 prop
   listRefreshKey // 接收 prop
 }, ref) => {
+  // 移除不再需要的诊断日志
   console.log('[ArticleList] Component rendered or re-rendered. Current filter:', filter, 'Key:', listRefreshKey);
   const { db, isInitialized, triggerRefresh } = useDatabase();
   const [loading, setLoading] = useState(true);
@@ -216,190 +216,132 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
 
   // Main data loading effect
   useEffect(() => {
-    if (!isInitialized || !db) return;
+    if (!isInitialized || !db) {
+      return;
+    }
 
     const loadArticles = async () => {
+      console.log('[ArticleList] useEffect[loadArticles]: Running with filter', filter);
+      const isInitialLoad = !hasInitialLoaded;
+      
+      // Determine if a full reload is needed.
       const hasFilterChanged = JSON.stringify(filter) !== JSON.stringify(prevFilter);
       const hasSearchTermChanged = searchTerm !== prevSearchTerm;
       const hasFeedIdChanged = currentFeedId !== prevCurrentFeedId;
       const hasGroupIdChanged = currentGroupId !== prevCurrentGroupId;
       const hasListRefreshKeyChanged = listRefreshKey !== prevListRefreshKey;
 
-      const isInitialLoad = !hasInitialLoaded;
-      const isInitialLoadOrCriticalChange = 
-        isInitialLoad || 
-        hasFilterChanged || 
-        hasSearchTermChanged || 
-        hasFeedIdChanged ||
-        hasGroupIdChanged ||
-        hasListRefreshKeyChanged;
+      const isCriticalChange = isInitialLoad || hasFilterChanged || hasSearchTermChanged || hasFeedIdChanged || hasGroupIdChanged || hasListRefreshKeyChanged;
 
-      if (isInitialLoadOrCriticalChange) {
-        console.log('[ArticleList] Performing hard refresh. Reason:');
-        if (isInitialLoad) console.log('  - Initial load (hasInitialLoaded === false)');
-        if (hasFilterChanged) console.log('  - Filter changed', { prev: prevFilter, current: filter });
-        if (hasSearchTermChanged) console.log('  - Search term changed', { prev: prevSearchTerm, current: searchTerm });
-        if (hasFeedIdChanged) console.log('  - FeedId changed', { prev: prevCurrentFeedId, current: currentFeedId });
-        if (hasGroupIdChanged) console.log('  - GroupId changed', { prev: prevCurrentGroupId, current: currentGroupId });
-        if (hasListRefreshKeyChanged) console.log('  - ListRefreshKey changed', { prev: prevListRefreshKey, current: listRefreshKey });
-        setLoading(true);
-        
-        // 标记已经进行过初始加载
-        if (isInitialLoad) {
-          setHasInitialLoaded(true);
-        }
-        
-        // 如果是关键变化（非初始加载），重置初始加载标志以便下次能正确处理
-        if (!isInitialLoad && (hasFilterChanged || hasFeedIdChanged || hasGroupIdChanged)) {
-          setHasInitialLoaded(true); // 确保标志保持正确状态
-        }
-      } else {
-        return; 
+      if (!isCriticalChange) {
+        console.log('[ArticleList] Skipping article load: no critical changes detected.');
+        return;
       }
       
-      console.log('[ArticleList] loadArticles: Starting DB query with filter object:', JSON.stringify(filter));
-      try {
-        let query;
-        
-        // 1. 处理日期范围 (首先检查 fetchDate, 然后是 publishDate)
-        if (filter && filter.fetchDate && typeof filter.fetchDate === 'object' && 
-            filter.fetchDate.hasOwnProperty('$gte') && filter.fetchDate.hasOwnProperty('$lte')) {
-          console.log('[ArticleList] Applying fetchDate range:', filter.fetchDate);
-          query = db.articles.where('fetchDate').between(filter.fetchDate.$gte, filter.fetchDate.$lte, true, true);
-          
-          // 应用其他可能的筛选条件 (isRead, isStarred)
-          const { fetchDate, ...otherFilters } = filter;
-          if (otherFilters.isRead === 'true' || otherFilters.isRead === 'false') {
-            query = query.and((article: Article) => article.isRead === otherFilters.isRead);
-          }
-          if (otherFilters.isStarred === 'true') {
-            query = query.and((article: Article) => article.isStarred === otherFilters.isStarred);
-          }
-        } else if (filter && filter.publishDate && typeof filter.publishDate === 'object' && 
-            filter.publishDate.hasOwnProperty('$gte') && filter.publishDate.hasOwnProperty('$lte')) {
-          console.log('[ArticleList] Applying publishDate range:', filter.publishDate);
-          query = db.articles.where('publishDate').between(filter.publishDate.$gte, filter.publishDate.$lte, true, true);
-          
-          const { publishDate, ...otherFilters } = filter;
-          if (otherFilters.isRead === 'true' || otherFilters.isRead === 'false') {
-            query = query.and((article: Article) => article.isRead === otherFilters.isRead);
-          }
-          if (otherFilters.isStarred === 'true') {
-            query = query.and((article: Article) => article.isStarred === otherFilters.isStarred);
-          }
-        } else {
-          // 2. 如果没有日期范围，处理其他条件
-          const conditionsForWhere: any = {};
-          if (currentFeedId) {
-            conditionsForWhere.sourceId = currentFeedId;
-            if (filter && filter.isRead !== undefined) conditionsForWhere.isRead = String(filter.isRead);
-            if (filter && filter.isStarred === 'true') conditionsForWhere.isStarred = 'true';
-            query = db.articles.where(conditionsForWhere);
-          } else if (currentGroupId) {
-            const feedsInGroup = await db.feeds.where('groupId').equals(currentGroupId).toArray();
-            const feedIdsInGroup = feedsInGroup.map(f => f.id).filter((id): id is string => !!id);
-            if (feedIdsInGroup.length > 0) {
-              query = db.articles.where('sourceId').anyOf(feedIdsInGroup);
-              if (filter && filter.isRead !== undefined) {
-                query = query.and((article: Article) => article.isRead === String(filter.isRead));
-              }
-              if (filter && filter.isStarred === 'true') {
-                query = query.and((article: Article) => article.isStarred === 'true');
-              }
-            } else {
-              setArticles([]);
-              setLoading(false);
-              return;
-            }
-          } else if (filter && (filter.isRead !== undefined || filter.isStarred === 'true')) {
-            if (filter.isRead !== undefined) conditionsForWhere.isRead = String(filter.isRead);
-            if (filter.isStarred === 'true') conditionsForWhere.isStarred = 'true';
-            if (Object.keys(conditionsForWhere).length > 0) {
-                 query = db.articles.where(conditionsForWhere);
-            } else {
-                 query = db.articles.toCollection(); 
-            }
-          } else {
-            query = db.articles.toCollection();
-          }
-        }
-        
-        if (!query) { 
-            console.warn("[ArticleList] Query was not constructed. Defaulting to all articles.");
-            query = db.articles.toCollection();
-        }
-        
-        const articlesFromDb = await (query as Dexie.Collection<Article, string>).toArray(); 
+      console.log('[ArticleList] Performing hard refresh. Reason:', {
+        isInitialLoad,
+        hasFilterChanged,
+        hasSearchTermChanged,
+        hasFeedIdChanged,
+        hasGroupIdChanged,
+        hasListRefreshKeyChanged,
+      });
 
-        let fetchedArticles: Article[];
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Start with a base collection
+        let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
+
+        // 1. Filter by Feed or Group
+        if (currentFeedId) {
+          collection = collection.filter(article => article.sourceId === currentFeedId);
+        } else if (currentGroupId) {
+          const feedsInGroup = await db.feeds.where('groupId').equals(currentGroupId).toArray();
+          const feedIdsInGroup = new Set(feedsInGroup.map(f => f.id).filter((id): id is string => !!id));
+          if (feedIdsInGroup.size > 0) {
+            collection = collection.filter(article => article.sourceId ? feedIdsInGroup.has(article.sourceId) : false);
+          } else {
+            // If group has no feeds, no articles can match.
+            setArticles([]);
+            setLoading(false);
+            setHasInitialLoaded(true);
+            return;
+          }
+        }
+
+        // 2. Apply main filters from the 'filter' prop
+        if (filter) {
+          if (typeof filter.isRead === 'string') { // 'true' or 'false'
+            collection = collection.filter(article => article.isRead === filter.isRead);
+          }
+          if (filter.isStarred === 'true') {
+            collection = collection.filter(article => article.isStarred === 'true');
+          }
+          // Handle 'Today' view filter if passed as a date range
+          if (filter.publishDate) {
+             collection = collection.filter(article => article.publishDate >= filter.publishDate.from && article.publishDate <= filter.publishDate.to);
+          }
+        }
+        
+        // The collection is now filtered based on DB-indexed properties.
+        let fetchedArticles = await collection.toArray();
+
+        // 3. Apply client-side search term filter (if any)
         if (searchTerm && searchTerm.trim() !== '') {
           const lowerSearchTerm = searchTerm.toLowerCase();
-          fetchedArticles = articlesFromDb.filter((article: Article) =>
+          fetchedArticles = fetchedArticles.filter((article: Article) =>
             article.title.toLowerCase().includes(lowerSearchTerm) ||
-            (!!(article.author && article.author.toLowerCase().includes(lowerSearchTerm))) ||
-            (!!(article.summary && typeof article.summary === 'string' && article.summary.toLowerCase().includes(lowerSearchTerm))) ||
-            (!!(article.contentText && article.contentText.toLowerCase().includes(lowerSearchTerm)))
+            (article.author && article.author.toLowerCase().includes(lowerSearchTerm)) ||
+            (article.summary && article.summary.toLowerCase().includes(lowerSearchTerm)) ||
+            (article.contentText && article.contentText.toLowerCase().includes(lowerSearchTerm))
           );
-        } else {
-          fetchedArticles = articlesFromDb;
         }
 
-        fetchedArticles.sort((a: Article, b: Article) => {
-          // publishDate 现在是时间戳，可以直接比较
-          // 默认按 publishDate 降序排序，如果需要按 fetchDate 排序，可以在调用处或根据视图类型调整
-          return b.publishDate - a.publishDate;
-        });
+        // 4. Sort the final list
+        fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
 
-        console.log('[ArticleList] loadArticles: Fetched articles count:', fetchedArticles.length);
         setArticles(fetchedArticles);
+        console.log(`[ArticleList] Loaded ${fetchedArticles.length} articles.`);
 
+        // 5. Fetch associated feed info for the loaded articles
         if (fetchedArticles.length > 0) {
-          const sourceIds = [...new Set(fetchedArticles.map(article => article.sourceId).filter(id => !!id))];
+          const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
           if (sourceIds.length > 0) {
-            const feeds = await db.feeds.where('id').anyOf(sourceIds).toArray();
+            const feeds = await db.feeds.where('id').anyOf(sourceIds as string[]).toArray();
             const newFeedInfoMap = new Map<string, FeedSource>();
-            
-            // 处理每个订阅源的图标
             for (const feed of feeds) {
               if (feed && feed.id) {
-                const processedIconUrl = await processIconUrl(feed.iconUrl);
-                const processedFeed = { ...feed, iconUrl: processedIconUrl };
-                newFeedInfoMap.set(feed.id, processedFeed);
+                newFeedInfoMap.set(feed.id, {
+                  ...feed,
+                  iconUrl: await processIconUrl(feed.iconUrl),
+                });
               }
             }
-            
             setFeedInfoMap(newFeedInfoMap);
-          } else {
-            setFeedInfoMap(new Map());
           }
-        } else {
-          setFeedInfoMap(new Map());
+        }
+        
+        if (!hasInitialLoaded) {
+          setHasInitialLoaded(true);
         }
 
-      } catch (error) {
-        console.error('获取文章失败:', error);
-        setArticles([]);
-        
-        // 如果是数据库连接问题，记录错误但不尝试重新初始化
-        if (error && typeof error === 'object' && 'name' in error) {
-          const errorName = (error as any).name;
-          if (errorName === 'DatabaseError' || errorName === 'InvalidStateError' || errorName === 'NotFoundError' || errorName === 'DatabaseClosedError') {
-            console.log('[ArticleList] 检测到数据库连接问题:', errorName);
-            // 不在这里触发重新初始化，避免循环
-          }
+      } catch (err) {
+        console.error('获取文章失败:', err);
+        setError('加载文章失败，请稍后重试。');
+        // If it's a Dexie error, we might get more info
+        if (err instanceof Error) {
+            console.error(`Error name: ${err.name}, message: ${err.message}`);
         }
       } finally {
-        if (isInitialLoadOrCriticalChange) {
-            setLoading(false);
-        }
+        setLoading(false);
       }
     };
 
     loadArticles();
-  }, [
-    db, isInitialized, filter, currentGroupId, currentFeedId, 
-    searchTerm, listRefreshKey // 正确的依赖项
-  ]);
+    
+  }, [db, isInitialized, filter, currentFeedId, currentGroupId, searchTerm, listRefreshKey]);
 
   const handleArticleClick = async (articleId: string) => {
     onSelectArticle(articleId);
@@ -628,236 +570,113 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     }
   ];
 
-  const renderContent = () => {
-    if (loading && articles.length === 0) { // 使用 'articles'
-      return (
-        <List
-          itemLayout="vertical"
-          size="large"
-          dataSource={Array(5).fill(undefined).map((_, index) => ({ id: `skeleton-${index}` }))}
-          renderItem={(item) => (
-            <List.Item key={item.id} className={styles.listItem}>
-              <Skeleton active avatar paragraph={{ rows: viewMode === 'compact' ? 1 : 3 }} />
-            </List.Item>
+  const renderListItem = (article: Article) => {
+    const feed = article.sourceId ? feedInfoMap.get(article.sourceId) : undefined;
+    const articleSourceTitle = feed ? feed.title : '未知来源';
+    const articleSourceIconUrl = feed ? feed.iconUrl : undefined;
+    const isArticleSelected = selectedArticleId === article.id;
+    const isRead = article.isRead === 'true';
+
+    // 移除不再需要的诊断日志
+
+    const formattedDate = article.publishDate 
+      ? formatDistanceToNowStrict(new Date(article.publishDate), { addSuffix: true, locale: zhCN })
+      : '日期未知';
+
+    const articleSummary = article.summary || extractFirstParagraphText(article.content) || article.contentText || '没有摘要';
+    const articleImage = article.imageUrl || extractFirstImage(article.content);
+
+    const contextMenuItems = createContextMenuItems(article);
+
+    const motionWrapper = (content: React.ReactNode) => (
+      <motion.div
+        layout
+        key={article.id}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, transition: { duration: 0.15 } }}
+        transition={{ duration: 0.2, type: 'tween' }}
+      >
+        <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']}>
+          {content}
+        </Dropdown>
+      </motion.div>
+    );
+
+    // 移除 switch 语句，只保留唯一的列表视图渲染逻辑
+    return motionWrapper(
+      <div
+        className={`${styles.listItemV5} ${
+          isRead ? styles.readItemV5 : styles.unreadItemV5
+        } ${isArticleSelected ? styles.selectedItemV5 : ''}`}
+        onClick={() => handleArticleClick(article.id)}
+        data-article-id={article.id}
+        onContextMenu={e => e.stopPropagation()}
+      >
+        <div className={styles.metaHeaderV5}>
+          <div className={styles.sourceInfoV5}>
+            {articleSourceIconUrl ? (
+              <Avatar src={articleSourceIconUrl} shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
+            ) : (
+              <Avatar shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
+            )}
+            <span className={styles.sourceNameV5}>{articleSourceTitle}</span>
+          </div>
+          <span className={styles.timestampV5}>{formattedDate}</span>
+        </div>
+
+        <div className={styles.bottomContentV5}>
+          <div className={styles.textContentV5}>
+            <h4 className={`${styles.titleV5} title-lines-2`}>{article.title || '无标题'}</h4>
+            {articleSummary !== '没有摘要' && (
+              <p className={`${styles.summaryV5} desc-lines-2`}>{articleSummary}</p>
+            )}
+          </div>
+          {articleImage && (
+            <div className={styles.imageContainerV5}>
+              <img src={articleImage} alt={article.title || '文章图片'} className={styles.imageV5} loading="lazy" />
+            </div>
           )}
-        />
+        </div>
+      </div>,
+    );
+  };
+  
+  const renderContent = () => {
+    if (loading && articles.length === 0) {
+      return (
+        <div style={{ padding: '20px' }}>
+          <Skeleton active avatar paragraph={{ rows: 3 }} />
+          <Skeleton active avatar paragraph={{ rows: 3 }} />
+          <Skeleton active avatar paragraph={{ rows: 3 }} />
+        </div>
       );
     }
 
-    if (articles.length === 0 && !loading) { // 使用 'articles'
-      const message = "没有文章"; // 简化消息，因为现在没有上下文筛选和底部筛选的区别
-      return <Empty description={message} className={styles.emptyState} />;
+    if (articles.length === 0 && !loading) {
+      return <Empty description="没有文章" className={styles.emptyState} />;
     }
 
-    const renderListItem = (article: Article) => {
-      const feed = article.sourceId ? feedInfoMap.get(article.sourceId) : undefined;
-      const articleSourceTitle = feed ? feed.title : '未知来源';
-      const articleSourceIconUrl = feed ? feed.iconUrl : undefined;
-      const isArticleSelected = selectedArticleId === article.id;
+    if (error) {
+      return <Empty description={`加载失败: ${error}`} />;
+    }
 
-      const formattedDate = article.publishDate 
-        ? formatDistanceToNowStrict(new Date(article.publishDate), { addSuffix: true, locale: zhCN })
-        : '日期未知';
-
-      const articleSummary = article.summary || extractFirstParagraphText(article.content) || article.contentText || '没有摘要';
-      const articleImage = article.imageUrl || extractFirstImage(article.content);
-      
-      switch (viewMode) {
-        case 'card':
-          return (
-            <Dropdown 
-              key={article.id} 
-              menu={{ items: createContextMenuItems(article) }} 
-              trigger={['contextMenu']}
-            >
-              <Card 
-                hoverable 
-                className={[
-                  styles.articleCardNew,
-                  article.isRead === 'true' ? styles.readCard : '',
-                  isArticleSelected ? styles.selectedCardNew : ''
-                ].join(' ').trim()}
-                onClick={() => handleArticleClick(article.id)}
-                data-article-id={article.id}
-                onContextMenu={(e) => e.stopPropagation()}
-              >
-              <div className={styles.cardHeaderNew}>
-                {articleSourceIconUrl ? (
-                  <Avatar src={articleSourceIconUrl} icon={<GlobalOutlined />} className={styles.sourceIcon} />
-                ) : (
-                  <Avatar icon={<GlobalOutlined />} className={styles.sourceIcon} />
-                )}
-                <span className={styles.sourceTitle}>{articleSourceTitle}</span>
-                <span className={styles.updateTime}>{formattedDate}</span>
-              </div>
-              <div className={styles.cardBodyNew}>
-                <div className={styles.cardContentNew}>
-                    <h3 className={`${styles.articleTitleNew} ${article.isRead === 'true' ? styles.readTitle : styles.unreadTitle} ${styles['title-lines-2']}`}>
-                        {article.title || '无标题'}
-                    </h3>
-                    {articleSummary !== '没有摘要' && 
-                        <p className={`${styles.articleDescriptionNew} ${styles['desc-lines-2']}`}>
-                            {articleSummary}
-                        </p>
-                    }
-                </div>
-                {articleImage && (
-                    <div className={styles.cardImageContainerNew}>
-                        <img src={articleImage} alt={article.title || '文章图片'} className={styles.cardImageNew}/>
-                    </div>
-                )}
-              </div>
-              </Card>
-            </Dropdown>
-          );
-
-        case 'magazine':
-            return (
-              <Dropdown 
-                key={article.id} 
-                menu={{ items: createContextMenuItems(article) }} 
-                trigger={['contextMenu']}
-              >
-                <List.Item 
-                  className={`${styles.magazineItem} ${article.isRead === 'true' ? styles.read : styles.unread} ${isArticleSelected ? styles.selectedMagazine : ''}`}
-                  onClick={() => handleArticleClick(article.id)}
-                  data-article-id={article.id}
-                  onContextMenu={(e) => e.stopPropagation()}
-                >
-                {articleImage && (
-                  <div className={styles.magazineImage}>
-                    <img src={articleImage} alt={article.title || '文章图片'} />
-                  </div>
-                )}
-                <div className={styles.magazineContent}>
-                    <div className={styles.feedInfo}>
-                        {articleSourceIconUrl ? (
-                            <Avatar size="small" src={articleSourceIconUrl} icon={<GlobalOutlined />} />
-                        ) : (
-                            <Avatar size="small" icon={<GlobalOutlined />} />
-                        )}
-                        <span className={styles.sourceName}>{articleSourceTitle}</span>
-                        <span className={styles.publishDate}>{formattedDate}</span>
-                    </div>
-                    <div className={styles.magazineTitle}>{article.title || '无标题'}</div>
-                    <div className={styles.magazineSummary}>{articleSummary.substring(0, 150)}...</div>
-                </div>
-                </List.Item>
-              </Dropdown>
-            );
-
-        case 'compact':
-          return (
-            <Dropdown 
-              key={article.id} 
-              menu={{ items: createContextMenuItems(article) }} 
-              trigger={['contextMenu']}
-            >
-              <List.Item 
-                className={`${styles.compactItem} ${article.isRead === 'true' ? styles.read : styles.unread} ${isArticleSelected ? styles.selectedItem : ''}`}
-                onClick={() => handleArticleClick(article.id)}
-                data-article-id={article.id}
-                onContextMenu={(e) => e.stopPropagation()}
-              >
-                <div >
-                  <div >
-                    {articleSourceIconUrl && <Avatar size="small" src={articleSourceIconUrl} icon={<GlobalOutlined />} />}
-                    <span >{article.title || '无标题'}</span>
-                  </div>
-                  <div >
-                    <span >{articleSourceTitle}</span>
-                    <span >{formattedDate}</span>
-                  </div>
-                </div>
-              </List.Item>
-            </Dropdown>
-          );
-        
-        case 'list':
-        default:
-          const isV5Unread = article.isRead === 'false';
-          const v5ItemClasses = [
-            styles.listItemV5,
-            isV5Unread ? styles.unreadItemV5 : styles.readItemV5,
-            isArticleSelected ? styles.selectedItemV5 : ''
-          ].join(' ').trim();
-
-          const v5DisplayTime = article.publishDate
-            ? formatDistanceToNowStrict(new Date(article.publishDate), { addSuffix: true, locale: zhCN })
-            : '日期未知';
-
-          return (
-            <Dropdown 
-              key={article.id} 
-              menu={{ items: createContextMenuItems(article) }} 
-              trigger={['contextMenu']}
-            >
-              <div
-                className={v5ItemClasses}
-                onClick={() => handleArticleClick(article.id)}
-                data-article-id={article.id}
-                onContextMenu={(e) => e.stopPropagation()}
-              >
-                <div className={styles.mainTextContentV5}>
-                  <div className={styles.itemHeaderV5}>
-                    {articleSourceIconUrl ? (
-                      <Avatar src={articleSourceIconUrl} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
-                    ) : (
-                      <Avatar className={styles.sourceIconV5} icon={<GlobalOutlined />} />
-                    )}
-                    {articleSourceTitle && <span className={styles.sourceNameV5}>{articleSourceTitle}</span>}
-                    {v5DisplayTime && <span className={styles.metaSeparator}>·</span>}
-                    {v5DisplayTime && <span className={styles.timestampV5}>{v5DisplayTime}</span>}
-                  </div>
-                  <div className={styles.textContentV5}>
-                    {(article.title || '无标题') &&
-                      <h3 className={`${styles.titleV5} ${styles['title-lines-2']}`}>{article.title || '无标题'}</h3>
-                    }
-                    {(articleSummary && articleSummary !== '没有摘要') &&
-                      <p className={`${styles.summaryV5} ${styles['desc-lines-2']}`}>{articleSummary}</p>
-                    }
-                  </div>
-                </div>
-
-                {articleImage && (
-                  <div className={styles.imageContainerV5}>
-                    <img src={articleImage} alt={article.title || '文章图片'} className={styles.imageV5} />
-                  </div>
-                )}
-              </div>
-            </Dropdown>
-          );
-      }
-    };
-    
-    console.log('[ArticleList] Rendering with articles count:', articles.length, 'Loading:', loading);
     return (
-      <div className={styles.scrollableArticleListContainer} ref={containerRef}> 
-        {viewMode === 'card' ? (
-          <div className={styles.cardContainerGridNew}> 
-            {articles.map(article => renderListItem(article))}
-          </div>
-        ) : viewMode === 'list' || viewMode === 'compact' || viewMode === 'magazine' ? (
-          articles.map(article => renderListItem(article))
-        ) : (
-          <List
-            dataSource={articles}
-            renderItem={renderListItem}
-          />
-        )}
+      <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
+        <AnimatePresence>
+          {articles.map(article => renderListItem(article))}
+        </AnimatePresence>
       </div>
     );
   };
-
+  
   useImperativeHandle(ref, () => ({
     scrollToTop: () => {
       if (containerRef.current) {
         containerRef.current.scrollTop = 0;
       }
     },
-    getScrollableElement: () => {
-      return containerRef.current;
-    }
+    getScrollableElement: () => containerRef.current,
   }));
 
   return renderContent();

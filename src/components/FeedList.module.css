@@ -435,9 +435,6 @@
 }
 
 /* 暗色主题适配 */
-:global(.dark-theme) .feedIcon {
-  filter: brightness(0.8);
-}
 
 :global(.dark-theme) .feedAction {
   color: rgba(255, 255, 255, 0.65);

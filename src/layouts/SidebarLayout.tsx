@@ -33,10 +33,21 @@ import { useLayout } from '../contexts/LayoutContext';
 
 const { Content } = Layout;
 
+// 防抖函数
+const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
+  let timeout: NodeJS.Timeout;
+
+  return (...args: Parameters<F>): void => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), waitFor);
+  };
+};
+
+
 const SidebarLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, isInitialized: settingsInitialized } = useSettings();
+  const { settings, isInitialized: settingsInitialized, updateLayoutSettings } = useSettings();
   const { db, refreshTrigger, isInitialized: dbInitialized, triggerRefresh } = useDatabase();
   const { filter } = useFilter();
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
@@ -47,6 +58,7 @@ const SidebarLayout: React.FC = () => {
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const siderPanelRef = useRef<ImperativePanelHandle>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const startupTasksDone = useRef(false);
   const refreshIntervalId = useRef<NodeJS.Timeout | null>(null);
 
@@ -59,6 +71,14 @@ const SidebarLayout: React.FC = () => {
 
   const { isFeedListVisible, setIsFeedListVisible, setIsArticleListVisible } = useLayout();
   const layoutRef = useRef<HTMLDivElement>(null);
+
+  // 使用 useCallback 来记忆防抖函数，防止每次渲染都创建新的
+  const debouncedUpdateLayout = useCallback(
+    debounce((layout: number[]) => {
+      updateLayoutSettings({ sidebarLayout: layout });
+    }, 500),
+    [updateLayoutSettings]
+  );
 
   // 监听笔记侧边栏的开关事件，实现"专注模式"
   useEffect(() => {
@@ -521,11 +541,18 @@ const SidebarLayout: React.FC = () => {
   };
 
   return (
-    <Layout ref={layoutRef} className={styles.sidebarLayout}>
-      <PanelGroup direction="horizontal" className={styles.layoutContainer_rH}>
+    <Layout 
+      ref={layoutRef} 
+      className={`${styles.sidebarLayout} ${isDragging ? styles.isResizing : ''}`}
+    >
+      <PanelGroup 
+        direction="horizontal" 
+        className={styles.layoutContainer_rH}
+        onLayout={debouncedUpdateLayout}
+      >
         <Panel
           ref={siderPanelRef}
-          defaultSize={20}
+          defaultSize={settings.layout.sidebarLayout[0]}
           minSize={15}
           maxSize={35}
           collapsible={true}
@@ -595,7 +622,7 @@ const SidebarLayout: React.FC = () => {
                 ),
                 onClick: () => {
                   if (location.pathname === '/') {
-                    navigate('/', { replace: true }); 
+                    document.dispatchEvent(new CustomEvent('request-list-refresh'));
                   } else {
                     navigate('/');
                   }
@@ -610,7 +637,13 @@ const SidebarLayout: React.FC = () => {
                     {allCount > 0 && <span className={styles.menuItemBadge}>{allCount}</span>}
                   </div>
                 ),
-                onClick: () => navigate('/all')
+                onClick: () => {
+                  if (location.pathname === '/all') {
+                    document.dispatchEvent(new CustomEvent('request-list-refresh'));
+                  } else {
+                    navigate('/all');
+                  }
+                }
               },
               {
                 key: 'readlater',
@@ -667,9 +700,15 @@ const SidebarLayout: React.FC = () => {
           </div>
         </Panel>
 
-        <PanelResizeHandle className={styles.siderResizeHandle_rH} />
+        <PanelResizeHandle 
+          className={styles.siderResizeHandle_rH} 
+          onDragging={setIsDragging}
+        />
 
-        <Panel defaultSize={80} minSize={30}>
+        <Panel 
+          defaultSize={settings.layout.sidebarLayout[1]}
+          minSize={30}
+        >
           <Layout className={styles.contentLayout_rH}>
             <Content className={styles.content_rH}>
               <Outlet />

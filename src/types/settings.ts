@@ -1,12 +1,20 @@
 export interface Settings {
-    general: {
-        syncOnStartup: boolean;
-        defaultViewMode: 'list' | 'card' | 'magazine' | 'compact';
-        updateFrequency: number; // in minutes
-        retentionDays: number; // 0 for indefinite
-        layoutMode: 'two-column' | 'three-column';
-        sidebarWidth?: number;
-    };
+    general: GeneralSettings;
+    appearance: AppearanceSettings;
+    advanced: AdvancedSettings;
+    layout: LayoutSettings;
+}
+
+export interface GeneralSettings {
+    syncOnStartup: boolean;
+    defaultViewMode: 'list' | 'card' | 'magazine' | 'compact';
+    updateFrequency: number; // in minutes
+    retentionDays: number; // 0 for indefinite
+    layoutMode: 'two-column' | 'three-column';
+    sidebarWidth?: number;
+}
+
+export interface AppearanceSettings {
     reading: {
         fontFamily: string;
         fontSize: number;
@@ -17,22 +25,28 @@ export interface Settings {
         titleFontSize: number;
         autoMarkAsRead: boolean;
     };
-    advanced: {
-        maxArticlesPerFeed: number; // 0 for indefinite
-        enableNotifications: boolean;
-        startMinimized: boolean;
-        keyboardShortcuts: Record<string, string>;
-        gestures: {
-            swipeLeft: string;
-            swipeRight: string;
-            pullToRefresh: boolean;
-        };
+}
+
+export interface AdvancedSettings {
+    maxArticlesPerFeed: number; // 0 for indefinite
+    enableNotifications: boolean;
+    startMinimized: boolean;
+    keyboardShortcuts: Record<string, string>;
+    gestures: {
+        swipeLeft: string;
+        swipeRight: string;
+        pullToRefresh: boolean;
     };
-    readLater: {
-        enabled: boolean;
-        autoDelete: boolean;
-        deleteDays: number;
+}
+
+export interface LayoutSettings {
+    windowSize: {
+        width: number;
+        height: number;
     };
+    sidebarLayout: number[];
+    mainLayout: number[];
+    articleListWidth: number; // 新增：文章列表的像素宽度
 }
 
 export const defaultSettings: Settings = {
@@ -43,18 +57,20 @@ export const defaultSettings: Settings = {
         retentionDays: 0,
         layoutMode: 'three-column',
     },
-    reading: {
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-        fontSize: 16,
-        lineHeight: 1.6,
-        backgroundColor: '#ffffff',
-        textColor: '#333333',
-        titleColor: '#333333',
-        titleFontSize: 24,
-        autoMarkAsRead: true,
+    appearance: {
+        reading: {
+            fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+            fontSize: 16,
+            lineHeight: 1.6,
+            backgroundColor: '#ffffff',
+            textColor: '#333333',
+            titleColor: '#333333',
+            titleFontSize: 24,
+            autoMarkAsRead: true,
+        },
     },
     advanced: {
-        maxArticlesPerFeed: 0,
+        maxArticlesPerFeed: 100, // 0 for indefinite
         enableNotifications: true,
         startMinimized: false,
         keyboardShortcuts: {
@@ -72,9 +88,13 @@ export const defaultSettings: Settings = {
             pullToRefresh: true,
         },
     },
-    readLater: {
-        enabled: true,
-        autoDelete: true,
-        deleteDays: 30,
+    layout: {
+        windowSize: {
+            width: 1280,
+            height: 720,
+        },
+        sidebarLayout: [20, 80],
+        mainLayout: [30, 70],
+        articleListWidth: 350, // 新增默认值
     },
 };

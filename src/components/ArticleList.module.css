@@ -5,221 +5,7 @@
   box-sizing: border-box; /* padding 不会增加元素的总宽度/高度 */
 }
 
-/* 通用样式 */
-.loadingContainer,
-.emptyContainer {
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-}
-
-.emptyContainer {
-  align-items: center;
-  justify-content: center;
-}
-
-/* 列表视图样式 */
-/* 旧的列表视图样式，将被新的 listMode 相关样式取代 */
-/*
-.list ListItem, .listTitle, .listDescription, .listInfo, .author, .summary, .listActions, .starButton ...etc 
-注释掉或者删除这些旧样式
-*/
-
-/* 卡片视图样式 */
-.cardContainerGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 16px;
-  padding: 16px;
-}
-
-.card {
-  height: 100%;
-  transition: box-shadow 0.3s, transform 0.3s;
-}
-
-.selectedCard {
-  box-shadow: 0 0 0 2px var(--highlight-color);
-}
-
-.cardCover {
-  height: 160px;
-  overflow: hidden;
-}
-
-.cardCover img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  border-top-left-radius: 6px;
-  border-top-right-radius: 6px;
-}
-
-.cardTitle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cardDescription {
-  display: flex;
-  flex-wrap: wrap; /* Allow wrapping if content is too long */
-  justify-content: space-between; /* Space out author and date */
-  align-items: center; /* Align items vertically */
-  color: var(--text-secondary);
-  font-size: 12px;
-  margin-top: 8px; /* Add some space above the description line */
-  gap: 8px; /* Gap between author and date if they wrap to different lines or for spacing */
-}
-
-/* Optional: if you want author and date to have some minimum space when on same line */
-/* .cardDescription > div:first-child { margin-right: 8px; } */
-
-/* 杂志视图样式 */
-.magazineContainer {
-  padding: 20px;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-}
-
-.magazineItem {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--card-bg);
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: transform 0.3s, box-shadow 0.3s;
-}
-
-.magazineItem:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.selectedMagazine {
-  box-shadow: 0 0 0 2px var(--highlight-color);
-}
-
-.magazineImage {
-  height: 180px;
-  overflow: hidden;
-}
-
-.magazineImage img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  border-top-left-radius: 8px;
-  border-top-right-radius: 8px;
-}
-
-.magazineContent {
-  padding: 16px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.magazineTitle {
-  margin: 0 0 12px;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.magazineSummary {
-  color: var(--text-secondary);
-  margin: 0 0 auto;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.magazineFooter {
-  margin-top: 16px;
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.magazineFooter span {
-  margin-right: 16px;
-}
-
-.starIcon {
-  margin-left: auto;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.starIcon:hover {
-  color: #fadb14;
-}
-
-/* 紧凑视图样式 */
-.compactList {
-  padding: 0;
-}
-
-.compactItem {
-  padding: 6px 16px;
-  cursor: pointer;
-  transition: background-color 0.3s, border-radius 0.3s;
-  border-bottom: 1px solid var(--border-color);
-  border-radius: 0;
-}
-
-.compactItem:hover {
-  background-color: var(--hover-color);
-  border-radius: 4px;
-}
-
-.compactTitle {
-  font-size: 14px;
-}
-
-.compactSource {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.unreadItem {
-  font-weight: 600;
-}
-
-.inlineStar {
-  font-size: 0.8em; /* Smaller size */
-  color: #fadb14; /* AntD default gold for stars */
-  vertical-align: middle; /* Align with text */
-}
-
-/* 响应式调整 */
-@media (max-width: 768px) {
-  .cardContainerGrid {
-    padding: 16px;
-  }
-  
-  .magazineContainer {
-    padding: 16px;
-    grid-template-columns: 1fr;
-  }
-  
-  .listItem {
-    padding: 12px 16px;
-  }
-}
+/* 移除不再使用的 .loadingContainer, .emptyContainer, 以及旧的 list, card, magazine, compact 视图样式 */
 
 /* 新的列表视图 (List Mode) 样式 */
 .listModeContainer .ant-list-item {
@@ -356,512 +142,6 @@
   object-fit: cover; /* 裁剪图片以填充容器，保持宽高比 */
 }
 
-/* New Card Styles */
-.cardContainerGridNew {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* 自适应列数 */
-  gap: 16px;
-  padding: 16px;
-}
-
-.articleCardNew {
-  border-radius: 8px !important; /* 使用 !important 覆盖 antd 默认 */
-  overflow: hidden !important; /* 确保子元素不会溢出圆角 */
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.09) !important;
-  transition: box-shadow 0.3s ease-in-out !important;
-  background-color: #fff !important;
-}
-
-.articleCardNew:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
-}
-
-.selectedCardNew {
-  border: 1px solid var(--ant-primary-color) !important;
-  box-shadow: 0 0 0 2px var(--ant-primary-color-outline) !important;
-}
-
-.readCard .cardHeaderNew .sourceTitle,
-.readCard .cardHeaderNew .updateTime {
-  color: #aaa; /* 已读卡片头部文字颜色变浅 */
-}
-
-.cardHeaderNew {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: #888;
-  border-bottom: 1px solid #f0f0f0; /* 顶部和内容区分割线 */
-}
-
-.sourceTitle {
-  font-weight: 500;
-  color: #555;
-  white-space: nowrap; /* 防止换行 */
-  overflow: hidden; /* 超出部分隐藏 */
-  text-overflow: ellipsis; /* 超出部分显示省略号 */
-  margin-right: 8px; /* 与时间之间留点空隙 */
-  flex-grow: 1; /* 允许标题占据多余空间，但会被截断 */
-  min-width: 0; /* flex item A: 配合 overflow hidden 生效 */
-}
-
-.updateTime {
-  color: #888;
-  flex-shrink: 0; /* 防止时间被压缩 */
-}
-
-.cardBodyNew {
-  display: flex;
-  padding: 12px;
-  min-height: 100px; /* 保证卡片有个最小高度 */
-}
-
-.cardContentNew {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden; /* 防止内容溢出 */
-  margin-right: 12px; /* 与图片间距 */
-}
-
-.cardContentNew:only-child {
-  margin-right: 0; /* 如果没有图片，则不需要右边距 */
-}
-
-.sourceInfoAndTitle {
-  display: flex;
-  align-items: flex-start; /* 图标和标题顶部对齐 */
-  margin-bottom: 8px;
-}
-
-.sourceIcon {
-  margin-right: 8px;
-  flex-shrink: 0; /* 防止图标被压缩 */
-  font-size: 16px; /* 如果是 iconfont */
-  width: 20px !important; /* 固定图标大小 */
-  height: 20px !important;
-  line-height: 20px !important; /* 确保 antd Icon 垂直居中 */
-}
-
-.articleTitleNew {
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.4;
-  color: #000; /* 未读标题默认为黑色 */
-  margin: 0; /* 重置 h3 默认 margin */
-  /* 多行文字截断 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  /* -webkit-line-clamp: 2; */ /* 默认为2行, JS 会动态调整 */
-}
-
-.unreadTitle {
-  color: #000000; /* 未读标题黑色 */
-}
-
-.readTitle {
-  color: #888888; /* 已读标题灰色 */
-}
-
-.articleDescriptionNew {
-  font-size: 13px;
-  line-height: 1.5;
-  color: #555;
-  margin: 0;
-  /* 多行文字截断 */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  /* -webkit-line-clamp: 2; */ /* 默认为2行, JS 会动态调整 */
-}
-
-/* 通过JS动态设置line-clamp */
-.title-lines-1 {
-  -webkit-line-clamp: 1 !important;
-}
-.title-lines-2 {
-  -webkit-line-clamp: 2 !important;
-}
-.title-lines-3 {
-  -webkit-line-clamp: 3 !important;
-}
-
-.title-lines-4 {
-  -webkit-line-clamp: 4 !important;
-}
-
-.desc-lines-1 {
-  -webkit-line-clamp: 1 !important;
-}
-.desc-lines-2 {
-  -webkit-line-clamp: 2 !important;
-}
-.desc-lines-3 {
-  -webkit-line-clamp: 3 !important;
-}
-
-
-.cardImageContainerNew {
-  width: 100px; /* 图片容器固定宽度 */
-  height: 80px; /* 图片容器固定高度 */
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: #f0f0f0; /* 图片加载时的背景色 */
-}
-
-.cardImageNew {
-  width: 100%;
-  height: 100%;
-  object-fit: cover; /* 保证图片内容充满容器且不变形 */
-}
-
-.cardImagePlaceholderNew {
-  border: 1px dashed #d9d9d9;
-  background-color: #fafafa;
-}
-
-/* 旧的 List Mode 相关样式 - 将被移除或替换 */
-/* .listModeContainer, .listModeItem, .unreadIndicator, .itemContentWrapper, .textContent, .feedInfo, .feedIcon, .sourceName, .publishDate, .articleMainTitle, .imageContent, .articleImage 等 */
-/* 注释掉或删除这些旧样式，防止冲突 */
-
-/* 清理旧的 .listMode... 开始 */
-.listModeContainer {
-  /* 可以保留外部容器的一些基本属性，或者完全用新的替换 */
-}
-
-.listModeItem.unread .articleMainTitle {
-  /* font-weight: 600; */ /* 旧的未读标题加粗 */
-  /* color: var(--text-color-strong); */
-}
-
-.listModeItem.read .textContent,
-.listModeItem.read .feedInfo,
-.listModeItem.read .articleMainTitle {
-  /* color: var(--text-color-read, #999) !important; */ /* 旧的已读置灰 */
-}
-
-.listModeItem.read .feedIcon {
-  /* opacity: 0.7; */
-}
-
-.listModeItem.read .unreadIndicator {
-  /* background-color: transparent !important; */ /* 旧的已读隐藏指示器 */
-}
-
-/* ... 其他可能需要清理的旧 .listMode... 和 .unreadIndicator 样式 ... */
-.unreadIndicator { display: none !important; } /* 确保旧的指示器不显示 */
-/* 清理旧的 .listMode... 结束 */
-
-
-/* New List View Styles */
-.listModeContainerNew {
-  padding: 0 8px; /* 列表容器左右留一点边距 */
-  background-color: var(--list-bg-color, #f7f7f7); /* 列表背景色 */
-}
-
-.listItemNew {
-  display: flex; /* 使用 flex 布局主结构 */
-  position: relative; /* 为了时间戳的绝对定位 */
-  padding: 12px 8px; /* 列表项上下内边距 */
-  border-bottom: 1px solid var(--border-color-light, #e8e8e8);
-  background-color: var(--card-bg, #fff); /* 每个列表项的背景色，可以和卡片一致或稍作区分 */
-  cursor: pointer;
-  transition: background-color 0.2s;
-  margin-bottom: 1px; /* 列表项之间的细微分隔，如果需要的话 */
-}
-
-.listItemNew:hover {
-  background-color: var(--hover-color, #f0f0f0);
-}
-
-.selectedItemNew {
-  background-color: var(--selected-bg-color, #e6f7ff); /* 选中时的背景色 */
-  /* box-shadow: inset 3px 0 0 var(--ant-primary-color); */ /* 左侧高亮线，如果需要 */
-}
-
-.itemContentWrapperNew { /* 包裹主要内容和图片 */
-  display: flex;
-  flex-grow: 1;
-  overflow: hidden; /* 防止内部元素溢出 */
-  gap: 12px; /* 内容和图片之间的间距 */
-}
-
-.sourceAndTextContainer { /* 左侧的图标、来源、标题、摘要的容器 */
-  flex-grow: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 0; /* flex item A: 关键，允许文本内容收缩和截断 */
-}
-
-.sourceInfoListNew { /* 图标和来源名称容器 */
-  display: flex;
-  align-items: center;
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin-bottom: 2px !important; /* 设置更紧凑的垂直间距 */
-}
-
-.sourceIconListNew {
-  width: 16px;
-  height: 16px;
-  min-width: 16px !important; /* 防止压缩 */
-  font-size: 16px !important; /* Antd Icon 尺寸 */
-  line-height: 16px !important;
-  border-radius: 3px;
-  margin-right: 5px !important; /* 设置更紧凑的水平间距 */
-}
-
-.sourceNameListNew {
-  font-size: 12px;
-  color: var(--text-secondary, #888);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.titleListNew {
-  font-size: 15px;
-  line-height: 1.4;
-  margin: 0 0 4px 0;
-  /* 多行截断的通用样式已在 .title-lines-X 中定义 */
-}
-
-.summaryListNew {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary, #888);
-  margin: 0;
-  /* 多行截断的通用样式已在 .desc-lines-X 中定义 */
-}
-
-/* 未读/已读状态 */
-.unreadItemNew .sourceNameListNew {
-  color: var(--text-color-strong, #333); /* 未读时来源名称颜色加深 */
-}
-
-.unreadItemNew .titleListNew {
-  font-weight: 600; /* 未读标题加粗 */
-  color: var(--text-color-strong, #000); /* 未读标题颜色 */
-}
-
-.unreadItemNew .summaryListNew {
-  color: var(--text-secondary-unread, #666); /* 未读摘要颜色也可能略深 */
-}
-
-.readItemNew .sourceNameListNew,
-.readItemNew .titleListNew,
-.readItemNew .summaryListNew {
-  color: var(--text-color-read, #999) !important; /* 已读全部置灰 */
-}
-
-.readItemNew .titleListNew {
-  font-weight: normal; /* 已读标题常规字重 */
-}
-
-.readItemNew .sourceIconListNew {
-   opacity: 0.7; /* 已读时图标稍暗 */
-}
-
-.imageContainerListNew {
-  width: 80px;  /* 图片容器固定宽度，调整为80px */
-  height: 80px; /* 图片容器固定高度，实现1:1 */
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  background-color: var(--image-placeholder-bg, #f0f0f0);
-  /* margin-top: auto; */ /* 尝试让图片在sourceAndTextContainer下方，如果容器高度不一致 */
-  /* align-self: flex-start; */ /* 确保图片顶部对齐，如果其父容器是flex */
-}
-
-.imageListNew {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.timestampListNew {
-  position: absolute;
-  top: 12px; /* 与 listItemNew 上内边距一致 */
-  right: 10px; /* 与 listItemNew 右内边距一致或稍大 */
-  font-size: 11px;
-  color: var(--text-tertiary, #aaa);
-  background-color: var(--card-bg, #fff); /* 给时间戳一个背景色，防止文字压字 */
-  padding: 1px 3px; /* 微小的内边距 */
-  border-radius: 2px; /* 轻微圆角 */
-  z-index: 1; /* 确保时间戳在图片和文本之上 */
-}
-
-/* 清理之前的 New List View Styles */
-.listModeContainerNew, .listItemNew, .itemContentWrapperNew, 
-.sourceAndTextContainer, .sourceInfoListNew, .sourceIconListNew, 
-.sourceNameListNew, .titleListNew, .summaryListNew, 
-.imageContainerListNew, .imageListNew, .timestampListNew {
-    /* display: none !important; */ /* 暂时注释掉，方便回滚，后续可删除 */
-}
-.unreadItemNew .sourceNameListNew, .unreadItemNew .titleListNew, 
-.unreadItemNew .summaryListNew, .readItemNew .sourceNameListNew,
-.readItemNew .titleListNew, .readItemNew .summaryListNew,
-.readItemNew .titleListNew, .readItemNew .sourceIconListNew {
-    /* display: none !important; */
-}
-/* 清理结束 */
-
-
-/* Ultra Compact List View Styles - Based on new screenshot */
-.listModeContainerUltraCompact {
-    padding: 0; /* 通常由列表项自己处理边距 */
-    background-color: var(--app-bg-color, #f0f2f5); /* 整体应用背景色 */
-}
-
-.listItemUltraCompact {
-    display: flex;
-    background-color: var(--card-bg, #fff); /* 列表项白色背景 */
-    padding: 12px 16px; /* 列表项内边距 */
-    border-bottom: 1px solid var(--border-color-base, #e8e8e8); /* 分隔线 */
-    cursor: pointer;
-    transition: background-color 0.2s;
-    position: relative; /* 为无图时的时间戳定位 */
-}
-
-.listItemUltraCompact:hover {
-    background-color: var(--hover-color, #f5f5f5);
-}
-
-.selectedItemUltraCompact {
-    background-color: var(--selected-bg-color, #e6f7ff); /* 选中高亮 */
-}
-
-.mainContentAreaNew { /* 左侧主要内容区：来源+文本 */
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0; /* Crucial for text truncation in flex child */
-    margin-right: 16px; /* 与右侧图片区域的间距 */
-}
-
-.sourceBlockNew { /* 来源图标和名称的容器 */
-    display: flex; /* 改为 flex 横向排列图标和文字，然后让文字换行 */
-    align-items: flex-start; /* 图标和文字顶部对齐 */
-    margin-bottom: 8px;
-}
-
-.sourceIconUltraCompact {
-    width: 16px !important;
-    height: 16px !important;
-    min-width: 16px !important;
-    font-size: 14px !important;
-    line-height: 16px !important;
-    margin-right: 6px;
-    border-radius: 3px;
-}
-
-.sourceNameUltraCompact {
-    font-size: 12px;
-    color: var(--text-color-secondary, #8c8c8c);
-    /* display: block; */ /* 确保它可以占据一行 */
-    line-height: 1.3; /* 调整行高以匹配图标 */
-}
-
-.textBlockNew { /* 标题和摘要的容器 */
-    display: flex;
-    flex-direction: column;
-}
-
-.titleUltraCompact {
-    font-size: 16px; /* 标题字号稍大 */
-    line-height: 1.4;
-    margin: 0 0 6px 0;
-    font-weight: 500; /* 默认字重 */
-    color: var(--text-color, #262626);
-}
-
-.summaryUltraCompact {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text-color-secondary, #595959);
-    margin: 0;
-}
-
-/* 未读/已读状态 for UltraCompact */
-.unreadItemUltraCompact .sourceNameUltraCompact {
-    /* 根据截图，未读时来源名称颜色似乎没有大变化，保持默认或微调 */
-     color: var(--text-color-secondary-unread, #595959);
-}
-
-.unreadItemUltraCompact .titleUltraCompact {
-    font-weight: 600; /* 未读标题加粗 */
-    color: var(--text-color-strong, #000);
-}
-
-.unreadItemUltraCompact .summaryUltraCompact {
-    color: var(--text-color-secondary-unread-summary, #595959); /* 未读摘要颜色可能略深 */
-}
-
-.readItemUltraCompact .sourceNameUltraCompact,
-.readItemUltraCompact .summaryUltraCompact {
-    color: var(--text-color-read, #bfbfbf) !important;
-}
-.readItemUltraCompact .titleUltraCompact {
-    font-weight: 500; /* 已读标题常规字重 */
-    color: var(--text-color-read, #bfbfbf) !important;
-}
-
-.readItemUltraCompact .sourceIconUltraCompact {
-   opacity: 0.6; /* 已读时图标稍暗 */
-}
-
-
-.imageTimeAreaNew { /* 右侧图片和时间容器 */
-    width: 80px; /* 固定宽度 */
-    height: 80px; /* 固定高度，实现1:1 */
-    flex-shrink: 0;
-    position: relative; /* 为了时间戳的绝对定位 */
-    border-radius: 4px;
-    overflow: hidden; /* 裁剪图片和时间戳的背景 */
-}
-
-.imageUltraCompact {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block; /* 移除图片下方的额外空间 */
-}
-
-.timeOnImageNew {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    font-size: 10px;
-    color: white;
-    background-color: rgba(0, 0, 0, 0.4); /* 深色半透明背景 */
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-weight: 500;
-}
-
-.timeOnlyNew { /* 无图时的时间戳 */
-    position: absolute;
-    top: 12px;
-    right: 16px;
-    font-size: 11px;
-    color: var(--text-color-tertiary, #8c8c8c);
-    background-color: var(--app-bg-color, #f0f2f5); /* 与列表背景色一致，避免遮挡 */
-    padding: 1px 3px;
-}
-
-/* Line clamp classes (title-lines-X, desc-lines-X) should already exist from previous card styles */
-
-/* ... Rest of the CSS, including card styles ... */
-
 /* =========================================== */
 /* V5 列表视图样式 (ArticleList.module.css) */
 /* =========================================== */
@@ -869,54 +149,63 @@
 /* 列表项整体 */
 .listItemV5 {
   display: flex;
+  flex-direction: column; /* 修改为垂直布局 */
+  gap: 0px; /* 修改：进一步减小上下两层之间的间距 */
   cursor: pointer;
-  transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  align-items: center;
-  gap: 12px; /* 新增：在文本和图片之间创建一个固定的间距 */
-
-  /* 卡片化改造 */
-  background-color: var(--bg-secondary);
+  transition: background-color 0.2s;
+  
+  /* 1. 默认透明背景、无边框 */
+  background-color: transparent;
+  border: none;
   border-radius: 8px;
-  margin: 0 12px 8px 12px; /* 左右留出边距，底部留出卡片间距（10px -> 8px） */
-  padding: 12px; /* 卡片内部统一内边距 */
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  /* 2. 减小卡片间距 */
+  margin: 0 8px 2px 8px; 
+  padding: 10px;
+  /* 移除阴影和transform效果 */
+  box-shadow: none;
 }
 
 .listItemV5:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border-color: var(--border-color); /* 悬浮时边框颜色不变或微调 */
+  /* 悬浮时也变成灰色背景 */
+  background-color: var(--hover-bg-color);
+  transform: none; /* 移除 transform */
+  box-shadow: none; /* 移除 shadow */
 }
 
-/* 移除未读和选中状态下的左侧边框，因为卡片本身已经是很好的区分了 */
+/* 3. 移除蓝色边框，只改变背景色 */
 .selectedItemV5 {
-  background-color: var(--selected-bg-color);
-  border-color: var(--highlight-color);
-  box-shadow: 0 0 0 1px var(--highlight-color), 0 4px 12px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
-  /* padding-left: 13px; */ /* 恢复内边距 */
+  background-color: var(--selected-bg-color); /* 替换为边框和阴影高亮 */
+  border: none;
+  box-shadow: none;
+  transform: none;
 }
 
 .unreadItemV5 {
-  /* border-left: 3px solid transparent; */
+  /* 未读状态主要通过内部元素的字体粗细来体现 */
 }
 
-/* 鼠标悬停在未读项上时，不再改变边框 */
-.unreadItemV5:hover {
-  /* border-left-color: var(--highlight-color-light); */
+/* 6. 已读状态，所有文字颜色变浅 */
+.readItemV5 .sourceNameV5,
+.readItemV5 .timestampV5,
+.readItemV5 .titleV5,
+.readItemV5 .summaryV5 {
+  color: #888888 !important; /* 直接使用更明显的灰色，确保与未读有明显区别 */
 }
 
-.readItemV5 {
-  /* border-left: 3px solid transparent; */
-}
-
-.mainTextContentV5 {
+.mainContentV5 {
+  flex: 1; /* 占据剩余空间 */
+  min-width: 0; /* flex 布局中防止内容溢出的关键 */
   display: flex;
   flex-direction: column;
-  gap: 2px !important; /* 减小标题和上方元信息的垂直间距 */
-  flex-grow: 1;
-  min-width: 0;
+  justify-content: flex-start; /* 从 center 改为 flex-start */
+}
+
+/* 新增：包裹下层内容（文本+图片）的容器 */
+.bottomContentV5 {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center; /* 确保文本和图片垂直居中对齐 */
 }
 
 /* 左侧主文本区域容器 */
@@ -927,107 +216,143 @@
 }
 
 .sourceIconV5 {
-  width: 20px;                   /* 图标宽度 */
-  height: 20px;                  /* 图标高度 */
-  margin-right: 8px;             /* 图标和来源名称的间距 */
-  border-radius: 4px;            /* 图标圆角 */
+  /* 4. 减小订阅源图标和名称间距 */
+  margin-right: 0; /* 修改：移除 margin，改用 gap 控制 */
+  flex-shrink: 0; /* 关键修复：禁止图标收缩 */
 }
 
 .sourceNameV5 {
-  font-weight: 500;              /* 来源名称字重 */
-  color: #555;                   /* 来源名称颜色 */
+  /* 5. 订阅源名称不加粗 */
+  font-weight: normal;
+  color: var(--text-secondary); /* 修改：将颜色与时间戳统一 */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 180px;              /* 来源名称最大宽度，超出部分会显示省略号 */
+  /* max-width: 120px; */ /* 移除最大宽度限制 */
+  min-width: 0; /* 关键修复：允许 flex item 收缩 */
+  flex-shrink: 1;
+  font-size: 11px; /* 采用用户建议的字体大小 */
+  font-weight: 400; /* 修改：确保字体不加粗 */
+  color: var(--text-secondary); /* 修改：将颜色与时间戳统一 */
 }
 
 .timestampV5 {
-  /* margin-left: auto; */ /* 取消自动边距，不再将时间推到最右边 */
-  font-size: 11px;
-  color: var(--text-tertiary);
-  flex-shrink: 0; /* Prevent timestamp from shrinking */
+  white-space: nowrap;
+  flex-shrink: 0; /* 不允许时间收缩 */
+  font-size: 11px; /* 采用用户建议的字体大小 */
+  color: var(--text-secondary); /* 确保颜色统一 */
 }
 
-/* 新增：元信息分隔符 */
-.metaSeparator {
+/* 移除 .metaSeparator, 因为它已被重构 */
+/* .metaSeparator { display: none; } */
+
+.metaHeaderV5 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between; /* 关键修复：两端对齐 */
+  flex-wrap: nowrap;
+  width: 100%; /* 确保 meta header 占满宽度 */
+  margin-bottom: 5px;
+}
+
+/* 新增：包裹图标和来源的容器样式 */
+.sourceInfoV5 {
+  display: flex;
+  align-items: center;
+  min-width: 0; /* 允许该容器收缩 */
+  gap: 4px; /* 新增：使用 gap 控制图标和名称的间距 */
+}
+
+.sourceIconV5 {
+  margin-right: 0; /* 修改：移除 margin，改用 gap 控制 */
+  flex-shrink: 0;
+}
+
+.sourceNameV5 {
+  font-weight: 400; /* 修改：确保字体不加粗 */
+  color: #999999; /* 修改：使用更柔和的灰色 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
-  color: var(--text-tertiary);
-  margin: 0 4px;
-  line-height: 1; /* 确保分隔符垂直居中 */
+  min-width: 0;
+}
+
+.timestampV5 {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #999999; /* 修改：与来源名称颜色统一 */
 }
 
 /* 标题和摘要的容器 */
 .textContentV5 {
-  margin-top: 4px; /* Header 和主内容之间的间距 */
-  /* 通常不需要额外样式，因为父级 mainTextContentV5 已经是 flex column */
+  height: 68px; /* 新增：固定高度，与图片高度一致 */
+  overflow: hidden; /* 新增：超出部分隐藏 */
 }
 
 .titleV5 {
-  margin: 0;
-  font-size: 13px; /* 从 14px 缩小到 13px */
-  line-height: 1.5;
+  font-size: 12px; /* 减小字体 */
   font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-title);
+  margin: 0 0 3px 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .summaryV5 {
-  font-size: 12px;               /* 摘要字号 - 缩小 */
-  line-height: 1.5;              /* 摘要行高 */
-  color: #555;                   /* 摘要颜色 */
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary); /* 已读和未读时摘要颜色统一 */
   margin: 0;
+  /* 移除 line-clamp 相关的所有属性，让其自由填充剩余空间 */
 }
 
 /* 右侧图片区域 */
 .imageContainerV5 {
-  width: 64px; /* 调整为正方形 (80px -> 64px) */
-  height: 64px; /* 调整为正方形 (60px -> 64px) */
   flex-shrink: 0;
+  width: 68px; /* 修改：设置为正方形宽度 */
+  height: 68px; /* 修改：设置为正方形高度 */
   border-radius: 4px;
   overflow: hidden;
-  position: relative;
-  /* margin-left: 12px; */ /* 移除：现在由父元素的 gap 属性控制间距 */
+  background-color: var(--bg-secondary);
 }
 
 .imageV5 {
   width: 100%;
   height: 100%;
-  object-fit: cover;             /* 保持图片宽高比，多余部分裁剪 */
+  object-fit: cover;
 }
 
 
-/* 未读/已读状态的特定样式 */
-.unreadItemV5 .titleV5 {
-  /* 如果未读时标题颜色和默认（.titleV5）一致，则此条可省略 */
-  /* color: #000; */ 
-}
-.unreadItemV5 .sourceNameV5, 
-.unreadItemV5 .timestampV5, 
-.unreadItemV5 .summaryV5 {
-   /* 如果未读时这些文本颜色和默认一致，则可省略 */
-}
-
+/* 统一处理已读状态下的文本样式 */
 .readItemV5 .titleV5 {
-  font-weight: normal;           /* 已读文章标题字重变细 */
-  color: #777;                   /* 已读文章标题颜色变浅 */
-}
-.readItemV5 .sourceNameV5,
-.readItemV5 .timestampV5,
-.readItemV5 .summaryV5 {
-  color: #999;                   /* 已读文章的其他文本颜色变浅 */
-}
-.readItemV5 .sourceIconV5,
-.readItemV5 .imageV5 {
-  opacity: 0.7;                  /* 已读文章的图标和图片透明度降低 */
+  font-weight: 400; /* 已读文章标题变细 */
+  color: var(--text-tertiary);
 }
 
+.readItemV5 .sourceNameV5 {
+  font-weight: normal; /* 确保已读时也不加粗 */
+  color: var(--text-tertiary);
+}
 
-/* 用于文字截断的辅助类 (确保这些已定义或添加它们) */
+.readItemV5 .summaryV5,
+.readItemV5 .timestampV5 {
+  color: var(--text-color-read-lighter) !important;
+}
+
+/* 文本截断通用样式 */
 .title-lines-2 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-all;
 }
 
 .desc-lines-2 {
@@ -1036,6 +361,7 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   text-overflow: ellipsis;
+  word-break: break-all;
 }
 
 /* ... Rest of the CSS ... */

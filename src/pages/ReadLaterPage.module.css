@@ -90,25 +90,7 @@
   text-align: center;
 }
 
-/* 暗色主题适配 */
-:global(.dark-theme) .header {
-  background-color: #1f1f1f;
-  color: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-:global(.dark-theme) .list {
-  background-color: #1f1f1f;
-}
-
-:global(.dark-theme) .listItem:hover {
-  background-color: #2a2a2a;
-}
-
-:global(.dark-theme) .selectedItem {
-  background-color: #177ddc33 !important;
-}
-
-:global(.dark-theme) .loadingContainer {
-  background-color: #1f1f1f;
+.selectedItem .summary,
+.selectedItem .timestamp {
+  color: var(--text-primary);
 } 

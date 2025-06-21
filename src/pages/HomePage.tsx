@@ -1,20 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Layout, Empty, Select, Button, Dropdown, Menu, Typography, Skeleton, Input, Space, Tooltip, Popover, message, Radio, Spin } from 'antd';
+import { Layout, Empty, Select, Button, Typography, Skeleton, Input, Space, Tooltip, Popover, message, Radio, Spin, notification, Modal } from 'antd';
 import type { InputRef } from 'antd';
 import { 
-  UnorderedListOutlined, 
-  AppstoreOutlined, 
   CheckCircleOutlined,
   SearchOutlined,
-  BookOutlined,
-  BarsOutlined,
-  ProfileOutlined,
-  LayoutOutlined,
-  DownOutlined,
   StarOutlined,
   CheckSquareOutlined,
-  AppstoreAddOutlined
+  AppstoreAddOutlined,
+  ExclamationCircleOutlined,
+  SyncOutlined
 } from '@ant-design/icons';
 import ArticleList, { ArticleListHandle } from '../components/ArticleList';
 import ArticleDetail from '../components/ArticleDetail';
@@ -45,23 +40,25 @@ interface GeneralSettings {
   // Add other fields from GeneralSettings if they are used in this component
 }
 
-const viewIcons: { [key: string]: React.ReactNode } = {
-  list: <UnorderedListOutlined />,
-  compact: <BarsOutlined />,
-  card: <AppstoreOutlined />,
-  magazine: <ProfileOutlined />,
+// 防抖函数
+const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
+  let timeout: NodeJS.Timeout;
+
+  return (...args: Parameters<F>): void => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), waitFor);
+  };
 };
 
 const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const { db, refreshTrigger, triggerRefresh, isInitialized: dbInitialized, initialLoadRefreshed, setInitialLoadRefreshed } = useDatabase();
-  const { settings, isInitialized: settingsInitialized } = useSettings();
+  const { settings, isInitialized: settingsInitialized, updateLayoutSettings } = useSettings();
   const { filter: activeListFilter, setFilter } = useFilter();
   const navigate = useNavigate();
   const { feedId, groupId } = useParams<{ feedId?: string; groupId?: string }>();
 
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'list' | 'card' | 'magazine' | 'compact'>('list');
   const [articleDetailViewMode, setArticleDetailViewMode] = useState<'full' | 'web' | 'original'>('full');
   const [pageTitle, setPageTitle] = useState('所有文章');
   const [loading, setLoading] = useState(false);
@@ -90,6 +87,48 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
   const { isArticleListVisible } = useLayout();
+  const panelGroupRef = useRef<HTMLDivElement>(null); // Ref for the PanelGroup container
+  const [isDragging, setIsDragging] = useState(false);
+
+  // This effect uses a ResizeObserver to maintain the article list panel's pixel width
+  // when its container is resized (e.g., when the main sidebar is dragged).
+  useEffect(() => {
+    const groupElement = panelGroupRef.current;
+    if (!groupElement) return;
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (listPanelRef.current && detailPanelRef.current) {
+        const containerWidth = groupElement.getBoundingClientRect().width;
+        if (containerWidth === 0) return;
+
+        const articleListPxWidth = settings.layout.articleListWidth;
+        
+        let newArticleListPercentage = (articleListPxWidth / containerWidth) * 100;
+
+        // Clamp the percentage within the min/max constraints of the panel
+        newArticleListPercentage = Math.max(25, Math.min(50, newArticleListPercentage));
+
+        listPanelRef.current.resize(newArticleListPercentage);
+        detailPanelRef.current.resize(100 - newArticleListPercentage);
+      }
+    });
+
+    resizeObserver.observe(groupElement);
+
+    return () => resizeObserver.disconnect();
+  }, [settings.layout.articleListWidth]);
+
+  const handleMainLayout = (sizes: number[]) => {
+    // When the user manually resizes the panel, save the new percentage and pixel width.
+    if (panelGroupRef.current) {
+      const containerWidth = panelGroupRef.current.getBoundingClientRect().width;
+      const newPixelWidth = (containerWidth * sizes[0]) / 100;
+      updateLayoutSettings({ 
+        mainLayout: sizes,
+        articleListWidth: newPixelWidth,
+      });
+    }
+  };
 
   const handleScrollCapture = (event: React.UIEvent<HTMLDivElement>) => {
     console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
@@ -155,8 +194,31 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const prevFilterPropRef = useRef<string | undefined>(); // 用于跟踪 filter prop 的变化
 
   useEffect(() => {
-    setViewMode(settings.general.defaultViewMode || 'list');
-  }, [settings.general.defaultViewMode]);
+    // 动态更新页面标题
+    const updateTitle = async () => {
+      if (!db) return;
+
+      if (feedId) {
+        const feed = await db.feeds.get(feedId);
+        setPageTitle(feed?.title || '订阅源');
+      } else if (groupId) {
+        const group = await db.groups.get(groupId);
+        setPageTitle(group?.name || '分组');
+      } else if (filter === 'starred') {
+        setPageTitle('我的收藏');
+      } else if (filter === 'unread') {
+        setPageTitle('未读文章');
+      } else if (filter === 'all') {
+        setPageTitle('所有文章');
+      } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
+        setPageTitle('今日文章');
+      } else {
+        setPageTitle('所有文章'); // 默认标题
+      }
+    };
+
+    updateTitle();
+  }, [db, feedId, groupId, filter]);
 
   const loadFeeds = async () => {
     if (!db) return;
@@ -168,27 +230,11 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     loadFeeds();
   }, [db, refreshTrigger]);
   
-  const fetchTitle = useCallback(async () => {
-    let titleText = '所有文章';
-    if (!db) {
-      setPageTitle(titleText);
-      return;
-    }
-    if (feedId) {
-      const feed = await db.feeds.get(feedId);
-      titleText = feed?.title || '订阅源文章';
-    } else if (groupId) {
-      const group = await db.groups.get(groupId);
-      titleText = group?.name || '分组文章';
-    } else if (filter === 'starred') {
-      titleText = '我的收藏';
-    } else if (filter === 'unread') {
-      titleText = '未读文章';
-    } else if (window.location.pathname === '/today') {
-      titleText = '今日文章';
-    }
-    setPageTitle(titleText);
-  }, [db, feedId, groupId, filter]);
+  /* 
+    The original fetchTitle useCallback is no longer needed 
+    as its logic is now inside the useEffect above.
+    I will remove the old fetchTitle function and the useEffect that calls it.
+  */
 
   useEffect(() => {
     // 这个 effect 应该在 filter prop (来自路由), feedId, 或 groupId 变化时运行
@@ -282,6 +328,20 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
   }, []); // Empty dependency array makes the function stable
   
+  const handleLocalListRefresh = useCallback(() => {
+    console.log('[HomePage] Triggering local list refresh via key increment.');
+    setArticleListRefreshKey(prev => prev + 1);
+  }, []);
+
+  // 新增 Effect 用于监听列表刷新请求
+  useEffect(() => {
+    // 注意：这不再调用 handleRefreshAll 以避免网络请求和下拉刷新指示器。
+    document.addEventListener('request-list-refresh', handleLocalListRefresh);
+    return () => {
+      document.removeEventListener('request-list-refresh', handleLocalListRefresh);
+    };
+  }, [handleLocalListRefresh]);
+
   // 新增 Effect 用于应用启动时自动刷新
   useEffect(() => {
     // 确保只在应用首次加载"今日"视图时执行一次
@@ -405,18 +465,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     triggerRefresh();
   };
 
-  const handleViewModeChange = (mode: 'list' | 'card' | 'magazine' | 'compact') => {
-    setViewMode(mode);
-    // Optionally, update settings if you want this to persist:
-    // if (settings.updateGeneralSetting) settings.updateGeneralSetting('defaultViewMode', mode);
-  };
-
   const handleArticleDetailViewModeChange = (mode: 'full' | 'web' | 'original') => {
     setArticleDetailViewMode(mode);
   };
 
   const handleMarkAllReadLocal = async () => {
     if (!db) return;
+
     let articlesToUpdateQuery;
     const isTodayView = !feedId && !groupId && !filter;
 
@@ -446,38 +501,67 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (!articlesToUpdateQuery) return;
 
     const articlesToMark = await articlesToUpdateQuery.toArray();
-    if (articlesToMark.length > 0) {
-        const articleIdsToMark = articlesToMark.map(a => a.id);
-        await db.transaction('rw', db.articles, db.feeds, async () => {
-            await db.articles.where('id').anyOf(articleIdsToMark).modify({ isRead: 'true' });
-            const feedIdsAffected = [...new Set(articlesToMark.map(a => a.sourceId).filter(id => id))];
-            for (const fId of feedIdsAffected) {
-                if (fId) {
-                    const count = await db.articles.where({ sourceId: fId, isRead: 'false' }).count();
-                    await db.feeds.update(fId, { unreadCount: count });
-                }
-            }
-        });
-        triggerRefresh(); // Refresh FeedList counts and potentially other parts of UI
-        setArticleListRefreshKey(prev => prev + 1); // Force ArticleList to re-evaluate its items
-        message.success(`${articlesToMark.length}篇文章已标记为已读。`);
-    } else {
+    
+    if (articlesToMark.length === 0) {
         message.info('当前视图没有未读文章。');
+        return;
     }
+
+    Modal.confirm({
+      title: '确认全部已读',
+      icon: <ExclamationCircleOutlined />,
+      content: `确定要将当前列表中的 ${articlesToMark.length} 篇文章标记为已读吗？`,
+      okText: '确认',
+      cancelText: '取消',
+      onOk: () => {
+        const key = `mark-all-read-${Date.now()}`;
+        let timeoutId: NodeJS.Timeout;
+
+        const performMarkAsRead = async () => {
+          notification.destroy(key);
+          const articleIdsToMark = articlesToMark.map(a => a.id);
+          await db.transaction('rw', db.articles, db.feeds, async () => {
+              await db.articles.where('id').anyOf(articleIdsToMark).modify({ isRead: 'true' });
+              const feedIdsAffected = [...new Set(articlesToMark.map(a => a.sourceId).filter(id => id))];
+              for (const fId of feedIdsAffected) {
+                  if (fId) {
+                      const count = await db.articles.where({ sourceId: fId, isRead: 'false' }).count();
+                      await db.feeds.update(fId, { unreadCount: count });
+                  }
+              }
+          });
+          triggerRefresh(); 
+          setArticleListRefreshKey(prev => prev + 1);
+          message.success(`${articlesToMark.length}篇文章已标记为已读。`);
+        };
+
+        const handleUndo = () => {
+          clearTimeout(timeoutId);
+          notification.destroy(key);
+          message.info('操作已撤销。');
+        };
+
+        const btn = (
+          <Button type="primary" size="small" onClick={handleUndo}>
+            撤销
+          </Button>
+        );
+
+        notification.open({
+          key,
+          message: '正在标记已读...',
+          description: `将在 5 秒后标记 ${articlesToMark.length} 篇文章为已读。`,
+          btn,
+          duration: 5, // 5秒后自动关闭
+        });
+        
+        timeoutId = setTimeout(performMarkAsRead, 5000);
+      },
+    });
   };
 
   const articleFilterForList = getArticleFilter();
   console.log('[HomePage] RENDERING ArticleList with props:', { filterPropForArticleList: articleFilterForList, currentFeedId: feedId, currentGroupId: groupId, activeListFilterState: activeListFilter });
-
-  const viewModeMenu = (
-    <Menu onClick={({ key }) => handleViewModeChange(key as 'list' | 'card' | 'magazine' | 'compact')}>
-      {Object.entries(viewIcons).map(([key, icon]) => (
-        <Menu.Item key={key} icon={icon}>
-          {key.charAt(0).toUpperCase() + key.slice(1)}
-        </Menu.Item>
-      ))}
-    </Menu>
-  );
 
   // Determine if WelcomePage should be shown. This should be decided before any rendering logic.
   // It's shown when there are absolutely no feeds and the user isn't searching for anything.
@@ -498,117 +582,136 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }
 
   return (
-    <Layout className={styles.homeLayout}>
-      {showWelcomePage ? (
-        <Content className={styles.centeredContent}>
-          <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
-        </Content>
-      ) : (
-        <PanelGroup direction="horizontal" className={styles.contentLayout}>
-          <Panel defaultSize={settings.general.sidebarWidth || 30} minSize={30} collapsible={true} collapsedSize={0} id="article-list-panel" ref={listPanelRef}>
-            <div 
-              style={{ display: 'flex', flexDirection: 'column', height: '100%' }} 
-              ref={articleListContainerRef} 
-              onWheel={handleWheel}
-              onScrollCapture={handleScrollCapture}
-            >
-              <div className={styles.articleListPanelHeader}>
-                <Title level={4} className={styles.panelHeaderTitle} ellipsis>
-                  {pageTitle}
-                </Title>
-                <Space className={styles.panelHeaderControls}>
-                  <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
-                      <Button
-                        icon={<SearchOutlined />}
-                        type={'text'} 
-                        onClick={() => setSearchModeActive(!searchModeActive)}
-                        className={styles.controlButton}
-                      />
-                  </Tooltip>
-                  <Tooltip title="标记当前列表已读">
-                      <Button 
-                        icon={<CheckCircleOutlined />} 
-                        onClick={handleMarkAllReadLocal} 
-                        type="text" 
-                        className={styles.controlButton}
-                      />
-                  </Tooltip>
-                </Space>
-              </div>
+    <div 
+      className={`${styles.homePage} ${isDragging ? styles.isResizing : ''}`}
+      ref={panelGroupRef}
+    >
+        <PanelGroup 
+          direction="horizontal" 
+          className={styles.panelGroup}
+          onLayout={handleMainLayout}
+        >
+          {isArticleListVisible && (
+            <>
+              <Panel
+                ref={listPanelRef}
+                defaultSize={settings.layout.mainLayout[0]}
+                minSize={25}
+                maxSize={50}
+                collapsible
+                id="article-list-panel"
+              >
+                <div className={styles.articleListColumn}>
+                  <div className={styles.listHeader}>
+                    <div className={styles.listTitle}>
+                      <Title level={4} className={styles.panelHeaderTitle} ellipsis>
+                        {pageTitle}
+                      </Title>
+                      <Space className={styles.panelHeaderControls}>
+                        <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
+                            <Button
+                              icon={<SearchOutlined />}
+                              type={'text'} 
+                              onClick={() => setSearchModeActive(!searchModeActive)}
+                              className={styles.controlButton}
+                            />
+                        </Tooltip>
+                        <Tooltip title="标记当前列表已读">
+                            <Button 
+                              icon={<CheckCircleOutlined />} 
+                              onClick={handleMarkAllReadLocal} 
+                              type="text" 
+                              className={styles.controlButton}
+                            />
+                        </Tooltip>
+                      </Space>
+                    </div>
 
-              {searchModeActive && (
-                <div className={styles.panelSearchInputContainer}>
-                  <Input
-                      ref={searchInputRef}
-                      placeholder="搜索"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className={styles.panelSearchInput}
-                      allowClear
-                      autoFocus
-                  />
+                    {searchModeActive && (
+                      <div className={styles.panelSearchInputContainer}>
+                        <Input
+                            ref={searchInputRef}
+                            placeholder="搜索"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className={styles.panelSearchInput}
+                            allowClear
+                            autoFocus
+                        />
+                      </div>
+                    )}
+
+
+                  </div>
+                  
+                  <div 
+                    className={styles.articleListContainer}
+                    ref={articleListContainerRef}
+                    onWheel={handleWheel}
+                  >
+                    <div 
+                      className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
+                    >
+                      <SyncOutlined spin style={{ fontSize: '16px' }} />
+                    </div>
+                    <ArticleList
+                      ref={articleListRef}
+                      filter={articleFilterForList}
+                      searchTerm={searchTerm}
+                      onSelectArticle={handleArticleSelect}
+                      currentFeedId={feedId}
+                      currentGroupId={groupId}
+                      isTodayView={isTodayView}
+                      selectedArticleId={selectedArticleId}
+                      lastUpdatedArticleInfo={lastUpdatedArticleInfo}
+                      listRefreshKey={articleListRefreshKey}
+                    />
+                  </div>
+                  <div className={styles.listFooterControls}>
+                    <Radio.Group
+                      value={activeListFilter}
+                      onChange={(e) => {
+                          const newFilter = e.target.value as FilterType;
+                          console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
+                          setFilter(newFilter);
+                          setArticleListRefreshKey(prev => prev + 1);
+                        }}
+                      style={{ width: '100%', display: 'flex' }}
+                    >
+                      <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                          <AppstoreAddOutlined />
+                          <span>全部</span>
+                        </div>
+                      </Radio.Button>
+                      <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                          <CheckCircleOutlined />
+                          <span>未读</span>
+                        </div>
+                      </Radio.Button>
+                      <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                          <StarOutlined />
+                          <span>收藏</span>
+                        </div>
+                      </Radio.Button>
+                    </Radio.Group>
+                  </div>
                 </div>
-              )}
-
-              <div 
-                className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
-              >
-                <Spin />
-              </div>
-
-              <div 
-                className={styles.articleListContainer}
-              >
-                <ArticleList
-                  ref={articleListRef}
-                  filter={articleFilterForList}
-                  searchTerm={searchTerm}
-                  onSelectArticle={handleArticleSelect}
-                  viewMode={viewMode}
-                  currentFeedId={feedId}
-                  currentGroupId={groupId}
-                  isTodayView={isTodayView}
-                  selectedArticleId={selectedArticleId}
-                  lastUpdatedArticleInfo={lastUpdatedArticleInfo}
-                  listRefreshKey={articleListRefreshKey}
-                />
-              </div>
-              <div className={styles.listFooterControls}>
-                <Radio.Group
-                  value={activeListFilter}
-                  onChange={(e) => {
-                    const newFilter = e.target.value as FilterType;
-                    console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
-                    setFilter(newFilter);
-                    setArticleListRefreshKey(prev => prev + 1);
-                  }}
-                  style={{ width: '100%', display: 'flex' }}
-                >
-                  <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <AppstoreAddOutlined />
-                      <span>全部</span>
-                    </div>
-                  </Radio.Button>
-                  <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <CheckCircleOutlined />
-                      <span>未读</span>
-                    </div>
-                  </Radio.Button>
-                  <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                      <StarOutlined />
-                      <span>收藏</span>
-                    </div>
-                  </Radio.Button>
-                </Radio.Group>
-              </div>
-            </div>
-          </Panel>
-          <PanelResizeHandle className={styles.resizeHandle} />
-          <Panel defaultSize={100 - (settings.general.sidebarWidth || 30)} minSize={30} collapsible={true} collapsedSize={0} id="article-detail-panel" ref={detailPanelRef}>
-            <div className={styles.articleDetail}>
+              </Panel>
+              <PanelResizeHandle 
+                className={styles.resizeHandle} 
+                onDragging={setIsDragging}
+              />
+            </>
+          )}
+          <Panel
+            ref={detailPanelRef}
+            defaultSize={settings.layout.mainLayout[1]}
+            minSize={30}
+          >
+            <div className={styles.articleDetailContainer}>
               {selectedArticleId ? (
                 <ArticleDetail 
                   articleId={selectedArticleId} 
@@ -623,8 +726,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             </div>
           </Panel>
         </PanelGroup>
-      )}
-    </Layout>
+    </div>
   );
 };
 

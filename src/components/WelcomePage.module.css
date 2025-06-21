@@ -76,11 +76,7 @@
   margin-left: 16px;
 }
 
-/* 暗色主题适配 */
-:global(.dark-theme) .welcomeContainer {
-  background-color: #141414;
-}
-
-:global(.dark-theme) .feedCard {
-  background-color: #1f1f1f;
+.feedCard:hover .addIcon {
+  opacity: 1;
+  transform: scale(1);
 } 

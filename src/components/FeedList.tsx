@@ -138,9 +138,19 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
   const handleSelect = (key: string) => {
     if (key.startsWith('feed-')) {
-      navigate(`/feed/${key.replace('feed-', '')}`);
+      const newFeedId = key.replace('feed-', '');
+      if (newFeedId === feedId) {
+        document.dispatchEvent(new CustomEvent('request-list-refresh'));
+      } else {
+        navigate(`/feed/${newFeedId}`);
+      }
     } else if (key.startsWith('group-')) {
-      navigate(`/group/${key.replace('group-', '')}`);
+      const newGroupId = key.replace('group-', '');
+      if (newGroupId === currentRouteGroupId) {
+        document.dispatchEvent(new CustomEvent('request-list-refresh'));
+      } else {
+        navigate(`/group/${newGroupId}`);
+      }
     }
   };
 

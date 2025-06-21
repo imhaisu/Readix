@@ -253,15 +253,9 @@
 
 .articleListContainer {
   flex: 1;
-  background-color: #ffffff;
-  display: flex;
-  flex-direction: column;
   overflow-y: auto;
   overflow-x: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  position: relative;
 }
 
 .articleDetail {
@@ -284,8 +278,8 @@
 }
 
 .resizeHandle {
-  width: 2px;
-  background-color: transparent;
+  width: 1px;
+  background-color: #e8e8e8;
   cursor: col-resize;
   display: flex;
   align-items: center;
@@ -382,20 +376,27 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 0;
-  height: auto; 
-  flex-shrink: 0;
   overflow: hidden;
   opacity: 0;
-  max-height: 0;
+  max-height: 0px;
   transition: opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease;
   background-color: var(--bg-primary);
+  position: absolute;
+  top: 0; /* 修改：定位到顶部 */
+  left: 0;
+  right: 0;
+  z-index: 10;
 }
 
 .pullToRefreshIndicatorContainer.visible {
   opacity: 1;
-  max-height: 40px;
-  padding: 10px 0;
+  max-height: 40px; /* 动画高度 */
+  padding: 8px 0;
+}
+
+/* Style for the pull-to-refresh icon */
+.pullToRefreshIndicatorContainer :global(.anticon) {
+  color: var(--text-color-secondary);
 }
 
 /* Change Spin component color to black */
@@ -408,15 +409,18 @@
   display: flex;
   justify-content: space-between;
   align-items: center; 
-  padding: 8px 16px;
+  padding: 12px 12px 8px 12px;
+  /* 移除分割线 */
   background-color: #ffffff;
   flex-shrink: 0;
   margin-top: 0;
 }
 
 .panelHeaderTitle {
-  margin-bottom: 0 !important;
-  margin-right: auto;
+  font-size: 14px; /* 缩小标题字体 */
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0;
 }
 
 .panelHeaderControls {
@@ -432,38 +436,89 @@
 
 /* NEW Styles for the Search Input container within the Panel */
 .panelSearchInputContainer {
-  padding: 4px 16px;
+  /* 外部容器样式 */
+  padding: 4px 12px;
   background-color: var(--bg-primary);
-  flex-shrink: 0;
-  margin: 0;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
+  min-height: 38px; /* 新增：固定最小高度防止抖动 */
+  box-sizing: border-box; /* 新增 */
 }
 
-/* Targeting the Ant Design Input component itself within our container */
 .panelSearchInputContainer :global(.ant-input-affix-wrapper) {
-  background-color: transparent !important;
+  /* Antd Input 的外层包裹 */
+  background-color: var(--bg-tertiary); /* 图片中较深的背景色 */
   border: none !important;
+  border-radius: 8px !important;
   box-shadow: none !important;
-  padding: 0;
+  padding: 2px 8px; /* 内边距 */
 }
 
 .panelSearchInputContainer :global(.ant-input) {
+  /* 真正的 input 元素 */
   background-color: transparent !important;
-  font-size: 12px !important;
-  height: 24px !important;
-  padding: 2px 8px !important;
-  line-height: normal !important;
-  border: none !important;
+  font-size: 12px !important; /* 强制设置字体大小 */
+}
+
+.panelSearchInputContainer :global(.ant-input::placeholder) {
+  font-size: 12px !important; /* 强制设置占位符字体大小 */
 }
 
 .panelSearchInputContainer :global(.ant-input-prefix) .anticon {
 }
 
-.panelSearchInputContainer :global(.ant-input-clear-icon) .anticon {
-  color: var(--ant-text-color-secondary, #888);
+.panelSearchInputContainer :global(.ant-input-clear-icon) {
+  /* 清除按钮样式 */
+  color: var(--text-tertiary);
 }
 
 .panelSearchInput {
   width: 100%;
+} 
+
+.panelGroup {
+  height: 100%;
+  overflow: hidden;
+}
+
+.articleListColumn {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.isResizing .articleListContainer {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.1s ease-in-out;
+}
+
+.listHeader {
+  display: flex;
+  flex-direction: column;
+  background-color: var(--bg-primary);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2; /* Ensure header is above list content for shadows etc. */
+}
+
+.listTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end; /* 修改：底部对齐 */
+  padding: 8px 12px 2px 12px; /* 修改：进一步减小底部内边距 */
+  /* 移除分割线 */
+}
+
+/* 提高标题选择器的优先级 */
+.listTitle .panelHeaderTitle {
+  font-size: 16px !important; /* 缩小标题字体并确保生效 */
+  font-weight: 600 !important;
+  /* 移除之前错误的 margin: 0 修改，让 baseline 对齐生效 */
+}
+
+.articleDetailContainer {
+  height: 100%;
+  overflow: auto;
+  background-color: var(--background-color-primary, #fff);
 } 

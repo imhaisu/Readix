@@ -72,7 +72,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
   const popupRef = useRef<HTMLDivElement>(null);
 
-  const readingSettings = settings.reading;
+  const readingSettings = settings.appearance.reading;
 
   const handleShare = () => {
     if (article) {
@@ -229,7 +229,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             }
 
             // 自动标记为已读
-            if (currentArticleData.isRead === 'false' && settings.reading.autoMarkAsRead) {
+            if (currentArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
               await db.articles.update(articleId, { isRead: 'true' });
               console.log(`文章 ${articleId} 已自动标记为已读。`);
             }
@@ -254,7 +254,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       setArticle(null);
       setLoading(false);
     }
-  }, [articleId, db, article, isMounted, performUpgrade, applyHighlights]);
+  }, [articleId, db, article, isMounted, performUpgrade, applyHighlights, readingSettings]);
 
   useEffect(() => {
     loadArticleRef.current = loadArticle;
@@ -667,16 +667,19 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   };
 
   const renderArticleContent = () => {
-    const contentToRender = processedContent || article?.content;
-    if (article) {
+    if (!article) return null;
+
+    // 如果文章内容存在，并且不是 iframe 或 webview 模式，则渲染内容
+    if (article.content && viewMode === 'full') {
+      const contentToRender = processedContent || article.content;
       return (
-        <div
+        <div 
           ref={contentRef}
           className={styles.articleContent}
           style={{
-            fontSize: `${readingSettings.fontSize}px`,
-            lineHeight: readingSettings.lineHeight,
-            fontFamily: readingSettings.fontFamily,
+             fontSize: `${readingSettings.fontSize}px`,
+             lineHeight: readingSettings.lineHeight,
+             fontFamily: readingSettings.fontFamily,
           }}
           dangerouslySetInnerHTML={{ __html: contentToRender || '' }}
         />
@@ -684,16 +687,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
     return null;
   };
-
-  const articleStyle = {
-    '--article-bg-color': readingSettings.backgroundColor,
-    '--article-text-color': readingSettings.textColor,
-    '--article-title-color': readingSettings.titleColor,
-    '--article-font-size-body': `${readingSettings.fontSize}px`,
-    '--article-font-size-title': `${readingSettings.titleFontSize}px`,
-    '--article-line-height-body': readingSettings.lineHeight,
-    fontFamily: readingSettings.fontFamily,
-  } as React.CSSProperties;
 
   // 处理点击外部区域关闭弹窗的逻辑
   useEffect(() => {
@@ -771,12 +764,25 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     );
   }
 
-  if (!article) {
+  const articleStyle = {
+    '--article-bg-color': readingSettings.backgroundColor,
+    '--article-text-color': readingSettings.textColor,
+    '--article-title-color': readingSettings.titleColor,
+    '--article-title-font-size': `${readingSettings.titleFontSize}px`,
+  } as React.CSSProperties;
+
+  if (loading) {
     return (
-      <div className={styles.loadingContainer}>
-        {loading ? <Spin size="large" /> : <Empty description={articleId ? "文章加载失败或不存在" : "未选择文章"} />}
+      <div className={styles.articleDetailContainer} style={articleStyle}>
+        <Skeleton active paragraph={{ rows: 15 }} />
       </div>
     );
+  }
+
+  if (!article) {
+    return <div className={styles.articleDetailContainer} style={articleStyle}>
+      <Empty description="文章不存在或已被删除" className={styles.emptyState} />
+    </div>;
   }
 
   return (
@@ -913,7 +919,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                 <header className={styles.header}>
                   {article.publishDate && (
                     <p className={styles.publishDate}>
-                      {format(new Date(article.publishDate), "EEEE, MMMM d, yyyy 'at' HH:mm")}
+                      {format(new Date(article.publishDate), "EEEE, MMMM d, yyyy 'at' HH:mm", { locale: zhCN })}
                     </p>
                   )}
                   <h1 className={styles.title}>{article.title}</h1>
@@ -944,4 +950,4 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   );
 };
 
-export default ArticleDetail; 
+export default ArticleDetail;

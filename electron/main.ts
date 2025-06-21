@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, Tray, nativeImage, shell, dialog, screen } from 'electron';
 import path from 'path';
 import * as url from 'url';
 import fs from 'fs';
@@ -19,7 +19,30 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
-function createWindow() {
+const createWindow = () => {
+  // 定义 Store 的 schema 以获得类型安全
+  const store = new Store<{ windowBounds: { width: number; height: number; x?: number; y?: number } }>({
+    defaults: {
+      windowBounds: { width: 1280, height: 800 }
+    }
+  });
+
+  let { width, height, x, y } = store.get('windowBounds');
+
+  // 确保窗口在可见区域内
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width: displayWidth, height: displayHeight } = primaryDisplay.workAreaSize;
+
+  const isWithinBounds = (val: number | undefined, max: number) => val !== undefined && val >= 0 && val < max;
+
+  if (!isWithinBounds(x, displayWidth) || !isWithinBounds(y, displayHeight)) {
+      x = undefined;
+      y = undefined;
+      width = 1280;
+      height = 800;
+  }
+
+
   // 确保 favicons 目录存在
   if (!fs.existsSync(faviconsDir)) {
     fs.mkdirSync(faviconsDir, { recursive: true });
@@ -28,9 +51,11 @@ function createWindow() {
 
   // 创建浏览器窗口
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    minWidth: 800,
+    width,
+    height,
+    x,
+    y,
+    minWidth: 800, // 设置一个合理的最小宽度
     minHeight: 600,
     show: false, // 先不显示窗口，等待加载完成
     webPreferences: {
@@ -157,6 +182,13 @@ function createWindow() {
     // 在生产模式下也打开开发者工具，方便调试白屏问题
     // mainWindow.webContents.openDevTools();
   }
+
+  // 添加窗口关闭事件监听器，保存窗口大小和位置
+  mainWindow.on('close', () => {
+    if (mainWindow) { // 检查 mainWindow 是否存在
+      store.set('windowBounds', mainWindow.getBounds());
+    }
+  });
 
   // 当窗口关闭时取消引用
   mainWindow.on('closed', () => {
