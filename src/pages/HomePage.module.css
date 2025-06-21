@@ -36,6 +36,7 @@
 
 .controlButton {
   font-size: 16px;
+  color: var(--text-secondary);
 }
 
 .searchContainer {
@@ -63,7 +64,7 @@
 /* 底部控制栏 - 使用全局样式强制覆盖 */
 .listFooterControls {
   padding: 0;
-  border-top: 1px solid var(--border-color-split, #f0f0f0);
+  border-top: 1px solid var(--border-color-light);
   flex-shrink: 0;
   background-color: #ffffff;
   margin: 0;
@@ -97,7 +98,7 @@
 }
 
 .listFooterControls :global(.ant-radio-button-wrapper-checked) {
-  color: #007AFF !important;
+  color: var(--text-primary) !important;
   font-weight: 500 !important;
   border: none !important;
   background: transparent !important;
@@ -105,7 +106,7 @@
 }
 
 .listFooterControls :global(.ant-radio-button-wrapper:hover) {
-  color: #007AFF !important;
+  color: var(--text-primary) !important;
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -242,12 +243,9 @@
   color: rgba(255, 255, 255, 0.55) !important;
 }
 
-:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper-checked),
-:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper:hover) {
-  color: #007AFF !important;
-}
-
 .articleListControls {
+  display: flex;
+  justify-content: space-between;
   flex-shrink: 0;
 }
 
@@ -424,6 +422,8 @@
 }
 
 .panelHeaderControls {
+  margin-left: auto; /* Push controls to the right */
+  gap: 0px !important; /* 减小 Space 组件的间距 */
 }
 
 .panelHeaderControls .ant-btn {
@@ -521,4 +521,22 @@
   height: 100%;
   overflow: auto;
   background-color: var(--background-color-primary, #fff);
+} 
+
+.articleListContainerWrapper {
+  position: relative;
+  flex-grow: 1;
+  overflow: hidden; /* Hide the scrollbar from the wrapper */
+}
+
+.headerRefreshIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px; /* 与右侧按钮的间距 */
+} 
+
+/* 强制指定 Spin 组件的颜色为灰色 */
+.headerRefreshIndicator :global(.ant-spin-dot-item) {
+  background-color: var(--text-secondary);
 } 

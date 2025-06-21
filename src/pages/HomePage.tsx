@@ -67,28 +67,31 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [popoverVisible, setPopoverVisible] = useState(false);
   const [searchModeActive, setSearchModeActive] = useState(false);
   const [lastUpdatedArticleInfo, setLastUpdatedArticleInfo] = useState<{ id: string, changes: Partial<Article> } | null>(null);
-  const [articleListRefreshKey, setArticleListRefreshKey] = useState<number>(0);
+  
+  // 移除了 listRefreshKey state
 
   // 新增：下拉刷新状态 和 ref
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const articleListContainerRef = useRef<HTMLDivElement>(null);
-  const articleListRef = useRef<ArticleListHandle>(null); // New ref for ArticleList component
+  const [pullDownProgress, setPullDownProgress] = useState(0); // 0 to 1
+  const articleListRef = useRef<ArticleListHandle>(null);
+  const articleListContainerRef = useRef<HTMLDivElement>(null); // 重新添加被误删的 ref
   const pullStartY = useRef(0);
-  const isPulling = useRef(false);
-  const isAtTop = useRef(true); // 新增一个 ref 来跟踪是否在顶部
+  const isPulling = useRef(false); // 用于下拉刷新的 Ref, 避免命名冲突
+
+  const PULL_TO_REFRESH_THRESHOLD = 250; // Distance in pixels to trigger refresh
 
   // Use a ref to hold all dependencies for handleRefreshAll to stabilize its identity
-  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey });
+  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerRefresh, setIsPullRefreshing });
   useEffect(() => {
-    refreshDependenciesRef.current = { db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey };
-  }, [db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey]);
+    refreshDependenciesRef.current = { db, feedId, groupId, triggerRefresh, setIsPullRefreshing };
+  }, [db, feedId, groupId, triggerRefresh, setIsPullRefreshing]);
 
   const listPanelRef = useRef<ImperativePanelHandle>(null);
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
   const { isArticleListVisible } = useLayout();
   const panelGroupRef = useRef<HTMLDivElement>(null); // Ref for the PanelGroup container
-  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false); // 用于面板拖动
 
   // This effect uses a ResizeObserver to maintain the article list panel's pixel width
   // when its container is resized (e.g., when the main sidebar is dragged).
@@ -128,34 +131,72 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         articleListWidth: newPixelWidth,
       });
     }
+    setIsResizing(false);
   };
 
   const handleScrollCapture = (event: React.UIEvent<HTMLDivElement>) => {
     console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
   };
 
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    // 1. Check if the feature is enabled
-    if (!settings.advanced.gestures.pullToRefresh) return;
-    
-    // 2. Get the real scrollable element from ArticleList
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     const scrollableElement = articleListRef.current?.getScrollableElement();
-    if (!scrollableElement) {
-      console.log("[PullToRefresh DEBUG] Scrollable element not available.");
+    if (!scrollableElement || scrollableElement.scrollTop !== 0 || isPullRefreshing) {
       return;
     }
+    pullStartY.current = e.touches[0].clientY;
+    isPulling.current = true;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!isPulling.current) return;
+
+    const currentY = e.touches[0].clientY;
+    const pullDistance = currentY - pullStartY.current;
+
+    if (pullDistance > 0) {
+      e.preventDefault(); // Prevent page scroll while pulling
+      const progress = Math.min(1, pullDistance / PULL_TO_REFRESH_THRESHOLD);
+      setPullDownProgress(progress);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (!isPulling.current) return;
+    isPulling.current = false;
+
+    if (pullDownProgress === 1) {
+      console.log('Pull to refresh triggered by touch.');
+      handleRefreshAll();
+    }
+    
+    // Reset progress smoothly
+    setTimeout(() => setPullDownProgress(0), 100);
+  };
+
+
+  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    if (!settings.advanced.gestures.pullToRefresh || isPulling.current) return;
+
+    const scrollableElement = articleListRef.current?.getScrollableElement();
+    if (!scrollableElement || isPullRefreshing) return;
 
     const { scrollTop } = scrollableElement;
     const { deltaY } = event;
 
-    // console.log(`[PullToRefresh DEBUG] Wheel event. deltaY: ${deltaY}, scrollTop: ${scrollTop}`);
-    
-    // 3. Check conditions: scrolling up at the very top AND not already refreshing
-    if (deltaY < 0 && scrollTop === 0 && !isPullRefreshing) {
-      console.log("[PullToRefresh] Conditions met. Refreshing...");
-      // Prevent the default "overscroll" behavior
-      event.preventDefault();
-      handleRefreshAll();
+    if (scrollTop === 0 && deltaY < 0) {
+      const pullDistance = Math.abs(deltaY);
+      const newProgress = Math.min(1, pullDownProgress + pullDistance / (PULL_TO_REFRESH_THRESHOLD * 2)); // Slower progress for wheel
+      setPullDownProgress(newProgress);
+
+      if (newProgress >= 1) {
+        console.log('Pull to refresh triggered by wheel.');
+        handleRefreshAll();
+        // Reset progress after triggering
+        setTimeout(() => setPullDownProgress(0), 100);
+      }
+    } else if (pullDownProgress > 0 && deltaY > 0) {
+      // If user scrolls down while in a pull-down state, reset progress
+      setPullDownProgress(0);
     }
   };
 
@@ -260,7 +301,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setSelectedArticleId(null); 
       // 修复：不要每次都清空搜索词，保留用户的搜索状态
       // setSearchTerm(''); 
-      setArticleListRefreshKey(prev => prev + 1);
+      // 移除了 setArticleListRefreshKey
     }
     
     // 更新isTodayView状态，这不应该触发列表的强制刷新，列表会根据filter对象自行调整
@@ -275,12 +316,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [filter, feedId, groupId]); // 依赖项保持不变
   
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
-    const { db, feedId, groupId, triggerRefresh, setLoading, setIsPullRefreshing, setArticleListRefreshKey } = refreshDependenciesRef.current;
-    if (!db) return; // 增加对 db 的检查
+    const { db, feedId, groupId, triggerRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
+    
+    // 问题2: 添加刷新锁，防止重复刷新
+    if (isPullRefreshing) {
+      console.log('Refresh is already in progress. Skipping.');
+      return;
+    }
+    
+    if (!db) return;
 
     if (!options?.silent) {
-      setLoading(true);
-      setIsPullRefreshing(true); // 确保下拉刷新指示器也显示
+      // 问题1: 移除全局 setLoading，只控制下拉刷新的视觉状态
+      setIsPullRefreshing(true);
     }
 
     let feedsToRefresh: FeedSource[] = [];
@@ -301,13 +349,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         await refreshAllFeeds(feedsToRefresh, undefined, (results) => {
           console.log('Refresh results:', results);
           triggerRefresh(); // 这会更新侧边栏的计数
-          setArticleListRefreshKey(prev => prev + 1); // 这会强制刷新文章列表
+          // 移除了 setArticleListRefreshKey
         });
       } else {
         // 如果没有找到任何需要刷新的 feeds（例如，一个空的 group），也通知一下用户
         console.log('No feeds to refresh.');
-        // 也可以选择刷新列表以反映空状态
-        setArticleListRefreshKey(prev => prev + 1);
+        // 移除了 setArticleListRefreshKey
       }
     } catch (error) {
       console.error("Error during refresh all:", error);
@@ -316,21 +363,20 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       }
     } finally {
       if (!options?.silent) {
-        // 使用一个小的延迟来确保用户能看到加载状态
+        // 问题1: 移除全局 setLoading。下拉刷新的视觉状态在 key 变化后由 ArticleList 内部重置。
+        // 为了平滑过渡，延迟一小段时间再移除下拉刷新指示器
         setTimeout(() => {
-          setLoading(false);
           setIsPullRefreshing(false);
         }, 500);
       } else {
-        // 对于静默刷新，也要确保重置 isPullRefreshing 状态
         setIsPullRefreshing(false);
       }
     }
-  }, []); // Empty dependency array makes the function stable
+  }, [isPullRefreshing]); // 将 isPullRefreshing 加入依赖数组
   
   const handleLocalListRefresh = useCallback(() => {
     console.log('[HomePage] Triggering local list refresh via key increment.');
-    setArticleListRefreshKey(prev => prev + 1);
+    // 移除了 setArticleListRefreshKey
   }, []);
 
   // 新增 Effect 用于监听列表刷新请求
@@ -390,9 +436,11 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
   }, [isArticleListVisible]);
 
-  const handleArticleSelect = useCallback((articleId: string) => {
+  const handleArticleSelect = useCallback((articleId: string | null) => {
     setSelectedArticleId(articleId);
-    setArticleDetailViewMode('full'); 
+    if (articleId) {
+      setArticleDetailViewMode('full'); 
+    }
   }, []);
 
   const handleCloseArticle = () => {
@@ -531,7 +579,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
               }
           });
           triggerRefresh(); 
-          setArticleListRefreshKey(prev => prev + 1);
+          // 移除了 setArticleListRefreshKey
           message.success(`${articlesToMark.length}篇文章已标记为已读。`);
         };
 
@@ -583,7 +631,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   return (
     <div 
-      className={`${styles.homePage} ${isDragging ? styles.isResizing : ''}`}
+      className={`${styles.homePage} ${isPulling ? styles.isResizing : ''}`}
       ref={panelGroupRef}
     >
         <PanelGroup 
@@ -601,13 +649,21 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                 collapsible
                 id="article-list-panel"
               >
-                <div className={styles.articleListColumn}>
+                <div 
+                  className={styles.articleListColumn}
+                  onScrollCapture={handleScrollCapture}
+                >
                   <div className={styles.listHeader}>
                     <div className={styles.listTitle}>
                       <Title level={4} className={styles.panelHeaderTitle} ellipsis>
                         {pageTitle}
                       </Title>
                       <Space className={styles.panelHeaderControls}>
+                        {isPullRefreshing && (
+                          <div className={styles.headerRefreshIndicator}>
+                            <Spin size="small" />
+                          </div>
+                        )}
                         <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
                             <Button
                               icon={<SearchOutlined />}
@@ -645,27 +701,29 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                   </div>
                   
                   <div 
-                    className={styles.articleListContainer}
+                    className={styles.articleListContainerWrapper}
                     ref={articleListContainerRef}
                     onWheel={handleWheel}
+                    onTouchStart={handleTouchStart}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={handleTouchEnd}
                   >
-                    <div 
-                      className={`${styles.pullToRefreshIndicatorContainer} ${isPullRefreshing ? styles.visible : ''}`}
-                    >
-                      <SyncOutlined spin style={{ fontSize: '16px' }} />
-                    </div>
-                    <ArticleList
-                      ref={articleListRef}
-                      filter={articleFilterForList}
-                      searchTerm={searchTerm}
-                      onSelectArticle={handleArticleSelect}
-                      currentFeedId={feedId}
-                      currentGroupId={groupId}
-                      isTodayView={isTodayView}
-                      selectedArticleId={selectedArticleId}
-                      lastUpdatedArticleInfo={lastUpdatedArticleInfo}
-                      listRefreshKey={articleListRefreshKey}
-                    />
+                    {/* 移除了旧的 pullToRefreshIndicator div */}
+                    {feeds.length > 0 || groupId || feedId ? (
+                      <ArticleList
+                        ref={articleListRef}
+                        filter={articleFilterForList}
+                        searchTerm={searchTerm}
+                        onSelectArticle={handleArticleSelect}
+                        currentFeedId={feedId}
+                        currentGroupId={groupId}
+                        isTodayView={isTodayView}
+                        selectedArticleId={selectedArticleId}
+                        lastUpdatedArticleInfo={lastUpdatedArticleInfo}
+                      />
+                    ) : (
+                      <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
+                    )}
                   </div>
                   <div className={styles.listFooterControls}>
                     <Radio.Group
@@ -674,7 +732,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                           const newFilter = e.target.value as FilterType;
                           console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
                           setFilter(newFilter);
-                          setArticleListRefreshKey(prev => prev + 1);
+                          // 移除了 setArticleListRefreshKey
                         }}
                       style={{ width: '100%', display: 'flex' }}
                     >
@@ -702,7 +760,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
               </Panel>
               <PanelResizeHandle 
                 className={styles.resizeHandle} 
-                onDragging={setIsDragging}
+                onDragging={setIsResizing}
               />
             </>
           )}

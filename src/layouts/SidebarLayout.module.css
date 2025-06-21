@@ -101,7 +101,7 @@
   border-top: 1px solid var(--border-color-split);
   justify-content: flex-start;
   padding: 8px;
-  background-color: var(--bg-secondary);
+  background-color: #ffffff;
   transition: padding 0.2s ease-out, border-color 0.2s ease-out, height 0.2s ease-out;
 }
 

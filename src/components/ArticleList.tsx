@@ -22,6 +22,7 @@ import { processIconUrl } from '../utils/iconUtils';
 import styles from './ArticleList.module.css';
 import Dexie from 'dexie'; // 引入 Dexie 以便使用类型 (取消注释)
 import { Settings, defaultSettings } from '../types/settings';
+import PulsingLoader from './PulsingLoader';
 
 // 自定义 hook，用于获取前一个 props/state 的值
 function usePrevious<T>(value: T): T | undefined {
@@ -35,7 +36,7 @@ function usePrevious<T>(value: T): T | undefined {
 interface ArticleListProps {
   filter: any; // 过滤条件, HomePage.getArticleFilter() 返回的对象
   searchTerm?: string; // 新增 searchTerm prop (可选)
-  onSelectArticle: (articleId: string) => void;
+  onSelectArticle: (articleId: string | null) => void; // 允许传递 null
   selectedArticleId: string | null;
   // 新增一个 prop 来处理"今日"这个特殊情况，因为 HomePage.getArticleFilter 对"今日"的处理是返回一个 publishDate 的范围
   // 但 ArticleList 可能需要更明确的指示，或者 HomePage 直接传递一个更通用的 filter 对象
@@ -114,10 +115,12 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   listRefreshKey // 接收 prop
 }, ref) => {
   // 移除不再需要的诊断日志
-  console.log('[ArticleList] Component rendered or re-rendered. Current filter:', filter, 'Key:', listRefreshKey);
+  // console.log('[ArticleList] Component rendered or re-rendered. Current filter:', filter, 'Key:', listRefreshKey);
   const { db, isInitialized, triggerRefresh } = useDatabase();
   const [loading, setLoading] = useState(true);
-  const [articles, setArticles] = useState<Article[]>([]); // 重命名回 articles, 移除 displayedArticles 和 allArticlesForCurrentContext
+  const [isRefreshing, setIsRefreshing] = useState(false); // 新增：用于防止重复刷新
+  const [allArticles, setAllArticles] = useState<Article[]>([]); // 新增：存储当前上下文的所有文章
+  const [displayedArticles, setDisplayedArticles] = useState<Article[]>([]); // 修改：用于显示的、经过筛选的文章
   const [feedInfoMap, setFeedInfoMap] = useState<Map<string, FeedSource>>(new Map());
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false); // 添加初始加载标志
   const [error, setError] = useState<string | null>(null);
@@ -132,31 +135,72 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   // prevIsTodayView 似乎没有在 effect 内部的比较逻辑中使用，如果确实不用可以考虑移除
   // const prevIsTodayView = usePrevious(isTodayView);
 
+  const markAsRead = useCallback(async (articleId: string) => {
+    // 简化: 只更新数据库和 allArticles。UI 的更新交给 filter effect。
+    const articleInAll = allArticles.find(a => a.id === articleId);
+
+    if (db && articleInAll && articleInAll.isRead === 'false') {
+      try {
+        console.log(`[ArticleList] markAsRead: Marking article ${articleId} as read in DB.`);
+        await db.articles.update(articleId, { isRead: 'true' });
+        
+        // 只更新 allArticles，让 filtering effect 去处理 displayedArticles
+        setAllArticles(prevAll => 
+          prevAll.map(a => a.id === articleId ? { ...a, isRead: 'true' } : a)
+        );
+
+        // 更新 feed 未读数的逻辑保持不变
+        if (articleInAll.sourceId) {
+          const feed = feedInfoMap.get(articleInAll.sourceId) || await db.feeds.get(articleInAll.sourceId);
+          if (feed && typeof feed.unreadCount === 'number' && feed.unreadCount > 0) {
+            const newUnreadCount = await db.articles.where({ sourceId: articleInAll.sourceId, isRead: 'false'}).count();
+            if (feed.id) {
+              await db.feeds.update(feed.id, { unreadCount: newUnreadCount });
+              console.log(`[ArticleList] markAsRead: Feed ${articleInAll.sourceId} unread count updated to ${newUnreadCount} in DB.`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error marking article as read:", error);
+      }
+    }
+  }, [db, allArticles, feedInfoMap]);
+
+
+  // 监听 selectedArticleId 的变化，自动将选中的文章标记为已读
+  useEffect(() => {
+    if (selectedArticleId) {
+      markAsRead(selectedArticleId);
+    }
+  }, [selectedArticleId, markAsRead]);
+
+
   // 键盘事件处理函数
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     // 如果没有选中的文章或者文章列表为空，不处理键盘事件
-    if (!selectedArticleId || articles.length === 0) return;
+    if (!selectedArticleId || displayedArticles.length === 0) return;
 
-    const currentIndex = articles.findIndex(article => article.id === selectedArticleId);
+    const currentIndex = displayedArticles.findIndex(article => article.id === selectedArticleId);
     if (currentIndex === -1) return;
 
     let nextIndex = currentIndex;
 
     if (event.key === 'ArrowUp') {
       // 上键：选择上一篇文章
-      nextIndex = currentIndex > 0 ? currentIndex - 1 : articles.length - 1; // 循环到最后一篇
+      nextIndex = currentIndex > 0 ? currentIndex - 1 : displayedArticles.length - 1; // 循环到最后一篇
       event.preventDefault(); // 防止页面滚动
     } else if (event.key === 'ArrowDown') {
       // 下键：选择下一篇文章
-      nextIndex = currentIndex < articles.length - 1 ? currentIndex + 1 : 0; // 循环到第一篇
+      nextIndex = currentIndex < displayedArticles.length - 1 ? currentIndex + 1 : 0; // 循环到第一篇
       event.preventDefault(); // 防止页面滚动
     } else {
       return; // 其他键不处理
     }
 
-    const nextArticle = articles[nextIndex];
+    const nextArticle = displayedArticles[nextIndex];
     if (nextArticle) {
       onSelectArticle(nextArticle.id);
+      // markAsRead(nextArticle.id); // 移除: 交给 useEffect 处理
       
       // 自动滚动到选中的文章
       const articleElement = containerRef.current?.querySelector(`[data-article-id="${nextArticle.id}"]`) as HTMLElement;
@@ -167,7 +211,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
         });
       }
     }
-  }, [selectedArticleId, articles, onSelectArticle]);
+  }, [selectedArticleId, displayedArticles, onSelectArticle]);
 
   // 添加键盘事件监听
   useEffect(() => {
@@ -202,7 +246,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   useEffect(() => {
     if (lastUpdatedArticleInfo && lastUpdatedArticleInfo.id) {
       console.log('[ArticleList] lastUpdatedArticleInfo triggered:', lastUpdatedArticleInfo);
-      setArticles(prevArticles => {
+      setDisplayedArticles(prevArticles => {
         const newArticles = prevArticles.map(article =>
           article.id === lastUpdatedArticleInfo.id
             ? { ...article, ...lastUpdatedArticleInfo.changes }
@@ -214,47 +258,32 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     }
   }, [lastUpdatedArticleInfo]);
 
-  // Main data loading effect
+  // Effect 1: Fetch articles from DB when context changes (feed, group, search, or forced refresh)
   useEffect(() => {
     if (!isInitialized || !db) {
       return;
     }
 
-    const loadArticles = async () => {
-      console.log('[ArticleList] useEffect[loadArticles]: Running with filter', filter);
-      const isInitialLoad = !hasInitialLoaded;
-      
-      // Determine if a full reload is needed.
-      const hasFilterChanged = JSON.stringify(filter) !== JSON.stringify(prevFilter);
-      const hasSearchTermChanged = searchTerm !== prevSearchTerm;
-      const hasFeedIdChanged = currentFeedId !== prevCurrentFeedId;
-      const hasGroupIdChanged = currentGroupId !== prevCurrentGroupId;
-      const hasListRefreshKeyChanged = listRefreshKey !== prevListRefreshKey;
-
-      const isCriticalChange = isInitialLoad || hasFilterChanged || hasSearchTermChanged || hasFeedIdChanged || hasGroupIdChanged || hasListRefreshKeyChanged;
-
-      if (!isCriticalChange) {
-        console.log('[ArticleList] Skipping article load: no critical changes detected.');
+    const loadArticlesForContext = async () => {
+      // 检查是否正在进行刷新，如果是，则中止新的加载
+      if (isRefreshing) {
+        console.log('[ArticleList] Refresh already in progress, skipping new data load.');
         return;
       }
-      
-      console.log('[ArticleList] Performing hard refresh. Reason:', {
-        isInitialLoad,
-        hasFilterChanged,
-        hasSearchTermChanged,
-        hasFeedIdChanged,
-        hasGroupIdChanged,
-        hasListRefreshKeyChanged,
-      });
 
-      setLoading(true);
+      console.log('[ArticleList] useEffect[loadArticlesForContext]: Running with context', { currentFeedId, currentGroupId, searchTerm });
+      
+      // 只有在首次加载时才显示重量级的加载动画
+      if (!hasInitialLoaded) {
+        setLoading(true);
+      }
+      setIsRefreshing(true); // 开始加载/刷新，设置锁定
       setError(null);
       
       try {
-        // Start with a base collection
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
 
-        // 1. Filter by Feed or Group
+        // Filter by Feed or Group
         if (currentFeedId) {
           collection = collection.filter(article => article.sourceId === currentFeedId);
         } else if (currentGroupId) {
@@ -263,32 +292,18 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
           if (feedIdsInGroup.size > 0) {
             collection = collection.filter(article => article.sourceId ? feedIdsInGroup.has(article.sourceId) : false);
           } else {
-            // If group has no feeds, no articles can match.
-            setArticles([]);
+            setAllArticles([]);
             setLoading(false);
+            setIsRefreshing(false);
             setHasInitialLoaded(true);
             return;
           }
         }
-
-        // 2. Apply main filters from the 'filter' prop
-        if (filter) {
-          if (typeof filter.isRead === 'string') { // 'true' or 'false'
-            collection = collection.filter(article => article.isRead === filter.isRead);
-          }
-          if (filter.isStarred === 'true') {
-            collection = collection.filter(article => article.isStarred === 'true');
-          }
-          // Handle 'Today' view filter if passed as a date range
-          if (filter.publishDate) {
-             collection = collection.filter(article => article.publishDate >= filter.publishDate.from && article.publishDate <= filter.publishDate.to);
-          }
-        }
         
-        // The collection is now filtered based on DB-indexed properties.
         let fetchedArticles = await collection.toArray();
+        fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
 
-        // 3. Apply client-side search term filter (if any)
+        // Client-side search term filter
         if (searchTerm && searchTerm.trim() !== '') {
           const lowerSearchTerm = searchTerm.toLowerCase();
           fetchedArticles = fetchedArticles.filter((article: Article) =>
@@ -299,13 +314,10 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
           );
         }
 
-        // 4. Sort the final list
-        fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
+        setAllArticles(fetchedArticles);
+        console.log(`[ArticleList] Loaded ${fetchedArticles.length} articles into allArticles.`);
 
-        setArticles(fetchedArticles);
-        console.log(`[ArticleList] Loaded ${fetchedArticles.length} articles.`);
-
-        // 5. Fetch associated feed info for the loaded articles
+        // Fetch associated feed info for the loaded articles
         if (fetchedArticles.length > 0) {
           const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
           if (sourceIds.length > 0) {
@@ -330,70 +342,89 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       } catch (err) {
         console.error('获取文章失败:', err);
         setError('加载文章失败，请稍后重试。');
-        // If it's a Dexie error, we might get more info
         if (err instanceof Error) {
             console.error(`Error name: ${err.name}, message: ${err.message}`);
         }
       } finally {
         setLoading(false);
+        setIsRefreshing(false); // 加载/刷新完成，解除锁定
       }
     };
 
-    loadArticles();
+    loadArticlesForContext();
     
-  }, [db, isInitialized, filter, currentFeedId, currentGroupId, searchTerm, listRefreshKey]);
+  }, [db, isInitialized, currentFeedId, currentGroupId, searchTerm, listRefreshKey]);
 
-  const handleArticleClick = async (articleId: string) => {
-    onSelectArticle(articleId);
-    const articleIndex = articles.findIndex(a => a.id === articleId);
-    if (articleIndex === -1) return;
-    const articleToUpdate = articles[articleIndex];
+  // Effect 2: Filter and sort articles when allArticles or filter changes
+  useEffect(() => {
+    console.log('[ArticleList] useEffect[filterAndSort]: Running with filter', filter);
+    
+    let filtered = [...allArticles];
 
-    if (articleToUpdate.isRead === 'false') {
-      try {
-        if (db) {
-          console.log(`[ArticleList] handleArticleClick: Marking article ${articleId} as read in DB.`);
-          await db.articles.update(articleId, { isRead: 'true' });
-          const updatedArticles = [...articles];
-          updatedArticles[articleIndex] = { ...articleToUpdate, isRead: 'true' };
-          console.log('[ArticleList] handleArticleClick: Local articles updated. Clicked article:', updatedArticles[articleIndex], 'All count:', updatedArticles.length);
-          setArticles(updatedArticles);
-
-          if (articleToUpdate.sourceId) {
-            const feed = feedInfoMap.get(articleToUpdate.sourceId) || await db.feeds.get(articleToUpdate.sourceId);
-            if (feed && typeof feed.unreadCount === 'number' && feed.unreadCount > 0) {
-              const newUnreadCount = await db.articles.where({ sourceId: articleToUpdate.sourceId, isRead: 'false'}).count();
-              if (feed.id) {
-                await db.feeds.update(feed.id, { unreadCount: newUnreadCount });
-              console.log(`[ArticleList] handleArticleClick: Feed ${articleToUpdate.sourceId} unread count updated to ${newUnreadCount} in DB.`);
-              }
-            }
-          }
-        }
-        // triggerRefresh();
-      } catch (error) {
-        console.error("Error marking article as read:", error);
+    // Apply main filters from the 'filter' prop
+    if (filter) {
+      if (typeof filter.isRead === 'string') {
+        filtered = filtered.filter(article => article.isRead === filter.isRead);
+      }
+      if (filter.isStarred === 'true') {
+        filtered = filtered.filter(article => article.isStarred === 'true');
+      }
+      // Handle 'Today' view filter if passed as a date range
+      if (filter.publishDate) {
+         filtered = filtered.filter(article => article.publishDate >= filter.publishDate.from && article.publishDate <= filter.publishDate.to);
       }
     }
+
+    // Sort the final list
+    filtered.sort((a, b) => b.publishDate - a.publishDate);
+
+    // [最终修复逻辑] 遵照用户规则: 只要有文章被选中，就不能从列表中消失。
+    if (selectedArticleId) {
+      const isSelectedInList = filtered.some((a: Article) => a.id === selectedArticleId);
+
+      // 如果选中的文章因为筛选被排除了
+      if (!isSelectedInList) {
+        // 从 "数据母版" a`llArticles` 中找到它
+        const selectedArticle = allArticles.find((a: Article) => a.id === selectedArticleId);
+        
+        // 如果找到了，就把它加回到要显示的列表中，并重新排序
+        if (selectedArticle) {
+          filtered.push(selectedArticle);
+          filtered.sort((a, b) => b.publishDate - a.publishDate);
+        }
+      }
+    }
+
+    setDisplayedArticles(filtered);
+    console.log(`[ArticleList] Filtered to ${filtered.length} displayed articles.`);
+
+    // Deselect article if filter changes (Problem 3)
+    if (JSON.stringify(filter) !== JSON.stringify(prevFilter)) {
+        onSelectArticle(null);
+    }
+
+  }, [allArticles, filter, selectedArticleId, onSelectArticle]);
+
+
+  const handleArticleClick = (articleId: string) => {
+    onSelectArticle(articleId);
+    // markAsRead(articleId); // 移除: 交给 useEffect 处理
   };
 
   // 右键菜单功能函数
   const handleToggleRead = async (articleId: string) => {
     if (!db) return;
     
-    const articleIndex = articles.findIndex(a => a.id === articleId);
-    if (articleIndex === -1) return;
-    const article = articles[articleIndex];
+    const article = allArticles.find(a => a.id === articleId);
+    if (!article) return;
     
     const newReadStatus = article.isRead === 'true' ? 'false' : 'true';
     
     try {
       await db.articles.update(articleId, { isRead: newReadStatus });
       
-      // 更新本地state
-      const updatedArticles = [...articles];
-      updatedArticles[articleIndex] = { ...article, isRead: newReadStatus };
-      setArticles(updatedArticles);
+      // 统一更新 allArticles
+      setAllArticles(prev => prev.map(a => a.id === articleId ? { ...a, isRead: newReadStatus } : a));
       
       // 同步更新feeds的未读计数
       if (article.sourceId) {
@@ -413,7 +444,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;
     
-    const article = articles.find(a => a.id === articleId);
+    const article = allArticles.find(a => a.id === articleId);
     if (!article) return;
 
     const newIsStarred = article.isStarred === 'true' ? 'false' : 'true';
@@ -421,9 +452,9 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     try {
       await db.articles.update(articleId, { isStarred: newIsStarred });
       
-      // 更新本地状态
-      setArticles(prevArticles => 
-        prevArticles.map(a => 
+      // 统一更新 allArticles
+      setAllArticles(prev => 
+        prev.map(a => 
           a.id === articleId ? { ...a, isStarred: newIsStarred } : a
         )
       );
@@ -439,10 +470,10 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   const handleMarkAboveAsRead = async (articleId: string) => {
     if (!db) return;
     
-    const currentIndex = articles.findIndex(a => a.id === articleId);
+    const currentIndex = displayedArticles.findIndex(a => a.id === articleId);
     if (currentIndex === -1) return;
 
-    const articlesToMark = articles.slice(0, currentIndex).filter(a => a.isRead === 'false');
+    const articlesToMark = displayedArticles.slice(0, currentIndex).filter(a => a.isRead === 'false');
     
     if (articlesToMark.length === 0) {
       message.info('上方没有未读文章');
@@ -453,9 +484,9 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       const articleIds = articlesToMark.map(a => a.id);
       await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
       
-      // 更新本地状态
-      setArticles(prevArticles => 
-        prevArticles.map(a => 
+      // 统一更新 allArticles
+      setAllArticles(prev => 
+        prev.map(a => 
           articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a
         )
       );
@@ -483,10 +514,10 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   const handleMarkBelowAsRead = async (articleId: string) => {
     if (!db) return;
     
-    const currentIndex = articles.findIndex(a => a.id === articleId);
+    const currentIndex = displayedArticles.findIndex(a => a.id === articleId);
     if (currentIndex === -1) return;
 
-    const articlesToMark = articles.slice(currentIndex + 1).filter(a => a.isRead === 'false');
+    const articlesToMark = displayedArticles.slice(currentIndex + 1).filter(a => a.isRead === 'false');
     
     if (articlesToMark.length === 0) {
       message.info('下方没有未读文章');
@@ -497,13 +528,13 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       const articleIds = articlesToMark.map(a => a.id);
       await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
       
-      // 更新本地状态
-      setArticles(prevArticles => 
-        prevArticles.map(a => 
+      // 统一更新 allArticles
+      setAllArticles(prev => 
+        prev.map(a => 
           articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a
         )
       );
-
+      
       // 更新对应订阅源的未读计数
       const affectedFeeds = new Set(articlesToMark.map(a => a.sourceId).filter(Boolean));
       for (const feedId of affectedFeeds) {
@@ -592,7 +623,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       <motion.div
         layout
         key={article.id}
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, transition: { duration: 0.15 } }}
         transition={{ duration: 0.2, type: 'tween' }}
@@ -643,7 +674,8 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   };
   
   const renderContent = () => {
-    if (loading && articles.length === 0) {
+    // 初始加载骨架屏
+    if (loading && displayedArticles.length === 0 && !hasInitialLoaded) {
       return (
         <div style={{ padding: '20px' }}>
           <Skeleton active avatar paragraph={{ rows: 3 }} />
@@ -653,18 +685,26 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       );
     }
 
-    if (articles.length === 0 && !loading) {
-      return <Empty description="没有文章" className={styles.emptyState} />;
-    }
-
+    // 加载错误
     if (error) {
       return <Empty description={`加载失败: ${error}`} />;
     }
 
+    // 列表为空
+    if (displayedArticles.length === 0 && !loading) {
+      return <Empty description="没有文章" className={styles.emptyState} />;
+    }
+
     return (
       <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
+        {/* 刷新加载指示器 */}
+        {loading && (
+          <div className={styles.refreshingLoaderContainer}>
+            <PulsingLoader />
+          </div>
+        )}
         <AnimatePresence>
-          {articles.map(article => renderListItem(article))}
+          {displayedArticles.map(article => renderListItem(article))}
         </AnimatePresence>
       </div>
     );

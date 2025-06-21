@@ -1,3 +1,7 @@
+.scrollableArticleListContainer:focus {
+  outline: none;
+}
+
 .scrollableArticleListContainer {
   height: 100%; /* 确保它填满父容器的高度 */
   overflow-y: auto; /* 当内容超出时显示垂直滚动条 */
@@ -358,7 +362,9 @@
 .desc-lines-2 {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 2; /*
+   在 V5 样式中，摘要最多显示两行 
+  */
   overflow: hidden;
   text-overflow: ellipsis;
   word-break: break-all;
@@ -379,4 +385,16 @@
 /* 已读项没有左边框 */
 .readItemV5 {
   /* border-left: 3px solid transparent; */
+} 
+
+/* 当列表为空时的提示信息样式 */
+.emptyState {
+  margin-top: 100px;
+}
+
+.refreshingLoaderContainer {
+  padding: 20px 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
 } 

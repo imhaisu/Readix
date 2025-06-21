@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import Dexie from 'dexie';
 
 // 定义数据库类
@@ -116,10 +116,72 @@ export interface Annotation {
   createdAt: number; // 创建时间戳，用于排序
 }
 
+// --- 单例模式实现 ---
+let dbInstance: RssDatabase | null = null;
+let isDbInitialized = false;
+let initializationPromise: Promise<RssDatabase | null> | null = null;
+
+const initializeDatabaseSingleton = async (): Promise<RssDatabase | null> => {
+  // 如果已经有一个正在进行的初始化，则返回该 promise
+  if (initializationPromise) {
+    return initializationPromise;
+  }
+  // 如果已经初始化完成，直接返回实例
+  if (isDbInitialized && dbInstance) {
+    return dbInstance;
+  }
+
+  // 开始初始化
+  initializationPromise = (async () => {
+    try {
+      console.log('[DatabaseSingleton] 开始初始化数据库...');
+      const database = new RssDatabase();
+      await database.open();
+      await database.articles.limit(1).toArray(); // 测试连接
+      
+      dbInstance = database;
+      isDbInitialized = true;
+      (window as any).dbInstanceForDebug = database;
+      console.log('[DatabaseSingleton] 数据库初始化成功。');
+      return dbInstance;
+    } catch (error) {
+      console.error('数据库初始化失败:', error);
+       if (error && typeof error === 'object' && 'name' in error) {
+        if ((error as any).name === 'VersionError' || (error as any).name === 'DatabaseError') {
+          console.log('检测到数据库版本或结构问题，尝试重置数据库...');
+          try {
+            await Dexie.delete('RssDatabase');
+            console.log('旧数据库已删除，重新初始化...');
+            const newDatabase = new RssDatabase();
+            await newDatabase.open();
+            await newDatabase.articles.limit(1).toArray();
+            dbInstance = newDatabase;
+            isDbInitialized = true;
+            (window as any).dbInstanceForDebug = newDatabase;
+            console.log('数据库重置并初始化成功');
+            return dbInstance;
+          } catch (resetError) {
+            console.error('数据库重置失败:', resetError);
+          }
+        }
+      }
+      // 如果发生任何错误，重置状态
+      dbInstance = null;
+      isDbInitialized = false;
+      return null;
+    } finally {
+      // 初始化结束后，重置 promise 以允许重试
+      initializationPromise = null;
+    }
+  })();
+  
+  return initializationPromise;
+};
+
+
 // 数据库上下文类型
 interface DatabaseContextType {
   db: RssDatabase | null;
-  initDatabase: () => void;
   isInitialized: boolean;
   refreshTrigger: number;
   triggerRefresh: () => void;
@@ -137,69 +199,20 @@ interface DatabaseProviderProps {
 
 // 数据库提供者组件
 export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) => {
-  const [db, setDb] = useState<RssDatabase | null>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
+  // state 现在只用于触发重新渲染，而不是存储实例
+  const [initializationCompleted, setInitializationCompleted] = useState(isDbInitialized);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [initialLoadRefreshed, setInitialLoadRefreshed] = useState(false);
-  const initStarted = useRef(false); // 使用 useRef 代替 useState 来防止重复初始化
 
-  // 初始化数据库
-  const initDatabase = useCallback(async () => {
-    // 防止重复初始化。useRef 的值在 StrictMode 的二次调用中不会被重置。
-    if (initStarted.current) {
-      return;
+  useEffect(() => {
+    // 组件挂载时触发初始化
+    if (!isDbInitialized) {
+      initializeDatabaseSingleton().then(() => {
+        // 初始化完成后，更新 state 以触发子组件的重新渲染
+        setInitializationCompleted(true);
+      });
     }
-    initStarted.current = true;
-    
-    try {
-      console.log('[DatabaseContext] 开始初始化数据库...');
-      const database = new RssDatabase();
-      console.log('[DatabaseContext] 数据库实例已创建');
-      
-      // 验证数据库连接
-      console.log('[DatabaseContext] 正在打开数据库连接...');
-      await database.open();
-      console.log('[DatabaseContext] 数据库连接已打开');
-      
-      // 测试数据库是否可用
-      console.log('[DatabaseContext] 测试数据库是否可用...');
-      await database.articles.limit(1).toArray();
-      console.log('[DatabaseContext] 数据库测试成功');
-      
-      setDb(database);
-      (window as any).dbInstanceForDebug = database;
-      setIsInitialized(true);
-      console.log('[DatabaseContext] 数据库初始化成功，标记为已初始化');
-    } catch (error) {
-      console.error('数据库初始化失败:', error);
-      setDb(null);
-      setIsInitialized(false);
-      
-      // 如果是数据库版本问题，尝试清理并重新初始化
-      if (error && typeof error === 'object' && 'name' in error) {
-        if ((error as any).name === 'VersionError' || (error as any).name === 'DatabaseError') {
-          console.log('检测到数据库版本或结构问题，尝试重置数据库...');
-          try {
-            await Dexie.delete('RssDatabase');
-            console.log('旧数据库已删除，重新初始化...');
-            
-            const newDatabase = new RssDatabase();
-            await newDatabase.open();
-            await newDatabase.articles.limit(1).toArray();
-            
-            setDb(newDatabase);
-            (window as any).dbInstanceForDebug = newDatabase;
-            setIsInitialized(true);
-            console.log('数据库重置并初始化成功');
-          } catch (resetError) {
-            console.error('数据库重置失败:', resetError);
-          }
-        }
-      }
-    } finally {
-      // 不再需要 setIsInitializing
-    }
-  }, []); // 保持空的依赖项
+  }, []);
 
   const triggerRefresh = useCallback(() => {
     setRefreshTrigger(prev => {
@@ -213,9 +226,8 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
   }, []);
 
   const value = {
-    db,
-    initDatabase,
-    isInitialized,
+    db: dbInstance,
+    isInitialized: initializationCompleted,
     refreshTrigger,
     triggerRefresh,
     initialLoadRefreshed,

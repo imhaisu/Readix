@@ -164,7 +164,7 @@
 }
 
 .header {
-  background-color: var(--bg-secondary);
+  background-color: #ffffff;
   padding: 2rem;
   margin-bottom: 2rem;
   border-radius: 8px;
@@ -319,7 +319,7 @@
   border-left: 3px solid var(--blockquote-border-color, var(--highlight-color));
   color: var(--text-blockquote, var(--text-secondary));
   font-style: italic;
-  font-size: 0.8em;
+  font-size: 1em;
 }
 
 .articleContent blockquote p:last-child {

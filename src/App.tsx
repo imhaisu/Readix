@@ -14,23 +14,20 @@ import PulsingLoader from './components/PulsingLoader';
 import { LayoutProvider } from './contexts/LayoutContext';
 
 const AppContent: React.FC = () => {
-  const { isInitialized } = useSettings();
-  const { initDatabase } = useDatabase();
+  const { isInitialized: settingsInitialized } = useSettings();
+  const { isInitialized: dbInitialized } = useDatabase();
   const { customControls } = useTitleBar();
 
+  // 同时检查两个上下文是否都已初始化
+  const isInitialized = settingsInitialized && dbInitialized;
   console.log('[App] AppContent 渲染，isInitialized:', isInitialized);
-
-  useEffect(() => {
-    console.log('[App] 开始初始化数据库...');
-    initDatabase();
-  }, [initDatabase]);
-
+  
   if (!isInitialized) {
-    console.log('[App] 设置未初始化，显示加载中...');
+    console.log('[App] 上下文未初始化，显示加载中...');
     return <PulsingLoader />;
   }
 
-  console.log('[App] 设置已初始化，渲染主要内容');
+  console.log('[App] 上下文已初始化，渲染主要内容');
   return (
     <>
       <TitleBar customControls={customControls} />
