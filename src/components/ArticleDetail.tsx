@@ -454,14 +454,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             <Button type="text" shape="circle" icon={<HighlightOutlined />} onClick={handleToggleSidebar} className={styles.toolbarButton}/>
           </Tooltip>
 
-          <Tooltip title="访问原址">
+          {/* <Tooltip title="访问原址">
             <Button 
               type="text" 
               icon={<GlobalOutlined />} 
               onClick={() => handleViewModeChange('web')}
               className={styles.toolbarButton}
             />
-          </Tooltip>
+          </Tooltip> */}
 
           {article && !article.isFullText && (
             <Tooltip title="获取全文">

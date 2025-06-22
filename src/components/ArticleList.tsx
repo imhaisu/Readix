@@ -12,7 +12,8 @@ import {
   EyeOutlined,
   ArrowUpOutlined,
   ArrowDownOutlined,
-  CopyOutlined
+  CopyOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
 import { format, isToday, formatDistanceToNowStrict, isYesterday } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -661,8 +662,8 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   };
   
   const renderContent = () => {
-    if (loading) {
-      // 保持骨架屏以提供加载反馈
+    if (loading && displayedArticles.length === 0) {
+      // Show skeleton only on initial load
       return (
         <div style={{ padding: '24px' }}>
           <Skeleton active paragraph={{ rows: 4 }} />
@@ -676,18 +677,21 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       return <div style={{ padding: '24px', color: 'red' }}>Error: {error}</div>;
     }
   
-    // 修改：如果没有文章，直接返回 null，不显示 Empty 组件
     if (displayedArticles.length === 0) {
       return null;
     }
   
     return (
       <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
-        {/* 刷新加载指示器 */}
         {loading && (
-          <div className={styles.refreshingLoaderContainer}>
-            <PulsingLoader />
-          </div>
+          <motion.div 
+            className={styles.refreshingLoaderContainer}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+          >
+            <ReloadOutlined spin style={{ fontSize: '24px', color: 'var(--primary-color)' }} />
+          </motion.div>
         )}
         <AnimatePresence>
           {displayedArticles.map(article => renderListItem(article))}

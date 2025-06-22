@@ -5,6 +5,7 @@
   overflow: hidden;
   position: relative;
   background-color: var(--article-bg-color);
+  animation: fadeIn 0.5s ease-in-out;
 }
 
 .fixedControlsBar {
@@ -313,13 +314,13 @@
 .articleContent h6 { font-size: 1em; font-weight: bold; text-transform: uppercase; }
 
 .articleContent blockquote {
-  margin: 1.2em 0;
-  padding: 1em 1em;
-  background-color: var(--bg-blockquote, var(--bg-secondary));
-  border-left: 3px solid var(--blockquote-border-color, var(--highlight-color));
-  color: var(--text-blockquote, var(--text-secondary));
+  margin: 1.5em 0;
+  padding: 0.5em 1.5em;
+  border-left: 4px solid var(--border-color);
+  background-color: var(--quote-bg-color);
+  color: var(--text-secondary);
   font-style: italic;
-  font-size: 1em;
+  border-radius: 0 4px 4px 0;
 }
 
 .articleContent blockquote p:last-child {
@@ -501,4 +502,13 @@
 /* 当滑块可见时，悬停在它上面可以加深颜色 */
 .scrollableContent.scrolling::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 0, 0, 0.6);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 } 

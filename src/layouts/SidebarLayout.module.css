@@ -19,17 +19,16 @@
 .siderHeader {
   padding: 8px 16px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
   min-height: 36px;
   border-bottom: 0px solid var(--border-color);
 }
 
 .siderTitle {
-  flex: 1;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  margin-right: auto;
 }
 
 .siderTitle h3 {
@@ -86,10 +85,10 @@
 }
 
 .feedsTitle {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  text-transform: uppercase;
+  /* text-transform: uppercase; */
   letter-spacing: 0.8px;
 }
 
@@ -191,6 +190,10 @@
     transform: translateX(-50%);
 }
 
+.refreshButton {
+  margin-right: -4px;
+}
+
 /* For Ant Design Menu Items when inlineCollapsed */
 :global(.ant-menu-inline-collapsed.ant-menu-root) {
     width: 100% !important;
@@ -261,4 +264,34 @@
 /* 如果菜单项内有图标，确保图标垂直居中 (Ant Design 通常会处理好) */
 .menu:not(:global(.ant-menu-inline-collapsed)) :global(.ant-menu-item .anticon) {
   line-height: 32px !important; /* 确保图标也适应新的行高 */
+}
+
+/* Override Ant Design's default blue selection color */
+:global(.ant-menu-item-selected) {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+:global(.ant-menu-item-selected .anticon),
+:global(.ant-menu-item-selected .menuItemContainer span) {
+  color: var(--text-primary) !important;
+}
+
+:global(.ant-menu-item-selected a),
+:global(.ant-menu.ant-menu-light .ant-menu-item-selected .menuItemContainer *),
+:global(.ant-menu.ant-menu-light .ant-menu-item-selected > .ant-menu-title-content *) {
+  color: var(--text-primary) !important;
+}
+
+:global(.ant-menu.ant-menu-light .ant-menu-item-selected),
+:global(.ant-menu.ant-menu-light .ant-menu-item-active) {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+:global(.ant-menu-item .ant-menu-title-content *) {
+  color: var(--text-primary) !important;
+}
+
+.headerActions {
+  /* margin-left: auto; */
+  display: flex;
+  align-items: center;
 } 

@@ -15,7 +15,7 @@ import {
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
-import { FeedSource, Group } from '../contexts/DatabaseContext';
+import { FeedSource, Group } from '../db/database';
 import { processFeedIcons } from '../utils/iconUtils';
 import styles from './FeedList.module.css';
 import EditFeedModal from './EditFeedModal';
@@ -403,17 +403,22 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       const feedKey = `feed-${feed.id}`;
       const count = dynamicCounts.get(feed.id) ?? 0;
       return (
-        <Dropdown key={feedKey} menu={{ items: createFeedMenuItems(feed) }} trigger={['contextMenu']}>
-          <div
-            className={`${styles.feedItem} ${selectedKeys.includes(feedKey) ? styles.selected : ''}`}
-            onClick={() => handleSelect(feedKey)}
-            onContextMenu={(e) => e.stopPropagation()}
-          >
-            <Avatar src={feed.iconUrl} size={16} icon={<LinkOutlined />} className={styles.feedIcon} />
-            <span className={styles.title}>{feed.title}</span>
-            {count > 0 && <span className={styles.count}>{count}</span>}
-          </div>
-        </Dropdown>
+        <div 
+          key={feedKey}
+          className={`${styles.feedItemWrapper} ${selectedKeys.includes(feedKey) ? styles.selected : ''}`}
+          onClick={() => handleSelect(feedKey)}
+        >
+          <Dropdown menu={{ items: createFeedMenuItems(feed) }} trigger={['contextMenu']} getPopupContainer={triggerNode => triggerNode.parentElement!}>
+            <div
+              className={styles.feedItem}
+              onContextMenu={(e) => e.stopPropagation()}
+            >
+              <Avatar src={feed.iconUrl} size={16} icon={<LinkOutlined />} className={styles.feedIcon} />
+              <span className={styles.title}>{feed.title}</span>
+              {count > 0 && <span className={styles.count}>{count}</span>}
+            </div>
+          </Dropdown>
+        </div>
       );
     });
   };

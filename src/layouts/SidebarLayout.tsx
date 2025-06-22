@@ -22,7 +22,7 @@ import AddGroupModal from '../components/AddGroupModal';
 import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { FeedSource, Group, Article as DbArticle } from '../contexts/DatabaseContext';
+import { FeedSource, Group, Article as DbArticle } from '../db/database';
 import { refreshAllFeeds, fetchRssFeed } from '../utils/rssParser';
 import { cleanupOldArticles } from '../utils/cleanupHelper';
 import { getTodayRange } from '../utils/helpers';
@@ -326,18 +326,16 @@ const SidebarLayout: React.FC = () => {
 
   const getSelectedKey = () => {
     const path = location.pathname;
-    console.log(`[SidebarLayout] getSelectedKey - path: ${path}`);
     if (path === '/') {
-      console.log(`[SidebarLayout] getSelectedKey - returning: home`);
       return 'home';
     }
-    if (path === '/all' || path.startsWith('/feed/') || path.startsWith('/group/')) {
-      console.log(`[SidebarLayout] getSelectedKey - returning: all`);
+    if (path === '/all') {
       return 'all';
     }
-    const key = path.substring(1);
-    console.log(`[SidebarLayout] getSelectedKey - returning: ${key}`);
-    return key;
+    if (path.startsWith('/feed/') || path.startsWith('/group/')) {
+      return '';
+    }
+    return path.substring(1);
   };
 
   const handleRefreshAll = useCallback(async (isSilent: boolean = false) => {
@@ -566,43 +564,57 @@ const SidebarLayout: React.FC = () => {
             <div className={styles.siderTitle}>
               {!isPanelCollapsed && <h3>Readix</h3>}
             </div>
-            {isPanelCollapsed ? (
-              <Tooltip title="添加" placement="right">
-                <Button
-                  type="text"
-                  icon={<PlusOutlined />}
-                  onClick={() => setShowAddFeedModal(true)}
-                  className={styles.addButton}
-                />
-              </Tooltip>
-            ) : (
-              <Dropdown
-                  menu={{
-                      items: [
-                          { key: 'add-feed', icon: <EditOutlined />, label: '添加订阅源' },
-                          { key: 'add-group', icon: <FolderAddOutlined />, label: '添加分组' },
-                          { key: 'discover-feeds', icon: <AppstoreOutlined />, label: '发现订阅源' }
-                      ],
-                      onClick: ({ key }) => {
-                          if (key === 'add-feed') {
-                              setShowAddFeedModal(true);
-                          } else if (key === 'add-group') {
-                              setShowAddGroupModal(true);
-                          } else if (key === 'discover-feeds') {
-                              console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
-                              setIsDiscoverModalOpen(true);
-                          }
-                      }
-                  }}
-                  trigger={['click']}
-              >
-                  <Button
-                      type="text"
-                      icon={<PlusOutlined />}
-                      className={styles.addButton}
+            <div className={styles.headerActions}>
+              {!isPanelCollapsed && (
+                <Tooltip title="刷新全部">
+                  <Button 
+                    type="text" 
+                    icon={<ReloadOutlined spin={refreshing} />} 
+                    size="small"
+                    onClick={() => handleRefreshAll(false)}
+                    disabled={refreshing || feeds.length === 0}
+                    className={styles.refreshButton}
                   />
-              </Dropdown>
-            )}
+                </Tooltip>
+              )}
+              {isPanelCollapsed ? (
+                <Tooltip title="添加" placement="right">
+                  <Button
+                    type="text"
+                    icon={<PlusOutlined />}
+                    onClick={() => setShowAddFeedModal(true)}
+                    className={styles.addButton}
+                  />
+                </Tooltip>
+              ) : (
+                <Dropdown
+                    menu={{
+                        items: [
+                            { key: 'add-feed', icon: <EditOutlined />, label: '添加订阅源' },
+                            { key: 'add-group', icon: <FolderAddOutlined />, label: '添加分组' },
+                            { key: 'discover-feeds', icon: <AppstoreOutlined />, label: '发现订阅源' }
+                        ],
+                        onClick: ({ key }) => {
+                            if (key === 'add-feed') {
+                                setShowAddFeedModal(true);
+                            } else if (key === 'add-group') {
+                                setShowAddGroupModal(true);
+                            } else if (key === 'discover-feeds') {
+                                console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
+                                setIsDiscoverModalOpen(true);
+                            }
+                        }
+                    }}
+                    trigger={['click']}
+                >
+                    <Button
+                        type="text"
+                        icon={<PlusOutlined />}
+                        className={styles.addButton}
+                    />
+                </Dropdown>
+              )}
+            </div>
           </div>
 
           <Menu
@@ -664,15 +676,6 @@ const SidebarLayout: React.FC = () => {
               {!isPanelCollapsed && (
                 <span className={styles.feedsTitle}>订阅</span>
               )}
-              <Tooltip title="刷新全部">
-                <Button 
-                  type="text" 
-                  icon={<ReloadOutlined spin={refreshing} />} 
-                  size="small"
-                  onClick={() => handleRefreshAll(false)}
-                  disabled={refreshing || feeds.length === 0}
-                />
-              </Tooltip>
             </div>
             <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
           </div>

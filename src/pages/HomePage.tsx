@@ -661,6 +661,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             <div className={styles.articleDetailContainer}>
               {selectedArticleId ? (
                 <ArticleDetail 
+                  key={selectedArticleId}
                   articleId={selectedArticleId} 
                   viewMode={articleDetailViewMode} 
                   onChangeViewMode={handleArticleDetailViewModeChange}

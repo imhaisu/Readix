@@ -34,26 +34,26 @@
 }
 
 /* Hover and selection states */
-.groupItem:hover, .feedItem:hover {
-  background-color: rgba(0, 0, 0, 0.04);
+.groupItem:hover {
+  background-color: rgba(0, 0, 0, 0.06);
 }
 
-.groupItem.selected, .feedItem.selected {
-  background-color: rgba(24, 144, 255, 0.1);
+.groupItem.selected {
+  background-color: rgba(0, 0, 0, 0.1);
 }
 
-.groupItem.selected:hover, .feedItem.selected:hover {
-  background-color: rgba(24, 144, 255, 0.15);
+.groupItem.selected:hover {
+  background-color: rgba(0, 0, 0, 0.15);
 }
 
 /* 确保悬浮时文字颜色清晰可见 */
-.groupItem:hover .title, .feedItem:hover .title {
+.groupItem:hover .title, .feedItemWrapper:hover .title {
   color: var(--text-primary);
 }
 
-.groupItem.selected .title, .feedItem.selected .title {
+.groupItem.selected .title, .feedItemWrapper.selected .title {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 /* 确保整行都能被选中，包括空白区域 */
@@ -97,7 +97,7 @@
 
 /* Group-specific styles */
 .groupItem {
-  font-weight: bold;
+  /* font-weight: bold; */
   /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
   /* margin-top: 8px; */ /* 取消这条线带来的间距 */
 }
@@ -136,7 +136,7 @@
   /* This padding aligns the content of the feeds (icon, title) with the 
      title of the parent group.
      It's calculated by: expanderIcon width (20px) + title padding (8px) = 28px */
-  padding-left: 28px;
+  padding-left: 18px;
   margin-top: 2px;
   margin-bottom: 6px;
 }
@@ -995,6 +995,223 @@
 .selected {
   /* Darker, tinted background for selection */
   background-color: rgba(24, 144, 255, 0.08); 
+}
+
+/* When a feed inside a group is selected or hovered, pull its background to the left */
+.feedListWrapper .feedItemWrapper.selected,
+.feedListWrapper .feedItemWrapper:hover {
+  margin-left: -20px;
+  padding-left: 20px;
+}
+
+.feedItemWrapper {
+  border-radius: 6px;
+}
+
+.feedItemWrapper:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.feedItemWrapper.selected {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.feedItemWrapper.selected:hover {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* 确保悬浮时文字颜色清晰可见 */
+.groupItem:hover .title, .feedItemWrapper:hover .title {
+  color: var(--text-primary);
+}
+
+.expanderIcon.expanded {
+  transform: rotate(90deg);
+}
+
+/* Feed-specific styles */
+.feedIcon {
+  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+  margin-right: 2px !important;
+}
+
+/* This is the key for indenting feeds within a group */
+.feedListWrapper {
+  /* This padding aligns the content of the feeds (icon, title) with the 
+     title of the parent group.
+     It's calculated by: expanderIcon width (20px) + title padding (8px) = 28px */
+  padding-left: 18px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+}
+
+.loadingContainer, .emptyContainer {
+  padding: 16px;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Cell-based layout for alignment */
+.expanderCell {
+  width: 20px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconCell {
+  width: 24px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.titleCell {
+  flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+}
+
+.countCell {
+  width: 35px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 12px;
+  color: #888;
+}
+
+/* Root-level items do not have the expander icon space reserved */
+.rootFeedItem .expanderCell {
+  width: 0px;
+}
+/* This compensates for the lack of expander, aligning root icons with group icons */
+.rootFeedItem .iconCell {
+  padding-left: 20px;
+}
+
+/* Ensure unread counts in selected items are readable */
+.row.selected .countCell {
+  color: #333;
+  font-weight: 500;
+}
+
+.listContainer {
+  padding: 0 8px;
+  user-select: none;
+}
+
+.groupContainer {
+  /* This wrapper helps with structuring group + feeds */
+}
+
+.groupItem, .feedItem {
+  border-radius: 4px;
+  cursor: pointer;
+  height: 30px;
+}
+
+/* Group-specific styles */
+.groupItem {
+  /* border-top: 1px solid var(--border-color); */ /* 取消这条线 */
+  /* margin-top: 8px; */ /* 取消这条线带来的间距 */
+}
+
+/* 第一个分组去掉顶部边框和间距 */
+.feedListContainer > div:first-child .groupItem {
+  /* border-top: none; */ /* 取消这条线 */
+  /* margin-top: 0; */ /* 取消这条线带来的间距 */
+  /* padding-top: 0; */ /* 取消这条线带来的间距 */
+}
+
+/* Feed-specific styles */
+.feedItem.rootFeedItem {
+  /* Separator for feeds not in a group */
+  border-top: 1px solid rgba(0, 0, 0, 0.05); 
+  margin-top: 8px;
+  padding-top: 8px;
+}
+
+.feedListWrapper {
+  /* Wrapper for feeds inside a group */
+}
+
+/* Shared row structure */
+.rowContent {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.leftPart {
+  display: flex;
+  align-items: center;
+  gap: 4px !important; /* 从 6px 调整为 4px，进一步缩小间距 */
+  min-width: 0;
+  flex-grow: 1; /* This is the key fix for alignment */
+}
+
+/* Indent ONLY for feeds inside a group */
+.feedListWrapper .leftPart {
+  padding-left: 22px; 
+}
+
+.rightPart {
+  color: var(--text-secondary);
+  font-size: 13px;
+  flex-shrink: 0;
+  
+  /* Use a fixed-width column for perfect right alignment */
+  width: 35px; 
+  text-align: right;
+}
+
+.groupTitle {
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feedTitle {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feedIcon {
+  flex-shrink: 0;
+}
+
+.expanderIcon {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+
+.expanderIcon.expanded {
+  transform: rotate(90deg);
+}
+
+.selected {
+  /* Darker, tinted background for selection */
+  background-color: rgba(24, 144, 255, 0.08); 
+}
+
+/* When a feed inside a group is selected, pull its background to the left */
+.feedListWrapper .feedItemWrapper.selected {
+  margin-left: -20px;
+  padding-left: 20px;
 }
 
  
