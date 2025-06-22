@@ -22,7 +22,7 @@
   justify-content: space-between;
   align-items: center;
   min-height: 36px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 0px solid var(--border-color);
 }
 
 .siderTitle {

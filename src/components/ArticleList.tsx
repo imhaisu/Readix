@@ -17,12 +17,14 @@ import {
 import { format, isToday, formatDistanceToNowStrict, isYesterday } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
 import { useDatabase } from '../contexts/DatabaseContext';
-import { Article, FeedSource } from '../contexts/DatabaseContext';
+import { useSettings } from '../contexts/SettingsContext';
+import { Article, FeedSource } from '../db/database';
 import { processIconUrl } from '../utils/iconUtils';
 import styles from './ArticleList.module.css';
 import Dexie from 'dexie'; // 引入 Dexie 以便使用类型 (取消注释)
 import { Settings, defaultSettings } from '../types/settings';
 import PulsingLoader from './PulsingLoader';
+import { updateUnreadCountOptimized } from '../utils/helpers';
 
 // 自定义 hook，用于获取前一个 props/state 的值
 function usePrevious<T>(value: T): T | undefined {
@@ -46,6 +48,7 @@ interface ArticleListProps {
   currentGroupId?: string; // 新增
   lastUpdatedArticleInfo?: { id: string, changes: Partial<Article> } | null; // 新增 prop
   listRefreshKey?: number; // 新增 prop
+  onLastUpdatedArticleInfoChange: (info: { id: string, changes: Partial<Article> } | null) => void;
 }
 
 // 辅助函数：格式化日期
@@ -101,6 +104,7 @@ const formatDateTime = (date: number | Date): string => {
 export interface ArticleListHandle {
   scrollToTop: () => void;
   getScrollableElement: () => HTMLDivElement | null;
+  setDisplayedArticles: (articles: Article[]) => void;
 }
 
 const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({ 
@@ -112,11 +116,12 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   currentFeedId, // 接收
   currentGroupId, // 接收
   lastUpdatedArticleInfo, // 接收 prop
-  listRefreshKey // 接收 prop
+  listRefreshKey, // 接收 prop
+  onLastUpdatedArticleInfoChange
 }, ref) => {
   // 移除不再需要的诊断日志
   // console.log('[ArticleList] Component rendered or re-rendered. Current filter:', filter, 'Key:', listRefreshKey);
-  const { db, isInitialized, triggerRefresh } = useDatabase();
+  const { db, isInitialized, triggerRefresh, refreshTrigger } = useDatabase();
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false); // 新增：用于防止重复刷新
   const [allArticles, setAllArticles] = useState<Article[]>([]); // 新增：存储当前上下文的所有文章
@@ -125,6 +130,9 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false); // 添加初始加载标志
   const [error, setError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { settings } = useSettings();
+  const articlesRef = useRef(allArticles);
+  articlesRef.current = allArticles;
 
   // 重新定义 prev* 变量
   const prevFilter = usePrevious(filter);
@@ -135,45 +143,55 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   // prevIsTodayView 似乎没有在 effect 内部的比较逻辑中使用，如果确实不用可以考虑移除
   // const prevIsTodayView = usePrevious(isTodayView);
 
-  const markAsRead = useCallback(async (articleId: string) => {
-    // 简化: 只更新数据库和 allArticles。UI 的更新交给 filter effect。
-    const articleInAll = allArticles.find(a => a.id === articleId);
+  const toggleArticleReadStatus = useCallback(async (articleId: string, currentStatus: 'true' | 'false', sourceId: string | undefined) => {
+    if (!db) return;
 
-    if (db && articleInAll && articleInAll.isRead === 'false') {
-      try {
-        console.log(`[ArticleList] markAsRead: Marking article ${articleId} as read in DB.`);
-        await db.articles.update(articleId, { isRead: 'true' });
-        
-        // 只更新 allArticles，让 filtering effect 去处理 displayedArticles
-        setAllArticles(prevAll => 
-          prevAll.map(a => a.id === articleId ? { ...a, isRead: 'true' } : a)
-        );
+    const newStatus = currentStatus === 'true' ? 'false' : 'true';
 
-        // 更新 feed 未读数的逻辑保持不变
-        if (articleInAll.sourceId) {
-          const feed = feedInfoMap.get(articleInAll.sourceId) || await db.feeds.get(articleInAll.sourceId);
-          if (feed && typeof feed.unreadCount === 'number' && feed.unreadCount > 0) {
-            const newUnreadCount = await db.articles.where({ sourceId: articleInAll.sourceId, isRead: 'false'}).count();
-            if (feed.id) {
-              await db.feeds.update(feed.id, { unreadCount: newUnreadCount });
-              console.log(`[ArticleList] markAsRead: Feed ${articleInAll.sourceId} unread count updated to ${newUnreadCount} in DB.`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Error marking article as read:", error);
+    try {
+      console.log(`[ArticleList] toggleArticleReadStatus: Marking article ${articleId} as ${newStatus === 'true' ? 'read' : 'unread'} in DB.`);
+      await db.articles.update(articleId, { isRead: newStatus });
+      
+      setAllArticles(prevAll => 
+        prevAll.map(a => a.id === articleId ? { ...a, isRead: newStatus } : a)
+      );
+      
+      if (lastUpdatedArticleInfo?.id === articleId) {
+        onLastUpdatedArticleInfoChange(null);
       }
+
+      if (sourceId) {
+        const feed = feedInfoMap.get(sourceId) || await db.feeds.get(sourceId);
+        if (feed?.id) {
+          const change = newStatus === 'true' ? -1 : 1;
+          await db.feeds.where('id').equals(feed.id).modify(f => {
+            f.unreadCount = (f.unreadCount || 0) + change;
+          });
+          const updatedFeed = await db.feeds.get(feed.id);
+          console.log(`[ArticleList] toggleArticleReadStatus: Feed ${feed.id} unread count updated to ${updatedFeed?.unreadCount} in DB.`);
+          triggerRefresh();
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling article read status:", error);
     }
-  }, [db, allArticles, feedInfoMap]);
+  }, [db, feedInfoMap, triggerRefresh, onLastUpdatedArticleInfoChange, lastUpdatedArticleInfo]);
 
+  const toggleFnRef = useRef(toggleArticleReadStatus);
+  toggleFnRef.current = toggleArticleReadStatus;
 
-  // 监听 selectedArticleId 的变化，自动将选中的文章标记为已读
+  // 监听 selectedArticleId 的变化，并根据设置自动将选中的文章标记为已读
   useEffect(() => {
-    if (selectedArticleId) {
-      markAsRead(selectedArticleId);
+    if (!selectedArticleId || !settings.appearance.reading.autoMarkAsRead) {
+      return;
     }
-  }, [selectedArticleId, markAsRead]);
-
+  
+    const article = articlesRef.current.find(a => a.id === selectedArticleId);
+    if (article && article.isRead === 'false') {
+      toggleFnRef.current(article.id, 'false', article.sourceId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedArticleId, settings.appearance.reading.autoMarkAsRead]);
 
   // 键盘事件处理函数
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -353,7 +371,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
 
     loadArticlesForContext();
     
-  }, [db, isInitialized, currentFeedId, currentGroupId, searchTerm, listRefreshKey]);
+  }, [db, isInitialized, currentFeedId, currentGroupId, searchTerm, listRefreshKey, refreshTrigger]);
 
   // Effect 2: Filter and sort articles when allArticles or filter changes
   useEffect(() => {
@@ -408,37 +426,6 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
 
   const handleArticleClick = (articleId: string) => {
     onSelectArticle(articleId);
-    // markAsRead(articleId); // 移除: 交给 useEffect 处理
-  };
-
-  // 右键菜单功能函数
-  const handleToggleRead = async (articleId: string) => {
-    if (!db) return;
-    
-    const article = allArticles.find(a => a.id === articleId);
-    if (!article) return;
-    
-    const newReadStatus = article.isRead === 'true' ? 'false' : 'true';
-    
-    try {
-      await db.articles.update(articleId, { isRead: newReadStatus });
-      
-      // 统一更新 allArticles
-      setAllArticles(prev => prev.map(a => a.id === articleId ? { ...a, isRead: newReadStatus } : a));
-      
-      // 同步更新feeds的未读计数
-      if (article.sourceId) {
-        const newUnreadCount = await db.articles
-          .where({ sourceId: article.sourceId, isRead: 'false' })
-          .count();
-        await db.feeds.update(article.sourceId, { unreadCount: newUnreadCount });
-      }
-      
-      message.success(newReadStatus === 'true' ? '已标记为已读' : '已标记为未读');
-    } catch (error) {
-      console.error('更新文章已读状态失败:', error);
-      message.error('操作失败');
-    }
   };
 
   const handleToggleStar = async (articleId: string) => {
@@ -452,15 +439,15 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     try {
       await db.articles.update(articleId, { isStarred: newIsStarred });
       
-      // 统一更新 allArticles
+      // Optimistically update local state
       setAllArticles(prev => 
         prev.map(a => 
           a.id === articleId ? { ...a, isStarred: newIsStarred } : a
         )
       );
-
+      
       message.success(newIsStarred === 'true' ? '已添加到收藏' : '已取消收藏');
-      triggerRefresh(); // 正确的函数名
+      triggerRefresh();
     } catch (error) {
       console.error('更新文章收藏状态失败:', error);
       message.error('操作失败');
@@ -568,13 +555,13 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   // 创建右键菜单项
   const createContextMenuItems = (article: Article): MenuProps['items'] => [
     {
-      key: 'read',
+      key: 'toggleRead',
       label: article.isRead === 'true' ? '标记为未读' : '标记为已读',
       icon: article.isRead === 'true' ? <EyeOutlined /> : <CheckCircleOutlined />,
-      onClick: () => handleToggleRead(article.id)
+      onClick: () => toggleArticleReadStatus(article.id, article.isRead as 'true' | 'false', article.sourceId)
     },
     {
-      key: 'star',
+      key: 'toggleStar',
       label: article.isStarred === 'true' ? '取消收藏' : '收藏',
       icon: article.isStarred === 'true' ? <StarFilled /> : <StarOutlined />,
       onClick: () => handleToggleStar(article.id)
@@ -674,27 +661,26 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   };
   
   const renderContent = () => {
-    // 初始加载骨架屏
-    if (loading && displayedArticles.length === 0 && !hasInitialLoaded) {
+    if (loading) {
+      // 保持骨架屏以提供加载反馈
       return (
-        <div style={{ padding: '20px' }}>
-          <Skeleton active avatar paragraph={{ rows: 3 }} />
-          <Skeleton active avatar paragraph={{ rows: 3 }} />
-          <Skeleton active avatar paragraph={{ rows: 3 }} />
+        <div style={{ padding: '24px' }}>
+          <Skeleton active paragraph={{ rows: 4 }} />
+          <Skeleton active paragraph={{ rows: 4 }} />
+          <Skeleton active paragraph={{ rows: 4 }} />
         </div>
       );
     }
-
-    // 加载错误
+  
     if (error) {
-      return <Empty description={`加载失败: ${error}`} />;
+      return <div style={{ padding: '24px', color: 'red' }}>Error: {error}</div>;
     }
-
-    // 列表为空
-    if (displayedArticles.length === 0 && !loading) {
-      return <Empty description="没有文章" className={styles.emptyState} />;
+  
+    // 修改：如果没有文章，直接返回 null，不显示 Empty 组件
+    if (displayedArticles.length === 0) {
+      return null;
     }
-
+  
     return (
       <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
         {/* 刷新加载指示器 */}
@@ -717,6 +703,10 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       }
     },
     getScrollableElement: () => containerRef.current,
+    setDisplayedArticles: (articles: Article[]) => {
+      console.log('[ArticleList] Imperatively setting displayed articles. Count:', articles.length);
+      setDisplayedArticles(articles);
+    }
   }));
 
   return renderContent();

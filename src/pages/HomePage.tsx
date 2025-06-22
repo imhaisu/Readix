@@ -18,11 +18,12 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
-import { FeedSource, Article } from '../contexts/DatabaseContext';
-import { getTodayRange } from '../utils/helpers';
+import { FeedSource, Article } from '../db/database';
+import { getTodayRange, debounce, updateUnreadCountOptimized } from '../utils/helpers';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
 import { useLayout } from '../contexts/LayoutContext';
+import { GeneralSettings } from '../types/settings';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
@@ -31,24 +32,6 @@ const { Title, Text } = Typography;
 interface HomePageProps {
   filter?: 'all' | 'unread' | 'starred' | 'today';
 }
-
-// Minimal local definition for GeneralSettings to avoid import error
-interface GeneralSettings {
-  defaultViewMode: 'list' | 'compact' | 'card' | 'magazine';
-  layoutMode: 'two-column' | 'three-column';
-  sidebarWidth?: number; // Make sidebarWidth optional as it was causing issues
-  // Add other fields from GeneralSettings if they are used in this component
-}
-
-// 防抖函数
-const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
-  let timeout: NodeJS.Timeout;
-
-  return (...args: Parameters<F>): void => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), waitFor);
-  };
-};
 
 const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const { db, refreshTrigger, triggerRefresh, isInitialized: dbInitialized, initialLoadRefreshed, setInitialLoadRefreshed } = useDatabase();
@@ -67,20 +50,17 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [popoverVisible, setPopoverVisible] = useState(false);
   const [searchModeActive, setSearchModeActive] = useState(false);
   const [lastUpdatedArticleInfo, setLastUpdatedArticleInfo] = useState<{ id: string, changes: Partial<Article> } | null>(null);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
   
-  // 移除了 listRefreshKey state
-
-  // 新增：下拉刷新状态 和 ref
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const [pullDownProgress, setPullDownProgress] = useState(0); // 0 to 1
+  const [pullDownProgress, setPullDownProgress] = useState(0); 
   const articleListRef = useRef<ArticleListHandle>(null);
-  const articleListContainerRef = useRef<HTMLDivElement>(null); // 重新添加被误删的 ref
+  const articleListContainerRef = useRef<HTMLDivElement>(null);
   const pullStartY = useRef(0);
-  const isPulling = useRef(false); // 用于下拉刷新的 Ref, 避免命名冲突
+  const isPulling = useRef(false);
 
-  const PULL_TO_REFRESH_THRESHOLD = 250; // Distance in pixels to trigger refresh
+  const PULL_TO_REFRESH_THRESHOLD = 250;
 
-  // Use a ref to hold all dependencies for handleRefreshAll to stabilize its identity
   const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerRefresh, setIsPullRefreshing });
   useEffect(() => {
     refreshDependenciesRef.current = { db, feedId, groupId, triggerRefresh, setIsPullRefreshing };
@@ -90,11 +70,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
   const { isArticleListVisible } = useLayout();
-  const panelGroupRef = useRef<HTMLDivElement>(null); // Ref for the PanelGroup container
-  const [isResizing, setIsResizing] = useState(false); // 用于面板拖动
+  const panelGroupRef = useRef<HTMLDivElement>(null); 
+  const [isResizing, setIsResizing] = useState(false);
 
-  // This effect uses a ResizeObserver to maintain the article list panel's pixel width
-  // when its container is resized (e.g., when the main sidebar is dragged).
   useEffect(() => {
     const groupElement = panelGroupRef.current;
     if (!groupElement) return;
@@ -108,7 +86,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         
         let newArticleListPercentage = (articleListPxWidth / containerWidth) * 100;
 
-        // Clamp the percentage within the min/max constraints of the panel
         newArticleListPercentage = Math.max(25, Math.min(50, newArticleListPercentage));
 
         listPanelRef.current.resize(newArticleListPercentage);
@@ -122,7 +99,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [settings.layout.articleListWidth]);
 
   const handleMainLayout = (sizes: number[]) => {
-    // When the user manually resizes the panel, save the new percentage and pixel width.
     if (panelGroupRef.current) {
       const containerWidth = panelGroupRef.current.getBoundingClientRect().width;
       const newPixelWidth = (containerWidth * sizes[0]) / 100;
@@ -154,7 +130,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     const pullDistance = currentY - pullStartY.current;
 
     if (pullDistance > 0) {
-      e.preventDefault(); // Prevent page scroll while pulling
+      e.preventDefault(); 
       const progress = Math.min(1, pullDistance / PULL_TO_REFRESH_THRESHOLD);
       setPullDownProgress(progress);
     }
@@ -169,10 +145,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       handleRefreshAll();
     }
     
-    // Reset progress smoothly
     setTimeout(() => setPullDownProgress(0), 100);
   };
-
 
   const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
     if (!settings.advanced.gestures.pullToRefresh || isPulling.current) return;
@@ -185,22 +159,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
     if (scrollTop === 0 && deltaY < 0) {
       const pullDistance = Math.abs(deltaY);
-      const newProgress = Math.min(1, pullDownProgress + pullDistance / (PULL_TO_REFRESH_THRESHOLD * 2)); // Slower progress for wheel
+      const newProgress = Math.min(1, pullDownProgress + pullDistance / (PULL_TO_REFRESH_THRESHOLD * 2));
       setPullDownProgress(newProgress);
 
       if (newProgress >= 1) {
         console.log('Pull to refresh triggered by wheel.');
         handleRefreshAll();
-        // Reset progress after triggering
         setTimeout(() => setPullDownProgress(0), 100);
       }
     } else if (pullDownProgress > 0 && deltaY > 0) {
-      // If user scrolls down while in a pull-down state, reset progress
       setPullDownProgress(0);
     }
   };
 
-  // 监听笔记侧边栏的开关事件，实现"专注模式"
   useEffect(() => {
     const handleAnnotationSidebarToggle = (event: Event) => {
       const customEvent = event as CustomEvent<{ isVisible: boolean }>;
@@ -208,7 +179,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
       const { isVisible } = customEvent.detail;
       
-      // 只在三栏布局下才折叠文章列表
       if (settings.general.layoutMode === 'three-column' && listPanelRef.current) {
         const isListCollapsed = listPanelRef.current.isCollapsed();
         if (isVisible && !isListCollapsed) {
@@ -224,18 +194,15 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     return () => {
       document.removeEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
     };
-  }, [settings.general.layoutMode]); // 依赖布局模式，以便在切换布局后行为正确
+  }, [settings.general.layoutMode]);
 
-  // 新增一个 ref 来跟踪初始刷新是否已完成
   const initialRefreshDoneRef = useRef(false);
 
-  // Refs to store previous feedId and groupId to detect navigation
   const prevFeedIdRef = useRef<string | undefined>();
   const prevGroupIdRef = useRef<string | undefined>();
-  const prevFilterPropRef = useRef<string | undefined>(); // 用于跟踪 filter prop 的变化
+  const prevFilterPropRef = useRef<string | undefined>();
 
   useEffect(() => {
-    // 动态更新页面标题
     const updateTitle = async () => {
       if (!db) return;
 
@@ -254,7 +221,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
         setPageTitle('今日文章');
       } else {
-        setPageTitle('所有文章'); // 默认标题
+        setPageTitle('所有文章');
       }
     };
 
@@ -271,16 +238,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     loadFeeds();
   }, [db, refreshTrigger]);
   
-  /* 
-    The original fetchTitle useCallback is no longer needed 
-    as its logic is now inside the useEffect above.
-    I will remove the old fetchTitle function and the useEffect that calls it.
-  */
-
   useEffect(() => {
-    // 这个 effect 应该在 filter prop (来自路由), feedId, 或 groupId 变化时运行
-    // 它的主要职责是重置文章详情选择、搜索词，并判断是否需要强制 ArticleList 重建 (通过 key)
-
     const prevFeed = prevFeedIdRef.current;
     const prevGroup = prevGroupIdRef.current;
     const prevFilter = prevFilterPropRef.current;
@@ -288,37 +246,28 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     let needsListRefresh = false;
 
     if (feedId !== prevFeed || groupId !== prevGroup) {
-      // 场景1: 订阅源或分组发生了变化 (进入/退出/切换 feed/group)
       needsListRefresh = true;
     } else if (!feedId && !groupId && filter !== prevFilter) {
-      // 场景2: 在全局视图之间切换 (e.g., / -> /all -> /unread -> /starred)
-      // feedId 和 groupId 必须当前和之前都为 undefined，仅 filter prop 变化
       needsListRefresh = true;
     }
 
     if (needsListRefresh) {
       console.log('[HomePage] Critical navigation change detected. Refreshing ArticleList key.', { feedId, prevFeed, groupId, prevGroup, filter, prevFilter });
       setSelectedArticleId(null); 
-      // 修复：不要每次都清空搜索词，保留用户的搜索状态
-      // setSearchTerm(''); 
-      // 移除了 setArticleListRefreshKey
     }
     
-    // 更新isTodayView状态，这不应该触发列表的强制刷新，列表会根据filter对象自行调整
     const newIsToday = filter === undefined && !feedId && !groupId;
     setIsTodayView(newIsToday);
 
-    // 更新 refs 以供下次比较
     prevFeedIdRef.current = feedId;
     prevGroupIdRef.current = groupId;
     prevFilterPropRef.current = filter;
 
-  }, [filter, feedId, groupId]); // 依赖项保持不变
+  }, [filter, feedId, groupId]);
   
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
     const { db, feedId, groupId, triggerRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
     
-    // 问题2: 添加刷新锁，防止重复刷新
     if (isPullRefreshing) {
       console.log('Refresh is already in progress. Skipping.');
       return;
@@ -327,7 +276,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (!db) return;
 
     if (!options?.silent) {
-      // 问题1: 移除全局 setLoading，只控制下拉刷新的视觉状态
       setIsPullRefreshing(true);
     }
 
@@ -339,7 +287,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     } else if (groupId) {
       feedsToRefresh = await db.feeds.where('groupId').equals(groupId).toArray();
     } else {
-      // 对于其他所有视图（如 all, unread, starred, today），刷新全部
       feedsToRefresh = await db.feeds.toArray();
     }
 
@@ -348,13 +295,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         console.log(`Refreshing ${feedsToRefresh.length} feeds...`);
         await refreshAllFeeds(feedsToRefresh, undefined, (results) => {
           console.log('Refresh results:', results);
-          triggerRefresh(); // 这会更新侧边栏的计数
-          // 移除了 setArticleListRefreshKey
+          triggerRefresh();
         });
       } else {
-        // 如果没有找到任何需要刷新的 feeds（例如，一个空的 group），也通知一下用户
         console.log('No feeds to refresh.');
-        // 移除了 setArticleListRefreshKey
       }
     } catch (error) {
       console.error("Error during refresh all:", error);
@@ -363,8 +307,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       }
     } finally {
       if (!options?.silent) {
-        // 问题1: 移除全局 setLoading。下拉刷新的视觉状态在 key 变化后由 ArticleList 内部重置。
-        // 为了平滑过渡，延迟一小段时间再移除下拉刷新指示器
         setTimeout(() => {
           setIsPullRefreshing(false);
         }, 500);
@@ -372,28 +314,23 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         setIsPullRefreshing(false);
       }
     }
-  }, [isPullRefreshing]); // 将 isPullRefreshing 加入依赖数组
+  }, [isPullRefreshing]);
   
   const handleLocalListRefresh = useCallback(() => {
     console.log('[HomePage] Triggering local list refresh via key increment.');
-    // 移除了 setArticleListRefreshKey
   }, []);
 
-  // 新增 Effect 用于监听列表刷新请求
   useEffect(() => {
-    // 注意：这不再调用 handleRefreshAll 以避免网络请求和下拉刷新指示器。
     document.addEventListener('request-list-refresh', handleLocalListRefresh);
     return () => {
       document.removeEventListener('request-list-refresh', handleLocalListRefresh);
     };
   }, [handleLocalListRefresh]);
 
-  // 新增 Effect 用于应用启动时自动刷新
   useEffect(() => {
-    // 确保只在应用首次加载"今日"视图时执行一次
     if (dbInitialized && isTodayView && !initialLoadRefreshed) {
       console.log('[HomePage] Initial load on Today view, triggering silent auto-refresh.');
-      setInitialLoadRefreshed(); // 立即标记，防止重复触发
+      setInitialLoadRefreshed();
       handleRefreshAll({ silent: true });
     }
   }, [dbInitialized, isTodayView, initialLoadRefreshed, setInitialLoadRefreshed, handleRefreshAll]);
@@ -449,8 +386,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const handleArticleModified = (articleId: string, changes: Partial<Article>) => {
     setLastUpdatedArticleInfo({ id: articleId, changes });
-    // Potentially trigger a soft refresh or specific update for FeedList counts here if needed in future.
-    // For now, FeedList updates on its own cycle or full refresh.
   };
   
   const handleManualListRefresh = () => {
@@ -461,51 +396,32 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     console.log('[HomePage] getArticleFilter CALLED. Inputs:', { feedId, groupId, activeListFilter, filterProp: filter });
     const conditions: any = {};
 
-    // 优先处理特定订阅源或分组的情况
-    if (feedId || groupId) {
-      if (activeListFilter === 'starred') {
-        conditions.isStarred = 'true';
-      } else if (activeListFilter === 'unread') {
-        conditions.isRead = 'false';
-      }
-      console.log('[HomePage] getArticleFilter (Feed/Group View) RETURNING conditions:', conditions);
-      return conditions;
-    }
-
-    // 全局视图 (没有 feedId 或 groupId)
-    // 判断是否为"今日"视图 (基于 filter prop === undefined)
-    if (filter === undefined) { // '/' 路径, 视为"今日"
-      // 修复：使用统一的今日时间范围工具函数
+    // 1. Establish the main context from URL params or filter prop
+    if (feedId) {
+      conditions.sourceId = feedId;
+    } else if (groupId) {
+      conditions.groupId = groupId; // Pass to consumers like ArticleList and handleMarkAllReadLocal
+    } else if (filter === 'starred') {
+      conditions.isStarred = 'true';
+    } else if (filter === 'unread') {
+      conditions.isRead = 'false';
+    } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
+      // Today view (either via route prop or default route)
       const todayRange = getTodayRange();
-      
-      // 使用 fetchDate 进行筛选，确保使用本地时区的时间戳
       conditions.fetchDate = { $gte: todayRange.start, $lte: todayRange.end };
-      
-      // 在"今日"视图下，如果底部筛选器不是'all',则应用额外筛选
-      if (activeListFilter === 'starred') {
-        conditions.isStarred = 'true';
-      } else if (activeListFilter === 'unread') {
-        conditions.isRead = 'false';
-      }
-              console.log('[HomePage] getArticleFilter (Today View - Local) RETURNING conditions:', conditions, {start: new Date(todayRange.start).toISOString(), end: new Date(todayRange.end).toISOString()});
-      return conditions;
     }
-
-    // 处理其他全局视图，最主要的是 /all (当 filter === 'all')
-    // 以及 /unread, /starred (如果这些路由被恢复)
-    // 在这些视图下，我们仍然根据 activeListFilter 来筛选，因为用户可能期望
-    // 在"所有文章"这个大的分类下，再通过底部筛选器进行"未读/收藏"的细分。
+    // `filter === 'all'` needs no initial condition.
+    
+    // 2. Additively apply the Radio.Group filter from the bottom bar.
     if (activeListFilter === 'starred') {
       conditions.isStarred = 'true';
     } else if (activeListFilter === 'unread') {
       conditions.isRead = 'false';
     }
-    // 如果 activeListFilter === 'all' (并且 filter prop 不是 undefined，例如 filter === 'all')
-    // conditions 仍然是空 {}，代表不过滤已读/收藏，显示所有(/all视图下)或所有未读(/unread视图下)等。
+    // If activeListFilter is 'all', no extra condition is added.
 
-    console.log(`[HomePage] getArticleFilter (Global View - ${filter}) RETURNING conditions:`, conditions);
+    console.log(`[HomePage] getArticleFilter RETURNING conditions:`, conditions);
     return conditions;
-
   }, [feedId, groupId, activeListFilter, filter]);
 
   const handleAddFirstFeed = (feed: FeedSource) => {
@@ -520,90 +436,66 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const handleMarkAllReadLocal = async () => {
     if (!db) return;
 
-    let articlesToUpdateQuery;
-    const isTodayView = !feedId && !groupId && !filter;
-
-    if (feedId) {
-        articlesToUpdateQuery = db.articles.where({ sourceId: feedId, isRead: 'false' });
-    } else if (groupId) {
-        const feedsInGroup = await db.feeds.where('groupId').equals(groupId).toArray();
-        const feedIdsInGroup = feedsInGroup.map(f => f.id).filter((id): id is string => !!id);
-        if (feedIdsInGroup.length === 0) {
-            message.info('此分组中没有订阅源。');
-            return;
-        }
-        articlesToUpdateQuery = db.articles.where('sourceId').anyOf(...feedIdsInGroup).and(article => article.isRead === 'false');
-    } else if (filter === 'starred') {
-        articlesToUpdateQuery = db.articles.where({ isStarred: 'true', isRead: 'false' });
-    } else if (filter === 'unread') {
-        articlesToUpdateQuery = db.articles.where({ isRead: 'false' });
-    } else if (isTodayView) {
-        const todayRange = getTodayRange();
-        articlesToUpdateQuery = db.articles
-            .where('fetchDate').between(todayRange.start, todayRange.end, true, true)
-            .and(article => article.isRead === 'false');
-    } else { // 'all' view
-        articlesToUpdateQuery = db.articles.where({ isRead: 'false' });
+    const currentFilter = getArticleFilter();
+    let articlesToUpdateQuery = db.articles.where('isRead').equals('false');
+    
+    // Special handling for groupId, as articles don't have it directly.
+    if (currentFilter.groupId) {
+      const feedsInGroup = await db.feeds.where('groupId').equals(currentFilter.groupId).toArray();
+      const feedIdsInGroup = feedsInGroup.map((f: FeedSource) => f.id);
+      if (feedIdsInGroup.length === 0) {
+        message.info('该分组下没有订阅源。');
+        return;
+      }
+      articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => feedIdsInGroup.includes(a.sourceId));
+      delete currentFilter.groupId; // Remove so it's not processed below
     }
 
-    if (!articlesToUpdateQuery) return;
-
-    const articlesToMark = await articlesToUpdateQuery.toArray();
+    // Applying the rest of the dynamic filter
+    if (currentFilter) {
+      const { sourceId, isStarred, fetchDate } = currentFilter;
+      if (sourceId) {
+        articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.sourceId === sourceId);
+      }
+      if (isStarred === 'true') {
+        articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.isStarred === 'true');
+      }
+      if (fetchDate && typeof fetchDate === 'object' && '$gte' in fetchDate && '$lte' in fetchDate) {
+         articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.fetchDate >= fetchDate.$gte && a.fetchDate <= fetchDate.$lte);
+      }
+    }
     
-    if (articlesToMark.length === 0) {
-        message.info('当前视图没有未读文章。');
-        return;
+    const unreadArticles = await articlesToUpdateQuery.toArray();
+    
+    if (unreadArticles.length === 0) {
+      message.info('没有需要标记的未读文章。');
+      return;
     }
 
     Modal.confirm({
       title: '确认全部已读',
-      icon: <ExclamationCircleOutlined />,
-      content: `确定要将当前列表中的 ${articlesToMark.length} 篇文章标记为已读吗？`,
-      okText: '确认',
+      content: `确定要将当前筛选下的 ${unreadArticles.length} 篇文章标记为已读吗？此操作不可撤销。`,
+      okText: '全部设为已读',
       cancelText: '取消',
-      onOk: () => {
-        const key = `mark-all-read-${Date.now()}`;
-        let timeoutId: NodeJS.Timeout;
+      onOk: async () => {
+        try {
+          const articleIds = unreadArticles.map(a => a.id);
+          const sourceIds = [...new Set(unreadArticles.map(a => a.sourceId))];
 
-        const performMarkAsRead = async () => {
-          notification.destroy(key);
-          const articleIdsToMark = articlesToMark.map(a => a.id);
-          await db.transaction('rw', db.articles, db.feeds, async () => {
-              await db.articles.where('id').anyOf(articleIdsToMark).modify({ isRead: 'true' });
-              const feedIdsAffected = [...new Set(articlesToMark.map(a => a.sourceId).filter(id => id))];
-              for (const fId of feedIdsAffected) {
-                  if (fId) {
-                      const count = await db.articles.where({ sourceId: fId, isRead: 'false' }).count();
-                      await db.feeds.update(fId, { unreadCount: count });
-                  }
-              }
-          });
-          triggerRefresh(); 
-          // 移除了 setArticleListRefreshKey
-          message.success(`${articlesToMark.length}篇文章已标记为已读。`);
-        };
+          await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
 
-        const handleUndo = () => {
-          clearTimeout(timeoutId);
-          notification.destroy(key);
-          message.info('操作已撤销。');
-        };
+          for (const sId of sourceIds) {
+            await updateUnreadCountOptimized(db, sId);
+          }
+          
+          // message.success('所有文章已标记为已读');
+          
+          triggerRefresh();
 
-        const btn = (
-          <Button type="primary" size="small" onClick={handleUndo}>
-            撤销
-          </Button>
-        );
-
-        notification.open({
-          key,
-          message: '正在标记已读...',
-          description: `将在 5 秒后标记 ${articlesToMark.length} 篇文章为已读。`,
-          btn,
-          duration: 5, // 5秒后自动关闭
-        });
-        
-        timeoutId = setTimeout(performMarkAsRead, 5000);
+        } catch (error) {
+          console.error('Failed to mark all as read:', error);
+          message.error('操作失败，请重试。');
+        }
       },
     });
   };
@@ -611,11 +503,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const articleFilterForList = getArticleFilter();
   console.log('[HomePage] RENDERING ArticleList with props:', { filterPropForArticleList: articleFilterForList, currentFeedId: feedId, currentGroupId: groupId, activeListFilterState: activeListFilter });
 
-  // Determine if WelcomePage should be shown. This should be decided before any rendering logic.
-  // It's shown when there are absolutely no feeds and the user isn't searching for anything.
   const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !searchTerm;
 
-  // Initial loading skeleton
   if (!dbInitialized || !settingsInitialized) {
     return (
       <Layout className={styles.homeLayout}>
@@ -708,18 +597,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                   >
-                    {/* 移除了旧的 pullToRefreshIndicator div */}
                     {feeds.length > 0 || groupId || feedId ? (
                       <ArticleList
                         ref={articleListRef}
-                        filter={articleFilterForList}
+                        key={`${feedId}-${groupId}-${activeListFilter}-${listRefreshKey}`}
+                        filter={getArticleFilter()}
                         searchTerm={searchTerm}
                         onSelectArticle={handleArticleSelect}
+                        selectedArticleId={selectedArticleId}
+                        isTodayView={isTodayView}
                         currentFeedId={feedId}
                         currentGroupId={groupId}
-                        isTodayView={isTodayView}
-                        selectedArticleId={selectedArticleId}
                         lastUpdatedArticleInfo={lastUpdatedArticleInfo}
+                        onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
                       />
                     ) : (
                       <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
@@ -732,7 +622,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                           const newFilter = e.target.value as FilterType;
                           console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
                           setFilter(newFilter);
-                          // 移除了 setArticleListRefreshKey
                         }}
                       style={{ width: '100%', display: 'flex' }}
                     >

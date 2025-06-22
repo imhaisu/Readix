@@ -63,7 +63,7 @@ export const defaultSettings: Settings = {
             fontSize: 16,
             lineHeight: 1.6,
             backgroundColor: '#ffffff',
-            textColor: '#333333',
+            textColor: '#757574',
             titleColor: '#333333',
             titleFontSize: 24,
             autoMarkAsRead: true,

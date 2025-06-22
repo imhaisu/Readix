@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Skeleton, Typography, Tag, Tooltip, Spin, Empty, message, Modal } from 'antd';
+import { Button, Skeleton, Tooltip, Spin, Empty, message, Modal } from 'antd';
 import { 
   StarOutlined, 
   StarFilled,
@@ -11,23 +11,18 @@ import {
   MinusCircleOutlined,
   ArrowLeftOutlined,
   ShareAltOutlined,
-  DeleteOutlined,
-  LeftOutlined,
   HighlightOutlined,
   CloseOutlined,
   ReadOutlined,
 } from '@ant-design/icons';
-import { useDatabase, Article, FeedSource, Annotation } from '../contexts/DatabaseContext';
+import { useDatabase, Article } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
-import { debounce } from '../utils/helpers';
+import { debounce, updateUnreadCountOptimized } from '../utils/helpers';
 import styles from './ArticleDetail.module.css';
-import { useNavigate } from 'react-router-dom';
 import AnnotationSidebar from './AnnotationSidebar';
-// import BionicReadingToggle from '../components/BionicReadingToggle'; // Temporarily commented out
-
-// const { Title, Text } = Typography; // 移除未使用的 Typography 成员
+import { useAnnotations } from '../hooks/useAnnotations';
 
 interface ArticleDetailProps {
   articleId: string | null;
@@ -38,72 +33,49 @@ interface ArticleDetailProps {
   onNavigate?: (nextOrPrevArticleId: string) => void;
 }
 
-const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified, onNavigate }) => {
+const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified }) => {
   const { db, triggerRefresh } = useDatabase();
   const { settings } = useSettings();
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [fetchingFullText, setFetchingFullText] = useState(false);
-  const [processedContent, setProcessedContent] = useState<string>('');
   const contentRef = useRef<HTMLDivElement>(null);
   const scrollableContentRef = useRef<HTMLDivElement>(null);
   const mainContentAreaRef = useRef<HTMLDivElement>(null);
   const articleDetailContainerRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
-  const [isSidebarVisible, setIsSidebarVisible] = useState(false);
-  const navigate = useNavigate();
-
-  const [annotations, setAnnotations] = useState<Annotation[]>([]);
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [autoEditNoteId, setAutoEditNoteId] = useState<string | null>(null);
-  const [pendingAnnotation, setPendingAnnotation] = useState<Annotation | null>(null);
-  const [selectionPopup, setSelectionPopup] = useState<{
-    visible: boolean;
-    top: number;
-    left: number;
-    range: Range | null;
-  }>({
-    visible: false,
-    top: 0,
-    left: 0,
-    range: null,
-  });
-
-  const popupRef = useRef<HTMLDivElement>(null);
+  const [isMounted, setIsMounted] = useState(false);
+  
+  const {
+    annotations,
+    processedContent,
+    setProcessedContent,
+    isSidebarVisible,
+    pendingAnnotation,
+    autoEditNoteId,
+    selectionPopup,
+    popupRef,
+    loadAnnotations,
+    applyHighlights,
+    handleToggleSidebar,
+    handleScrollToAnnotation,
+    handleSelection,
+    handleHighlightClick,
+    handleNoteClick,
+    handleSaveNote,
+    handleDeleteAnnotation,
+    handleAutoEditApplied,
+  } = useAnnotations({ articleId, scrollableContentRef });
 
   const readingSettings = settings.appearance.reading;
 
   const handleShare = () => {
     if (article) {
-      const shareUrl = article.url;
-      navigator.clipboard.writeText(shareUrl)
+      navigator.clipboard.writeText(article.url)
         .then(() => message.success('文章链接已复制到剪贴板'))
         .catch(() => message.error('复制链接失败'));
     }
-  };
-
-  const handleDeleteArticle = () => {
-    if (!db || !articleId) return;
-    Modal.confirm({
-      title: '确认删除',
-      content: '确定要删除这篇文章吗？此操作不可撤销。',
-      okText: '删除',
-      okType: 'danger',
-      cancelText: '取消',
-      onOk: async () => {
-        try {
-          await db.articles.delete(articleId);
-          message.success('文章已删除');
-          onClose?.(); 
-          onArticleModified(articleId, { isHidden: true }); 
-          triggerRefresh();
-        } catch (error) {
-          console.error('删除文章失败:', error);
-          message.error('删除文章失败！');
-        }
-      },
-    });
   };
 
   const saveScrollPosition = useCallback(async (articleIdToSave: string, position: number) => {
@@ -115,55 +87,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   }, [db]);
 
-  const debouncedSaveScrollPosition = useCallback(
-    debounce((articleIdToSave: string, position: number) => {
-      saveScrollPosition(articleIdToSave, position);
-    }, 500),
-    [saveScrollPosition]
-  );
-
-  const handleScrollToAnnotation = (annotationId: string) => {
-    const element = document.getElementById(`annotation-${annotationId}`);
-    if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-        inline: 'nearest'
-      });
-      // 可选：给元素一个短暂的视觉反馈，比如闪烁一下
-      element.style.transition = 'background-color 0.3s ease';
-      element.style.backgroundColor = '#fadd87'; // 一个更亮的高亮色
-      setTimeout(() => {
-        element.style.backgroundColor = ''; // 恢复原来的颜色
-      }, 1200);
-    }
-  };
-
-  const applyHighlights = useCallback((content: string, annotationsToApply: Annotation[]): string => {
-    let newContent = content;
-    annotationsToApply.forEach(anno => {
-      // 确保高亮标签有唯一的 ID
-      const markTag = `<mark id="annotation-${anno.id}" class="customHighlight">`;
-      
-      const searchString = `${anno.prefix}${anno.text}${anno.suffix}`;
-      const replacementString = `${anno.prefix}${markTag}${anno.text}</mark>${anno.suffix}`;
-      
-      if (newContent.includes(searchString)) {
-        newContent = newContent.replace(searchString, replacementString);
-      }
-    });
-    return newContent;
-  }, []);
-
-  const [isMounted, setIsMounted] = useState(false);
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
-  // 使用 useRef 来持有 loadArticle 的最新引用，打破 useCallback 依赖循环
   const loadArticleRef = useRef<((forceReload?: boolean) => Promise<void>) | null>(null);
 
-  // 核心：执行文章升级的函数
   const performUpgrade = useCallback(async (articleToUpgrade: Article) => {
     if (!articleToUpgrade || !articleToUpgrade.url || !db || !isMounted) return;
 
@@ -177,7 +106,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           isFullText: true,
         });
         if (loadArticleRef.current) {
-          await loadArticleRef.current(true); // 强制重新加载文章
+          await loadArticleRef.current(true);
         }
       } else {
         message.error('无法获取文章全文，目标网站可能不支持。');
@@ -192,7 +121,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   }, [db, isMounted]);
 
-  // 将 loadArticle 定义为一个 useCallback，并将其存入 ref
   const loadArticle = useCallback(async (forceReload = false) => {
     if (articleId && db) {
       if (forceReload || !article || article.id !== articleId) {
@@ -208,17 +136,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             const source = await db.feeds.get(currentArticleData.sourceId);
             setSourceTitle(source?.title);
 
-            // 检查是否需要自动获取全文
             if (!currentArticleData.isFullText && source?.defaultViewMode === 'fulltext') {
               await performUpgrade(currentArticleData);
-              return; // performUpgrade 内部会触发重载
+              return;
             }
             
-            // 先加载笔记和高亮
-            const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
-            setAnnotations(annos); 
-            
-            // 再应用高亮到内容
+            const annos = await loadAnnotations();
             const contentWithHighlights = applyHighlights(currentArticleData.content, annos);
             setProcessedContent(contentWithHighlights);
 
@@ -228,7 +151,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               setSourceTitle(source.title);
             }
 
-            // 自动标记为已读
             if (currentArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
               await db.articles.update(articleId, { isRead: 'true' });
               console.log(`文章 ${articleId} 已自动标记为已读。`);
@@ -254,55 +176,17 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       setArticle(null);
       setLoading(false);
     }
-  }, [articleId, db, article, isMounted, performUpgrade, applyHighlights, readingSettings]);
-
+  }, [articleId, db, article, isMounted, performUpgrade, loadAnnotations, applyHighlights, setProcessedContent, readingSettings]);
+  
   useEffect(() => {
     loadArticleRef.current = loadArticle;
   }, [loadArticle]);
 
-  // 在组件挂载时调用 loadArticle
   useEffect(() => {
     loadArticle();
   }, [articleId, loadArticle]);
 
-  useEffect(() => {
-    const contentElement = contentRef.current;
-    if (!contentElement) return;
-
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      
-      if (target.tagName === 'MARK' && target.classList.contains('customHighlight')) {
-        const annotationId = target.id.replace('annotation-', '');
-        
-        // 1. 设置状态以显示侧边栏，并传递标注ID
-        setIsSidebarVisible(true);
-        setAutoEditNoteId(annotationId);
-
-        // 2. 如果侧边栏之前是隐藏的，则发送通知，以便其他组件（如主布局）可以响应
-        if (!isSidebarVisible) {
-            document.dispatchEvent(new CustomEvent('annotationSidebarToggled', {
-              detail: { 
-                isVisible: true,
-                articleId: articleId
-              }
-            }));
-        }
-      }
-    };
-
-    contentElement.addEventListener('click', handleClick);
-
-    return () => {
-      if (contentElement) {
-        contentElement.removeEventListener('click', handleClick);
-      }
-    };
-  }, [articleId, processedContent, isSidebarVisible]); // 添加 isSidebarVisible 作为依赖
-
-  // 处理获取全文的点击事件，包含智能提示逻辑
   const handleFetchAndUpgradeArticle = useCallback(async (articleToUpgrade: Article) => {
-    // 如果已经有笔记，则弹窗确认
     if (annotations.length > 0) {
       Modal.confirm({
         title: '确认获取全文',
@@ -312,26 +196,20 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         onOk: () => performUpgrade(articleToUpgrade),
       });
     } else {
-      // 如果没有笔记，则直接执行
       performUpgrade(articleToUpgrade);
     }
   }, [annotations, performUpgrade]);
 
   useEffect(() => {
-    if (isMounted) {
-      loadArticle();
-    }
-
-    // 当组件卸载或 articleId 改变时，保存当前滚动位置
     return () => {
       if (articleId && scrollableContentRef.current) {
         saveScrollPosition(articleId, scrollableContentRef.current.scrollTop);
       }
     };
-  }, [isMounted, loadArticle, saveScrollPosition]);
+  }, [articleId, saveScrollPosition]);
 
   useEffect(() => {
-    const contentElement = contentRef.current;
+    const contentElement = scrollableContentRef.current;
     if (!contentElement || viewMode !== 'full') return;
 
     let scrollSaveTimer: NodeJS.Timeout;
@@ -357,11 +235,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return () => {
       contentElement.removeEventListener('scroll', handleScroll);
       clearTimeout(scrollSaveTimer);
-      if (article && articleId && contentElement.scrollTop > 0 && db) {
-        db.articles.update(articleId, { scrollPosition: contentElement.scrollTop });
-      }
     };
-  }, [article, articleId, db, viewMode, isMounted]);
+  }, [article, articleId, db, viewMode]);
 
   useEffect(() => {
     if (viewMode === 'web') {
@@ -372,105 +247,72 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     if (!contentEl) return;
 
     const checkScroll = () => {
-      if (contentEl.scrollTop > 0) {
-        setIsScrolled(true);
-      } else {
-        setIsScrolled(false);
-      }
+      setIsScrolled(contentEl.scrollTop > 0);
     };
 
     contentEl.addEventListener('scroll', checkScroll);
     checkScroll();
 
-    return () => {
-      contentEl.removeEventListener('scroll', checkScroll);
-    };
-  }, [articleId, viewMode, isMounted]);
+    return () => contentEl.removeEventListener('scroll', checkScroll);
+  }, [articleId, viewMode]);
 
-  // 新增：处理滚动条"滚动时显示"的逻辑
   useEffect(() => {
     const scrollableElement = scrollableContentRef.current;
-    if (!scrollableElement) {
-      return;
-    }
+    if (!scrollableElement) return;
 
     let scrollTimeout: NodeJS.Timeout | null = null;
-
     const handleScroll = () => {
-      // 1. 添加 'scrolling' 类，让 CSS 把滚动条显示出来
       scrollableElement.classList.add(styles.scrolling);
-
-      // 2. 清除上一个计时器（如果存在）
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-      }
-
-      // 3. 设置一个新的计时器，1.5秒后移除 'scrolling' 类
+      if (scrollTimeout) clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         scrollableElement.classList.remove(styles.scrolling);
       }, 1500);
     };
-
-    // 监听滚动事件
     scrollableElement.addEventListener('scroll', handleScroll, { passive: true });
 
-    // 组件卸载时，清理事件监听和计时器
     return () => {
       scrollableElement.removeEventListener('scroll', handleScroll);
-      if (scrollTimeout) {
-        clearTimeout(scrollTimeout);
-      }
+      if (scrollTimeout) clearTimeout(scrollTimeout);
     };
-  }, [articleId, viewMode, isMounted]);
+  }, [articleId, viewMode]);
 
   const handleToggleStar = async () => {
     if (!db || !article || !articleId) return;
-    try {
-      const newIsStarred = article.isStarred === 'true' ? 'false' : 'true';
-      await db.articles.update(articleId, { isStarred: newIsStarred });
-      setArticle(prevArticle => prevArticle ? { ...prevArticle, isStarred: newIsStarred } : null);
-      onArticleModified(articleId, { isStarred: newIsStarred });
-      triggerRefresh();
-    } catch (error) {
-      console.error('更新收藏状态失败:', error);
-    }
+    const newIsStarred = article.isStarred === 'true' ? 'false' : 'true';
+    await db.articles.update(articleId, { isStarred: newIsStarred });
+    setArticle(prev => prev ? { ...prev, isStarred: newIsStarred } : null);
+    onArticleModified(articleId, { isStarred: newIsStarred });
+    triggerRefresh();
   };
 
   const handleToggleReadLater = async () => {
     if (!db || !article || !articleId) return;
-    try {
-      const newIsReadLater = article.isReadLater === 'true' ? 'false' : 'true';
-      await db.articles.update(articleId, { isReadLater: newIsReadLater });
-      setArticle(prevArticle => prevArticle ? { ...prevArticle, isReadLater: newIsReadLater } : null);
-      onArticleModified(articleId, { isReadLater: newIsReadLater });
-    } catch (error) {
-      console.error('更新稍后读状态失败:', error);
-    }
+    const newIsReadLater = article.isReadLater === 'true' ? 'false' : 'true';
+    await db.articles.update(articleId, { isReadLater: newIsReadLater });
+    setArticle(prev => prev ? { ...prev, isReadLater: newIsReadLater } : null);
+    onArticleModified(articleId, { isReadLater: newIsReadLater });
   };
 
   const handleToggleReadStatus = async () => {
-    if (!db || !article || !articleId) return;
-
+    if (!article || !db) return;
     const newIsRead = article.isRead === 'true' ? 'false' : 'true';
     try {
-      await db.articles.update(articleId, { isRead: newIsRead });
+      // Step 1: Update the article in the database and wait for it to complete.
+      await db.articles.update(article.id, { isRead: newIsRead });
       
-      setArticle(prev => prev ? { ...prev, isRead: newIsRead } : null); 
+      // Step 2: Update the unread count for the feed and wait for it.
+      await updateUnreadCountOptimized(db, article.sourceId);
 
-      if (article.sourceId) {
-        const feed = await db.feeds.get(article.sourceId);
-        if (feed) {
-          const newUnreadCount = await db.articles
-            .where({ sourceId: article.sourceId, isRead: 'false' })
-            .count();
-          await db.feeds.update(article.sourceId, { unreadCount: newUnreadCount });
-          console.log(`[ArticleDetail handleToggleReadStatus] Feed ${article.sourceId} unread count updated to ${newUnreadCount}`);
-        }
-      }
-      onArticleModified(articleId, { isRead: newIsRead });
+      // Step 3: Now that all DB operations are done, trigger a global refresh.
       triggerRefresh();
+
+      // Step 4: Update local state for immediate UI feedback.
+      setArticle({ ...article, isRead: newIsRead });
+      onArticleModified(article.id, { isRead: newIsRead });
+
     } catch (error) {
-      console.error('更新文章已读状态失败:', error);
+      console.error('Failed to toggle read status:', error);
+      message.error('更新已读状态失败');
     }
   };
 
@@ -484,194 +326,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   };
 
-  const loadAnnotations = useCallback(async () => {
-    if (!db || !articleId) return;
-    const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
-    setAnnotations(annos);
-    return annos;
-  }, [db, articleId]);
-
-  const handleSelection = () => {
-    // 如果侧边栏是打开的，并且用户可能是在侧边栏里选择文本，则不显示弹窗
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      const container = range.commonAncestorContainer;
-
-      // 检查选区是否在文章内容之内
-      if (scrollableContentRef.current && scrollableContentRef.current.contains(container)) {
-        if (!selection.isCollapsed && selection.toString().trim().length > 0) {
-          const rect = range.getBoundingClientRect();
-          const containerRect = scrollableContentRef.current?.getBoundingClientRect();
-          if (!containerRect) return;
-    
-          // 计算弹窗位置
-          const top = rect.top - containerRect.top + scrollableContentRef.current!.scrollTop;
-          const left = rect.left - containerRect.left + scrollableContentRef.current!.scrollLeft + (rect.width / 2);
-    
-          setSelectionPopup({
-            visible: true,
-            top,
-            left,
-            range,
-          });
-        } else {
-          setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
-        }
-        return;
-      }
-    }
-    // 如果选区不在文章内部，或者没有选区，则隐藏弹窗
-    setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
-  };
-
-  const handleHighlightClick = async () => {
-    if (!selectionPopup.range || !articleId || !db) return;
-
-    const range = selectionPopup.range;
-    const text = range.toString().trim();
-    if (!text) return;
-
-    // 提取上下文
-    const prefixRange = document.createRange();
-    prefixRange.setStart(range.startContainer, Math.max(0, range.startOffset - 20));
-    prefixRange.setEnd(range.startContainer, range.startOffset);
-    const prefix = prefixRange.toString();
-
-    const suffixRange = document.createRange();
-    suffixRange.setStart(range.endContainer, range.endOffset);
-    suffixRange.setEnd(range.endContainer, Math.min(range.endContainer.textContent?.length || 0, range.endOffset + 20));
-    const suffix = suffixRange.toString();
-
-    const newAnnotation: Annotation = {
-      id: `annotation-${Date.now()}`,
-      articleId: articleId,
-      type: 'highlight',
-      text,
-      prefix,
-      suffix,
-      createdAt: Date.now()
-    };
-
-    try {
-      await db.annotations.add(newAnnotation);
-      await loadAnnotations();
-      setProcessedContent(prevContent => applyHighlights(prevContent, [newAnnotation]));
-      message.success("高亮已保存");
-    } catch (error) {
-      console.error("保存高亮失败:", error);
-      message.error("保存高亮失败！");
-    } finally {
-      window.getSelection()?.removeAllRanges();
-      setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
-    }
-  };
-  
-  const handleNoteClick = async () => {
-    if (!selectionPopup.range || !articleId || !db) return;
-
-    const range = selectionPopup.range;
-    const text = range.toString().trim();
-    if (!text) return;
-
-    // 提取上下文
-    const prefixRange = document.createRange();
-    prefixRange.setStart(range.startContainer, Math.max(0, range.startOffset - 20));
-    prefixRange.setEnd(range.startContainer, range.startOffset);
-    const prefix = prefixRange.toString();
-
-    const suffixRange = document.createRange();
-    suffixRange.setStart(range.endContainer, range.endOffset);
-    suffixRange.setEnd(range.endContainer, Math.min(range.endContainer.textContent?.length || 0, range.endOffset + 20));
-    const suffix = suffixRange.toString();
-
-    const tempAnnotation: Annotation = {
-      id: `pending-${Date.now()}`,
-      articleId: articleId,
-      type: 'note',
-      text,
-      prefix,
-      suffix,
-      noteContent: '',
-      createdAt: Date.now()
-    };
-
-    setPendingAnnotation(tempAnnotation);
-    
-    // 打开侧边栏并自动进入编辑模式
-    if (!isSidebarVisible) {
-      handleToggleSidebar();
-    }
-    setAutoEditNoteId(tempAnnotation.id);
-
-    window.getSelection()?.removeAllRanges();
-    setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
-  };
-  
-  const handleToggleSidebar = () => {
-    const newVisibility = !isSidebarVisible;
-    setIsSidebarVisible(newVisibility);
-    // 派发全局事件，通知 HomePage 调整布局
-    document.dispatchEvent(new CustomEvent('annotationSidebarToggled', {
-      detail: { isVisible: newVisibility }
-    }));
-  };
-
-  const handleSaveNote = async (annotationId: string, content: string) => {
-    if (!db || !articleId) return;
-    try {
-      if (annotationId.startsWith('pending-')) {
-        const newAnnotationData = { ...pendingAnnotation!, noteContent: content, id: `annotation-${Date.now()}` };
-        
-        await db.annotations.add(newAnnotationData);
-        setPendingAnnotation(null);
-        
-        setProcessedContent(prevContent => applyHighlights(prevContent, [newAnnotationData]));
-        message.success("笔记已创建");
-      } else {
-        await db.annotations.update(annotationId, { noteContent: content });
-        message.success("笔记已保存");
-      }
-      await loadAnnotations();
-    } catch (error) {
-      console.error("保存笔记失败:", error);
-      message.error("保存笔记失败！");
-    }
-  };
-
-  const handleDeleteAnnotation = async (annotationId: string) => {
-    if (!db || !articleId) return;
-    try {
-      await db.annotations.delete(annotationId);
-      
-      // 从 DOM 中移除高亮
-      const highlightElement = document.getElementById(`annotation-${annotationId}`);
-      if (highlightElement) {
-        const fragment = document.createDocumentFragment();
-        while (highlightElement.firstChild) {
-          fragment.appendChild(highlightElement.firstChild);
-        }
-        highlightElement.parentNode?.replaceChild(fragment, highlightElement);
-      }
-      
-      message.success("删除成功");
-      await loadAnnotations(); // 重新加载以更新侧边栏
-    } catch (error) {
-      console.error("删除失败:", error);
-      message.error("删除失败！");
-    }
-  };
-
-  const handleAutoEditApplied = () => {
-    setAutoEditNoteId(null);
-  };
-
   const renderArticleContent = () => {
     if (!article) return null;
-
-    // 如果文章内容存在，并且不是 iframe 或 webview 模式，则渲染内容
     if (article.content && viewMode === 'full') {
-      const contentToRender = processedContent || article.content;
       return (
         <div 
           ref={contentRef}
@@ -681,49 +338,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
              lineHeight: readingSettings.lineHeight,
              fontFamily: readingSettings.fontFamily,
           }}
-          dangerouslySetInnerHTML={{ __html: contentToRender || '' }}
+          dangerouslySetInnerHTML={{ __html: processedContent || '' }}
         />
       );
     }
     return null;
   };
-
-  // 处理点击外部区域关闭弹窗的逻辑
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
-        if (selectionPopup.visible) {
-          // 在隐藏弹窗之前，短暂延迟以允许选区变化先生效
-          setTimeout(() => {
-            const selection = window.getSelection();
-            if (!selection || selection.isCollapsed) {
-              setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
-            }
-          }, 100);
-        }
-      }
-    };
-
-    if (selectionPopup.visible) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [selectionPopup.visible]);
-
-  const restoreScrollPosition = useCallback(() => {
-    if (article && articleId && scrollableContentRef.current) {
-      // 确保在内容实际渲染并且滚动条出现后执行
-      const currentScrollableRef = scrollableContentRef.current;
-      setTimeout(() => {
-        if (db) {
-          db.articles.update(articleId, { scrollPosition: currentScrollableRef.scrollTop });
-        }
-      }, 100);
-    }
-  }, [article, articleId, db]);
 
   if (viewMode === 'web') {
     if (!articleId || !article || !article.url) {
@@ -812,13 +432,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             <Button
               type="text"
               shape="circle"
-              icon={
-                article.isStarred === 'true' ? (
-                  <StarFilled />
-                ) : (
-                  <StarOutlined />
-                )
-              }
+              icon={article.isStarred === 'true' ? <StarFilled /> : <StarOutlined />}
               onClick={handleToggleStar}
               className={styles.toolbarButton}
             />
@@ -885,7 +499,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         </div>
       </div>
 
-      <div ref={mainContentAreaRef} className={`${styles.mainContentArea} ${isSidebarVisible ? styles.isSidebarVisible : ''}`} onMouseUp={handleSelection}>
+      <div ref={mainContentAreaRef} className={styles.mainContentArea} onMouseUp={handleSelection}>
         <div ref={scrollableContentRef} className={styles.scrollableContent}>
           {loading ? (
             <div className={styles.loadingContainer}>

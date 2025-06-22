@@ -120,8 +120,8 @@ const createWindow = () => {
       "style-src 'self' 'unsafe-inline'", // antd 等UI库需要 'unsafe-inline'
       "img-src 'self' data: https:",
       `connect-src ${connectSrc.join(' ')}`,
-      "object-src 'none'",
-      "frame-src 'none'",
+      "object-src 'self'",
+      "frame-src https://player.youku.com",
     ].join('; ');
 
     newHeaders['Content-Security-Policy'] = [csp];
