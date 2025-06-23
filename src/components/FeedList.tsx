@@ -30,7 +30,7 @@ interface FeedListProps {
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
   const { feedId, groupId: currentRouteGroupId } = useParams<{ feedId?: string; groupId?: string }>();
-  const { db, triggerRefresh: triggerDbRefresh } = useDatabase();
+  const { db, triggerRefresh: triggerDbRefresh, feedListRefreshTrigger } = useDatabase();
   const { filter } = useFilter();
   const [loading, setLoading] = useState(true);
   const [expandedKeys, setExpandedKeys] = useState<ReactKey[]>([]);
@@ -75,7 +75,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
 
     calculateCounts();
-  }, [db, filter, feedsFromProps]);
+  }, [db, filter, feedsFromProps, feedListRefreshTrigger]);
 
   useEffect(() => {
     if (groupsFromProps) {

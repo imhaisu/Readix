@@ -265,7 +265,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   useEffect(() => {
     if (lastUpdatedArticleInfo && lastUpdatedArticleInfo.id) {
       console.log('[ArticleList] lastUpdatedArticleInfo triggered:', lastUpdatedArticleInfo);
-      setDisplayedArticles(prevArticles => {
+      setAllArticles(prevArticles => {
         const newArticles = prevArticles.map(article =>
           article.id === lastUpdatedArticleInfo.id
             ? { ...article, ...lastUpdatedArticleInfo.changes }

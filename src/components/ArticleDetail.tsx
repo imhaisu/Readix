@@ -39,7 +39,7 @@ interface ArticleDetailProps {
 }
 
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified }) => {
-  const { db, triggerRefresh } = useDatabase();
+  const { db, triggerRefresh, triggerFeedListRefresh } = useDatabase();
   const { settings } = useSettings();
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
@@ -234,7 +234,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
   useEffect(() => {
     const contentElement = scrollableContentRef.current;
-    if (!contentElement || viewMode !== 'full') return;
+    if (!contentElement || (viewMode !== 'full' && viewMode !== 'original')) return;
 
     let scrollSaveTimer: NodeJS.Timeout;
 
@@ -364,7 +364,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
         if (article.sourceId) {
           // 更新订阅源的未读计数
-          updateUnreadCountOptimized(db, article.sourceId, newReadStatus === 'true' ? -1 : 1);
+          updateUnreadCountOptimized(db, article.sourceId);
+          // 触发 FeedList 更新
+          triggerFeedListRefresh();
         }
         
         // 移除全局刷新，因为它会导致不必要的重渲染和滚动问题

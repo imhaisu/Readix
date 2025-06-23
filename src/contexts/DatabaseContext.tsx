@@ -7,6 +7,8 @@ interface DatabaseContextType {
   isInitialized: boolean;
   refreshTrigger: number;
   triggerRefresh: () => void;
+  feedListRefreshTrigger: number;
+  triggerFeedListRefresh: () => void;
   initialLoadRefreshed: boolean;
   setInitialLoadRefreshed: () => void;
 }
@@ -24,6 +26,7 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
   // state 现在只用于触发重新渲染，而不是存储实例
   const [initializationCompleted, setInitializationCompleted] = useState(isDbInitialized);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [feedListRefreshTrigger, setFeedListRefreshTrigger] = useState(0);
   const [initialLoadRefreshed, setInitialLoadRefreshed] = useState(false);
 
   useEffect(() => {
@@ -43,6 +46,10 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
     });
   }, []);
 
+  const triggerFeedListRefresh = useCallback(() => {
+    setFeedListRefreshTrigger(prev => prev + 1);
+  }, []);
+
   const handleSetInitialLoadRefreshed = useCallback(() => {
     setInitialLoadRefreshed(true);
   }, []);
@@ -52,6 +59,8 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
     isInitialized: initializationCompleted,
     refreshTrigger,
     triggerRefresh,
+    feedListRefreshTrigger,
+    triggerFeedListRefresh,
     initialLoadRefreshed,
     setInitialLoadRefreshed: handleSetInitialLoadRefreshed
   };
