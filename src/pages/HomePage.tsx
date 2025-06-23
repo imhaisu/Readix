@@ -408,7 +408,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
       // Today view (either via route prop or default route)
       const todayRange = getTodayRange();
-      conditions.fetchDate = { $gte: todayRange.start, $lte: todayRange.end };
+      conditions.publishDate = { $gte: todayRange.start, $lte: todayRange.end };
     }
     // `filter === 'all'` needs no initial condition.
     
@@ -453,15 +453,15 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
     // Applying the rest of the dynamic filter
     if (currentFilter) {
-      const { sourceId, isStarred, fetchDate } = currentFilter;
+      const { sourceId, isStarred, publishDate } = currentFilter;
       if (sourceId) {
         articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.sourceId === sourceId);
       }
       if (isStarred === 'true') {
         articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.isStarred === 'true');
       }
-      if (fetchDate && typeof fetchDate === 'object' && '$gte' in fetchDate && '$lte' in fetchDate) {
-         articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.fetchDate >= fetchDate.$gte && a.fetchDate <= fetchDate.$lte);
+      if (publishDate && typeof publishDate === 'object' && '$gte' in publishDate && '$lte' in publishDate) {
+         articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => a.publishDate >= publishDate.$gte && a.publishDate <= publishDate.$lte);
       }
     }
     

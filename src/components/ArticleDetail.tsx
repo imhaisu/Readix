@@ -14,8 +14,12 @@ import {
   HighlightOutlined,
   CloseOutlined,
   ReadOutlined,
+  ZoomInOutlined,
+  ZoomOutOutlined,
+  ReloadOutlined,
 } from '@ant-design/icons';
-import { useDatabase, Article } from '../contexts/DatabaseContext';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { Article } from '../db/database';
 import { useSettings } from '../contexts/SettingsContext';
 import { format } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
@@ -23,6 +27,7 @@ import { debounce, updateUnreadCountOptimized } from '../utils/helpers';
 import styles from './ArticleDetail.module.css';
 import AnnotationSidebar from './AnnotationSidebar';
 import { useAnnotations } from '../hooks/useAnnotations';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 
 interface ArticleDetailProps {
   articleId: string | null;
@@ -46,7 +51,26 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const articleDetailContainerRef = useRef<HTMLDivElement>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [imageModalVisible, setImageModalVisible] = useState(false);
+  const [imageModalUrl, setImageModalUrl] = useState('');
   
+  const iconButtonStyle: React.CSSProperties = {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: '50%',
+    width: 28,
+    height: 28,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    transition: 'background-color 0.3s',
+  };
+
+  const iconStyle: React.CSSProperties = {
+    color: 'white',
+    fontSize: 16,
+  };
+
   const {
     annotations,
     processedContent,
@@ -276,6 +300,28 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     };
   }, [articleId, viewMode]);
 
+  useEffect(() => {
+    const contentElement = contentRef.current;
+    if (!contentElement) return;
+
+    const handleImageClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.tagName === 'IMG') {
+        const url = target.getAttribute('src');
+        if (url) {
+          setImageModalUrl(url);
+          setImageModalVisible(true);
+        }
+      }
+    };
+
+    contentElement.addEventListener('click', handleImageClick);
+
+    return () => {
+      contentElement.removeEventListener('click', handleImageClick);
+    };
+  }, [processedContent]);
+
   const handleToggleStar = async () => {
     if (!db || !article || !articleId) return;
     const newIsStarred = article.isStarred === 'true' ? 'false' : 'true';
@@ -294,25 +340,39 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   };
 
   const handleToggleReadStatus = async () => {
-    if (!article || !db) return;
-    const newIsRead = article.isRead === 'true' ? 'false' : 'true';
-    try {
-      // Step 1: Update the article in the database and wait for it to complete.
-      await db.articles.update(article.id, { isRead: newIsRead });
-      
-      // Step 2: Update the unread count for the feed and wait for it.
-      await updateUnreadCountOptimized(db, article.sourceId);
+    if (article && db) {
+      const currentScrollPosition = scrollableContentRef.current?.scrollTop;
+      const newReadStatus = article.isRead === 'true' ? 'false' : 'true';
 
-      // Step 3: Now that all DB operations are done, trigger a global refresh.
-      triggerRefresh();
+      try {
+        // 在一次数据库操作中同时更新已读状态和滚动位置
+        await db.articles.update(article.id, { 
+          isRead: newReadStatus,
+          ...(currentScrollPosition !== undefined && { scrollPosition: currentScrollPosition })
+        });
 
-      // Step 4: Update local state for immediate UI feedback.
-      setArticle({ ...article, isRead: newIsRead });
-      onArticleModified(article.id, { isRead: newIsRead });
+        // 乐观地更新本地文章状态，包含滚动位置
+        const updatedArticle = { 
+          ...article, 
+          isRead: newReadStatus,
+          scrollPosition: currentScrollPosition ?? article.scrollPosition 
+        };
+        setArticle(updatedArticle);
+        
+        // 通知父组件文章已修改（用于更新列表项状态）
+        onArticleModified(article.id, { isRead: newReadStatus });
 
-    } catch (error) {
-      console.error('Failed to toggle read status:', error);
-      message.error('更新已读状态失败');
+        if (article.sourceId) {
+          // 更新订阅源的未读计数
+          updateUnreadCountOptimized(db, article.sourceId, newReadStatus === 'true' ? -1 : 1);
+        }
+        
+        // 移除全局刷新，因为它会导致不必要的重渲染和滚动问题
+        // triggerRefresh();
+
+      } catch (error) {
+        console.error('更新文章已读状态失败:', error);
+      }
     }
   };
 
@@ -326,9 +386,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   };
 
+  const handleCloseImageModal = () => {
+    setImageModalVisible(false);
+    setImageModalUrl('');
+  };
+
   const renderArticleContent = () => {
     if (!article) return null;
-    if (article.content && viewMode === 'full') {
+    if (article.content && (viewMode === 'full' || viewMode === 'original')) {
       return (
         <div 
           ref={contentRef}
@@ -560,6 +625,99 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           />
         )}
       </div>
+
+      <Modal
+        open={imageModalVisible}
+        onCancel={handleCloseImageModal}
+        footer={null}
+        width="90vw"
+        style={{ top: 20 }}
+        styles={{ body: { padding: 0, overflow: 'hidden' } }}
+        destroyOnClose
+        closeIcon={
+          <div style={iconButtonStyle}>
+            <CloseOutlined style={iconStyle} />
+          </div>
+        }
+      >
+        <TransformWrapper
+          initialScale={1}
+          minScale={0.5}
+          maxScale={10}
+          doubleClick={{ mode: 'reset' }}
+          wheel={{ step: 0.2 }}
+          pinch={{ step: 1 }}
+        >
+          {({ zoomIn, zoomOut, resetTransform }) => (
+            <React.Fragment>
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 15,
+                  right: 50,
+                  zIndex: 10,
+                  display: 'flex',
+                  gap: '12px',
+                }}
+              >
+                <Tooltip title="放大">
+                  <div 
+                    style={iconButtonStyle} 
+                    onClick={() => zoomIn()}
+                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
+                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
+                  >
+                    <ZoomInOutlined style={iconStyle} />
+                  </div>
+                </Tooltip>
+                <Tooltip title="缩小">
+                  <div 
+                    style={iconButtonStyle} 
+                    onClick={() => zoomOut()}
+                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
+                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
+                  >
+                    <ZoomOutOutlined style={iconStyle} />
+                  </div>
+                </Tooltip>
+                <Tooltip title="重置">
+                  <div 
+                    style={iconButtonStyle} 
+                    onClick={() => resetTransform()}
+                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
+                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
+                  >
+                    <ReloadOutlined style={iconStyle} />
+                  </div>
+                </Tooltip>
+              </div>
+              <TransformComponent
+                wrapperStyle={{ 
+                  width: '100%', 
+                  height: 'calc(100vh - 40px)',
+                }}
+                contentStyle={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  height: '100%',
+                }}
+              >
+                <img 
+                  src={imageModalUrl} 
+                  alt="Enlarged" 
+                  style={{ 
+                    maxWidth: '100%',
+                    maxHeight: '100%',
+                    objectFit: 'contain',
+                  }}
+                />
+              </TransformComponent>
+            </React.Fragment>
+          )}
+        </TransformWrapper>
+      </Modal>
     </div>
   );
 };

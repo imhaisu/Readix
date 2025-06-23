@@ -153,7 +153,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       console.log(`[ArticleList] toggleArticleReadStatus: Marking article ${articleId} as ${newStatus === 'true' ? 'read' : 'unread'} in DB.`);
       await db.articles.update(articleId, { isRead: newStatus });
       
-      setAllArticles(prevAll => 
+      setAllArticles((prevAll: Article[]) => 
         prevAll.map(a => a.id === articleId ? { ...a, isRead: newStatus } : a)
       );
       
@@ -389,8 +389,9 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
         filtered = filtered.filter(article => article.isStarred === 'true');
       }
       // Handle 'Today' view filter if passed as a date range
-      if (filter.publishDate) {
-         filtered = filtered.filter(article => article.publishDate >= filter.publishDate.from && article.publishDate <= filter.publishDate.to);
+      if (filter.publishDate && typeof filter.publishDate === 'object' && '$gte' in filter.publishDate && '$lte' in filter.publishDate) {
+        const { $gte, $lte } = filter.publishDate;
+        filtered = filtered.filter(article => article.publishDate >= $gte && article.publishDate <= $lte);
       }
     }
 
@@ -431,27 +432,27 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;
-    
-    const article = allArticles.find(a => a.id === articleId);
+    const article = articlesRef.current.find(a => a.id === articleId);
     if (!article) return;
-
+    
     const newIsStarred = article.isStarred === 'true' ? 'false' : 'true';
     
     try {
       await db.articles.update(articleId, { isStarred: newIsStarred });
       
-      // Optimistically update local state
-      setAllArticles(prev => 
-        prev.map(a => 
-          a.id === articleId ? { ...a, isStarred: newIsStarred } : a
-        )
+      setAllArticles((prev: Article[]) => 
+        prev.map(a => a.id === articleId ? { ...a, isStarred: newIsStarred } : a)
+      );
+
+      setDisplayedArticles((prev: Article[]) =>
+        prev.map(a => a.id === articleId ? { ...a, isStarred: newIsStarred } : a)
       );
       
       message.success(newIsStarred === 'true' ? '已添加到收藏' : '已取消收藏');
-      triggerRefresh();
+
     } catch (error) {
-      console.error('更新文章收藏状态失败:', error);
-      message.error('操作失败');
+      console.error('Failed to toggle star status:', error);
+      message.error('收藏操作失败');
     }
   };
 
@@ -472,11 +473,8 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       const articleIds = articlesToMark.map(a => a.id);
       await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
       
-      // 统一更新 allArticles
-      setAllArticles(prev => 
-        prev.map(a => 
-          articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a
-        )
+      setAllArticles((prev: Article[]) => 
+        prev.map(a => articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a)
       );
 
       // 更新对应订阅源的未读计数
@@ -516,11 +514,8 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
       const articleIds = articlesToMark.map(a => a.id);
       await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
       
-      // 统一更新 allArticles
-      setAllArticles(prev => 
-        prev.map(a => 
-          articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a
-        )
+      setAllArticles((prev: Article[]) => 
+        prev.map(a => articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a)
       );
       
       // 更新对应订阅源的未读计数
@@ -708,7 +703,7 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     },
     getScrollableElement: () => containerRef.current,
     setDisplayedArticles: (articles: Article[]) => {
-      console.log('[ArticleList] Imperatively setting displayed articles. Count:', articles.length);
+      //HomePage 能够直接控制 ArticleList 显示的文章
       setDisplayedArticles(articles);
     }
   }));
