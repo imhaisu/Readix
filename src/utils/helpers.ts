@@ -173,3 +173,45 @@ export const debounceDataUpdate = <T extends any[]>(
     });
   };
 }; 
+
+/**
+ * 从 HTML 内容中提取第一张图片的 URL
+ * @param htmlContent HTML 字符串
+ * @returns 图片的 URL，如果找不到则返回 null
+ */
+export const extractFirstImage = (htmlContent: string): string | null => {
+  if (!htmlContent) return null;
+  const imgRegex = /<img[^>]+src="([^">]+)"/;
+  const match = htmlContent.match(imgRegex);
+  return match ? match[1] : null;
+};
+
+/**
+ * 从 HTML 内容中提取第一段的纯文本作为摘要
+ * @param htmlContent HTML 字符串
+ * @returns 提取的文本摘要，如果找不到则返回 null
+ */
+export const extractFirstParagraphText = (htmlContent: string): string | null => {
+  if (!htmlContent) return null;
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    
+    const firstParagraph = doc.querySelector('p');
+    if (firstParagraph && firstParagraph.textContent) {
+      return firstParagraph.textContent.trim();
+    }
+    
+    if (doc.body && doc.body.textContent) {
+        const text = doc.body.textContent.trim().replace(/\s+/g, ' ');
+        const sentenceEnd = text.indexOf('.');
+        if (sentenceEnd > 0 && sentenceEnd < 150) {
+            return text.substring(0, sentenceEnd + 1);
+        }
+        return text.substring(0, 120) + (text.length > 120 ? '...' : '');
+    }
+  } catch (e) {
+    console.error("Error parsing HTML for summary extraction:", e);
+  }
+  return null;
+}; 
