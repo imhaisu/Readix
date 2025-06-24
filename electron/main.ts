@@ -327,7 +327,54 @@ async function fetchAndParseFeed(feedUrl: string) {
     }
   }
 
-  return await rssParser.parseString(feedText);
+  const parsedFeed = await rssParser.parseString(feedText);
+
+  // 修复相对 URL
+  const baseLink = parsedFeed.link || feedUrl;
+  if (parsedFeed.items) {
+    parsedFeed.items.forEach(item => {
+      const itemBaseUrl = item.link || baseLink;
+      
+      // 1. 修复 enclosure 中的相对 URL
+      if (item.enclosure && item.enclosure.url) {
+        try {
+          item.enclosure.url = new URL(item.enclosure.url, itemBaseUrl).href;
+        } catch (e) {
+          console.error(`修正 enclosure URL 失败: ${item.enclosure.url}`, e);
+        }
+      }
+
+      // 2. 修复内容中的相对 URL (图片和链接)
+      const contentKey = 'content:encoded' in item ? 'content:encoded' : 'content';
+      if (item[contentKey]) {
+        try {
+          const { JSDOM } = require('jsdom');
+          const dom = new JSDOM(item[contentKey], { url: itemBaseUrl });
+          const document = dom.window.document;
+
+          document.querySelectorAll('img').forEach((img: any) => {
+            const src = img.getAttribute('src');
+            if (src) {
+              img.setAttribute('src', new URL(src, itemBaseUrl).href);
+            }
+          });
+
+          document.querySelectorAll('a').forEach((a: any) => {
+            const href = a.getAttribute('href');
+            if (href) {
+              a.setAttribute('href', new URL(href, itemBaseUrl).href);
+            }
+          });
+          
+          item[contentKey] = document.body.innerHTML;
+        } catch (e) {
+           console.error(`修正文章内容中的相对 URL 失败:`, e);
+        }
+      }
+    });
+  }
+
+  return parsedFeed;
 }
 
 // 处理来自渲染进程的 RSS 解析请求 (刷新用)
@@ -613,29 +660,61 @@ ipcMain.handle('get-local-icon-base64', async (_, iconPath: string) => {
   }
 });
 
-ipcMain.handle('fetch-article-content', async (event, url) => {
+ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
   try {
     const { JSDOM } = await import('jsdom');
     const { Readability } = await import('@mozilla/readability');
     
-    const dom = await JSDOM.fromURL(url, {
+    const dom = await JSDOM.fromURL(articleUrl, {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      referrer: url,
+      referrer: articleUrl,
     });
     
     const reader = new Readability(dom.window.document);
     const article = reader.parse();
     
-    if (article) {
+    if (article && article.content) {
+      // 创建一个新的 JSDOM 实例来处理相对路径
+      const contentDom = new JSDOM(article.content, { url: articleUrl });
+      const document = contentDom.window.document;
+
+      // 处理图片
+      const images = document.querySelectorAll('img');
+      images.forEach(img => {
+        const src = img.getAttribute('src');
+        if (src) {
+          try {
+            const absoluteSrc = new URL(src, articleUrl).href;
+            img.setAttribute('src', absoluteSrc);
+          } catch (e) {
+            console.error(`无效的图片 URL ${src} 在 ${articleUrl}:`, e);
+          }
+        }
+      });
+      
+      // 你也可以在这里处理其他元素的相对链接，例如 <a> 标签
+      const links = document.querySelectorAll('a');
+      links.forEach(link => {
+        const href = link.getAttribute('href');
+        if (href) {
+           try {
+            const absoluteHref = new URL(href, articleUrl).href;
+            link.setAttribute('href', absoluteHref);
+          } catch (e) {
+            console.error(`无效的链接 URL ${href} 在 ${articleUrl}:`, e);
+          }
+        }
+      });
+
       return {
         title: article.title,
-        content: article.content,
+        content: document.body.innerHTML, // 返回处理过的HTML
       };
     } else {
       return null;
     }
   } catch (error) {
-    console.error('Failed to fetch and parse article:', error);
+    console.error('获取和解析文章失败:', error);
     return null;
   }
 });

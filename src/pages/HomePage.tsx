@@ -314,7 +314,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         setIsPullRefreshing(false);
       }
     }
-  }, [isPullRefreshing]);
+  }, [db, feeds, triggerRefresh, settings.general.backgroundRefresh]);
   
   const handleLocalListRefresh = useCallback(() => {
     console.log('[HomePage] Triggering local list refresh via key increment.');

@@ -277,7 +277,7 @@ const SidebarLayout: React.FC = () => {
         // 1. 计算今日文章数
         const todayRange = getTodayRange();
         const todayPromise = db.articles
-          .where('fetchDate').between(todayRange.start, todayRange.end, true, true)
+          .where('publishDate').between(todayRange.start, todayRange.end, true, true)
           .filter(filterCondition)
           .count();
 
@@ -435,6 +435,16 @@ const SidebarLayout: React.FC = () => {
       console.log('[SidebarLayout] handleRefreshAll finished.');
     }
   }, [db, refreshing, feeds, triggerRefresh]);
+
+  // 新增: 应用启动时自动刷新
+  useEffect(() => {
+    // 确保只在DB初始化后执行一次
+    if (dbInitialized && !startupTasksDone.current) {
+      console.log('[SidebarLayout] Initializing startup refresh.');
+      handleRefreshAll(true); // silent refresh
+      startupTasksDone.current = true;
+    }
+  }, [dbInitialized, handleRefreshAll]);
 
   // 新增：专门刷新单个订阅源的文章
   const refreshSingleFeedArticles = useCallback(async (feedToRefresh: FeedSource) => {
