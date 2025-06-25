@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react';
 import { Card, Empty, Skeleton, Badge, Tooltip, Avatar, Dropdown, message } from 'antd';
 import type { MenuProps } from 'antd';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -54,7 +54,8 @@ export interface ArticleListHandle {
   getScrollableElement: () => HTMLDivElement | null;
 }
 
-const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({ 
+// 优化ArticleList使用React.memo包装
+const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({ 
   filter, 
   searchTerm,
   onSelectArticle,
@@ -69,7 +70,10 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  console.log(`[ArticleList Render] isPullingDown prop: ${isPullingDown}`);
+  // 仅在开发环境下记录日志
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[ArticleList Render] isPullingDown prop: ${isPullingDown}`);
+  }
 
   const {
     loading,
@@ -392,6 +396,6 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   }));
 
   return renderContent();
-});
+}));
 
 export default ArticleList; 

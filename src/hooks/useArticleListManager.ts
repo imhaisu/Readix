@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Article, FeedSource } from '../db/database';
@@ -187,7 +187,7 @@ export const useArticleListManager = ({
   }, [currentFeedId, currentGroupId]);
 
   // Effect 2: Filter and sort articles for display when data or filters change
-  useEffect(() => {
+  const displayedArticlesResult = useMemo(() => {
     let filtered = [...allArticles];
 
     // Client-side search term filter
@@ -223,16 +223,12 @@ export const useArticleListManager = ({
       });
     }
 
-    // Sort is now done once after fetching, so we don't need to re-sort here unless filter logic changes order
-    // filtered.sort((a, b) => b.publishDate - a.publishDate);
-    
     // Keep selected article in view
     if (selectedArticleId) {
       const isSelectedInList = filtered.some((a: Article) => a.id === selectedArticleId);
       if (!isSelectedInList) {
         const selectedArticle = allArticles.find((a: Article) => a.id === selectedArticleId);
         if (selectedArticle) {
-          setPersistentlyExemptedIds(prev => new Set(prev).add(selectedArticleId));
           // Instead of pushing and re-sorting, find the correct position and insert
           const insertIndex = filtered.findIndex((a: Article) => a.publishDate < selectedArticle.publishDate);
           if (insertIndex === -1) {
@@ -244,15 +240,13 @@ export const useArticleListManager = ({
       }
     }
 
-    setDisplayedArticles(filtered);
+    return filtered;
+  }, [allArticles, filter, searchTerm, exemptedArticleIds, persistentlyExemptedIds, selectedArticleId]);
 
-    // Deselect article if filter changes and the new list doesn't contain the old selection
-    if (JSON.stringify(filter) !== JSON.stringify(prevFilter)) {
-      if (selectedArticleId && !filtered.some(a => a.id === selectedArticleId)) {
-        onSelectArticle(null);
-      }
-    }
-  }, [allArticles, filter, searchTerm, selectedArticleId, onSelectArticle, prevFilter, exemptedArticleIds, persistentlyExemptedIds]);
+  // 使用 useMemo 计算结果更新 state
+  useEffect(() => {
+    setDisplayedArticles(displayedArticlesResult);
+  }, [displayedArticlesResult]);
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;

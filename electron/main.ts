@@ -454,7 +454,8 @@ ipcMain.handle('get-rss-feed-info', async (event, feedUrl) => {
         // 使用 feed.link 或 feedUrl 来确定域名
         const targetUrl = feed.link || feedUrl;
         const domain = new URL(targetUrl).hostname;
-        const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+        // 使用 faviconkit 服务获取图标，更为可靠
+        const faviconUrl = `https://api.faviconkit.com/${domain}/144`;
         const hash = crypto.createHash('md5').update(domain).digest('hex');
         iconPathToReturn = await downloadAndCacheIcon(faviconUrl, hash);
       } catch (fallbackError: any) {
@@ -595,7 +596,8 @@ ipcMain.handle('get-favicon', async (_, feedUrl) => {
   try {
     const parsedUrl = new URL(feedUrl);
     const domain = parsedUrl.hostname;
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+    // 使用 faviconkit 服务获取图标，更为可靠
+    const faviconUrl = `https://api.faviconkit.com/${domain}/144`;
     const localIconFileName = `${crypto.createHash('md5').update(domain).digest('hex')}.png`;
     const localIconPath = path.join(faviconsDir, localIconFileName);
 

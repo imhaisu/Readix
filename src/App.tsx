@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Layout } from 'antd';
+import { Layout, Form } from 'antd';
 import SidebarLayout from './layouts/SidebarLayout';
 import TitleBar from './components/TitleBar';
 import HomePage from './pages/HomePage';
@@ -20,14 +20,22 @@ const AppContent: React.FC = () => {
 
   // 同时检查两个上下文是否都已初始化
   const isInitialized = settingsInitialized && dbInitialized;
-  console.log('[App] AppContent 渲染，isInitialized:', isInitialized);
+  
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[App] AppContent 渲染，isInitialized:', isInitialized);
+  }
   
   if (!isInitialized) {
-    console.log('[App] 上下文未初始化，显示加载中...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[App] 上下文未初始化，显示加载中...');
+    }
     return <PulsingLoader />;
   }
 
-  console.log('[App] 上下文已初始化，渲染主要内容');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[App] 上下文已初始化，渲染主要内容');
+  }
+  
   return (
     <>
       <TitleBar customControls={customControls} />
@@ -52,15 +60,17 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <FilterProvider>
-      <TitleBarProvider>
-        <LayoutProvider>
-          <div className="app-container">
-            <AppContent />
-          </div>
-        </LayoutProvider>
-      </TitleBarProvider>
-    </FilterProvider>
+    <Form.Provider>
+      <FilterProvider>
+        <TitleBarProvider>
+          <LayoutProvider>
+            <div className="app-container">
+              <AppContent />
+            </div>
+          </LayoutProvider>
+        </TitleBarProvider>
+      </FilterProvider>
+    </Form.Provider>
   );
 };
 

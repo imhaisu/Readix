@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Button, Input, Tooltip } from 'antd';
 import { CloseOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import styles from './AnnotationSidebar.module.css';
-import { Annotation } from '../contexts/DatabaseContext';
+import { Annotation } from '../db/database';
 
 const { TextArea } = Input;
 
@@ -17,6 +17,7 @@ interface AnnotationSidebarProps {
   onItemClick: (annotationId: string) => void;
   autoEditNoteId: string | null;
   onAutoEditApplied: () => void;
+  onCancelPendingAnnotation: () => void;
 }
 
 const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
@@ -29,6 +30,7 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
   onItemClick,
   autoEditNoteId,
   onAutoEditApplied,
+  onCancelPendingAnnotation,
 }) => {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
@@ -67,14 +69,22 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
     setEditContent(annotation.noteContent || '');
   };
 
-  // 处理"取消"编辑
-  const handleCancel = () => {
-    // 如果取消的是一个还未保存的新笔记，则直接关闭侧边栏
-    if (editingNoteId && editingNoteId.startsWith('pending-')) {
-      onClose(); 
+  // 处理删除笔记
+  const handleDelete = () => {
+    if (editingNoteId) {
+      // 对于临时笔记，需要特殊处理
+      if (editingNoteId.startsWith('pending-')) {
+        // 对于临时笔记，调用取消创建方法
+        onCancelPendingAnnotation();
+        setEditingNoteId(null);
+        setEditContent('');
+      } else {
+        // 对于已保存的笔记，调用删除方法
+        onDelete(editingNoteId);
+        setEditingNoteId(null);
+        setEditContent('');
+      }
     }
-    setEditingNoteId(null);
-    setEditContent('');
   };
 
   // 处理"保存"笔记
@@ -106,7 +116,7 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
         autoFocus
       />
       <div className={styles.editorActions}>
-        <Button onClick={handleCancel}>取消</Button>
+        <Button danger onClick={handleDelete}>删除</Button>
         <Button type="primary" onClick={handleSave}>保存</Button>
       </div>
     </div>

@@ -89,6 +89,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     handleNoteClick,
     handleSaveNote,
     handleDeleteAnnotation,
+    handleCancelPendingAnnotation,
     handleAutoEditApplied,
   } = useAnnotations({ articleId, scrollableContentRef });
 
@@ -669,6 +670,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             onItemClick={handleScrollToAnnotation}
             autoEditNoteId={autoEditNoteId}
             onAutoEditApplied={handleAutoEditApplied}
+            onCancelPendingAnnotation={handleCancelPendingAnnotation}
           />
         )}
       </div>
@@ -680,7 +682,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         width="90vw"
         style={{ top: 20 }}
         styles={{ body: { padding: 0, overflow: 'hidden' } }}
-        destroyOnClose
+        destroyOnHidden
         closeIcon={
           <div style={iconButtonStyle}>
             <CloseOutlined style={iconStyle} />

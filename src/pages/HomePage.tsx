@@ -534,7 +534,29 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     });
   };
 
-  const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !searchTerm;
+  // 检查是否有文章存在
+  const [hasArticles, setHasArticles] = useState(true);
+  
+  // 检查是否有任何文章存在的函数
+  useEffect(() => {
+    const checkForArticles = async () => {
+      if (!db || !dbInitialized) return;
+      
+      try {
+        // 检查是否至少有一篇文章
+        const count = await db.articles.count();
+        setHasArticles(count > 0);
+      } catch (error) {
+        console.error('检查文章失败:', error);
+        setHasArticles(true); // 出错时假设有文章，避免不必要地显示欢迎页面
+      }
+    };
+    
+    checkForArticles();
+  }, [db, dbInitialized, articleListRefreshTrigger]);
+
+  // 仅当确认没有订阅源且没有文章时才显示欢迎页面
+  const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !hasArticles && !searchTerm;
 
   if (showWelcomePage) {
     return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;

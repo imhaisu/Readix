@@ -267,11 +267,28 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         }
         highlightElement.parentNode?.replaceChild(fragment, highlightElement);
       }
-      message.success("删除成功");
       await loadAnnotations();
     } catch (error) {
       console.error("删除失败:", error);
       message.error("删除失败！");
+    }
+  };
+
+  // 新增：处理取消临时笔记
+  const handleCancelPendingAnnotation = () => {
+    if (pendingAnnotation) {
+      // 移除临时高亮
+      const tempHighlight = document.getElementById(`annotation-${pendingAnnotation.id}`);
+      if (tempHighlight) {
+        const fragment = document.createDocumentFragment();
+        while (tempHighlight.firstChild) {
+          fragment.appendChild(tempHighlight.firstChild);
+        }
+        tempHighlight.parentNode?.replaceChild(fragment, tempHighlight);
+      }
+      
+      // 清除临时注释状态
+      setPendingAnnotation(null);
     }
   };
 
@@ -343,6 +360,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     handleNoteClick,
     handleSaveNote,
     handleDeleteAnnotation,
+    handleCancelPendingAnnotation,
     handleAutoEditApplied,
   };
 }; 
