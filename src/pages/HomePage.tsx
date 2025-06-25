@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Empty, Select, Button, Typography, Skeleton, Input, Space, Tooltip, Popover, message, Radio, Spin, notification, Modal } from 'antd';
 import type { InputRef } from 'antd';
@@ -34,7 +34,7 @@ interface HomePageProps {
 }
 
 const HomePage: React.FC<HomePageProps> = ({ filter }) => {
-  const { db, refreshTrigger, triggerRefresh, isInitialized: dbInitialized, initialLoadRefreshed, setInitialLoadRefreshed } = useDatabase();
+  const { db, articleListRefreshTrigger, triggerArticleListRefresh, isInitialized: dbInitialized, initialLoadRefreshed, setInitialLoadRefreshed } = useDatabase();
   const { settings, isInitialized: settingsInitialized, updateLayoutSettings } = useSettings();
   const { filter: activeListFilter, setFilter } = useFilter();
   const navigate = useNavigate();
@@ -61,10 +61,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const PULL_TO_REFRESH_THRESHOLD = 250;
 
-  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerRefresh, setIsPullRefreshing });
+  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing });
   useEffect(() => {
-    refreshDependenciesRef.current = { db, feedId, groupId, triggerRefresh, setIsPullRefreshing };
-  }, [db, feedId, groupId, triggerRefresh, setIsPullRefreshing]);
+    refreshDependenciesRef.current = { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing };
+  }, [db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing]);
 
   const listPanelRef = useRef<ImperativePanelHandle>(null);
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
@@ -111,16 +111,28 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   };
 
   const handleScrollCapture = (event: React.UIEvent<HTMLDivElement>) => {
-    console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
+    // console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
   };
 
   const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
     const scrollableElement = articleListRef.current?.getScrollableElement();
-    if (!scrollableElement || scrollableElement.scrollTop !== 0 || isPullRefreshing) {
+    // console.log('[HomePage Touch] --- TOUCH START ---');
+    if (!scrollableElement) {
+      // console.log('[HomePage Touch] Aborting: scrollableElement is null.');
       return;
     }
+    if (scrollableElement.scrollTop !== 0) {
+      // console.log(`[HomePage Touch] Aborting: scrollTop is ${scrollableElement.scrollTop}, not 0.`);
+      return;
+    }
+    if (isPullRefreshing) {
+      // console.log(`[HomePage Touch] Aborting: isPullRefreshing is ${isPullRefreshing}.`);
+      return;
+    }
+    
     pullStartY.current = e.touches[0].clientY;
     isPulling.current = true;
+    // console.log(`[HomePage Touch] Success! Pulling gesture initiated. StartY: ${pullStartY.current}`);
   };
 
   const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
@@ -128,6 +140,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
     const currentY = e.touches[0].clientY;
     const pullDistance = currentY - pullStartY.current;
+    
+    // console.log(`[HomePage Touch] handleTouchMove. Pull distance: ${pullDistance}`);
 
     if (pullDistance > 0) {
       e.preventDefault(); 
@@ -140,8 +154,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (!isPulling.current) return;
     isPulling.current = false;
 
+    // console.log(`[HomePage Touch] --- TOUCH END --- Progress: ${pullDownProgress}`);
     if (pullDownProgress === 1) {
-      console.log('Pull to refresh triggered by touch.');
+      // console.log('Pull to refresh triggered by touch.');
       handleRefreshAll();
     }
     
@@ -163,7 +178,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setPullDownProgress(newProgress);
 
       if (newProgress >= 1) {
-        console.log('Pull to refresh triggered by wheel.');
+        // console.log('Pull to refresh triggered by wheel.');
         handleRefreshAll();
         setTimeout(() => setPullDownProgress(0), 100);
       }
@@ -236,7 +251,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   useEffect(() => {
     loadFeeds();
-  }, [db, refreshTrigger]);
+  }, [db, articleListRefreshTrigger]);
   
   useEffect(() => {
     const prevFeed = prevFeedIdRef.current;
@@ -252,7 +267,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
 
     if (needsListRefresh) {
-      console.log('[HomePage] Critical navigation change detected. Refreshing ArticleList key.', { feedId, prevFeed, groupId, prevGroup, filter, prevFilter });
+      // console.log('[HomePage] Critical navigation change detected. Refreshing ArticleList key.', { feedId, prevFeed, groupId, prevGroup, filter, prevFilter });
       setSelectedArticleId(null); 
     }
     
@@ -266,10 +281,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [filter, feedId, groupId]);
   
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
-    const { db, feedId, groupId, triggerRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
+    const { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
     
     if (isPullRefreshing) {
-      console.log('Refresh is already in progress. Skipping.');
+      // console.log('Refresh is already in progress. Skipping.');
       return;
     }
     
@@ -279,31 +294,55 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setIsPullRefreshing(true);
     }
 
-    let feedsToRefresh: FeedSource[] = [];
-
-    if (feedId) {
-      const feed = await db.feeds.get(feedId);
-      if (feed) feedsToRefresh = [feed];
-    } else if (groupId) {
-      feedsToRefresh = await db.feeds.where('groupId').equals(groupId).toArray();
-    } else {
-      feedsToRefresh = await db.feeds.toArray();
-    }
+    const feedsToRefresh = feedId ? [feeds.find(f => f.id === feedId)].filter(Boolean) as FeedSource[] : feeds;
 
     try {
       if (feedsToRefresh.length > 0) {
-        console.log(`Refreshing ${feedsToRefresh.length} feeds...`);
-        await refreshAllFeeds(feedsToRefresh, undefined, (results) => {
-          console.log('Refresh results:', results);
-          triggerRefresh();
-        });
+        // console.log(`[HomePage] Refreshing ${feedsToRefresh.length} feeds...`);
+        const results = await refreshAllFeeds(feedsToRefresh);
+
+        if (db) {
+          for (const result of results) {
+            const { feed, articles: fetchedArticles } = result;
+            if (fetchedArticles.length > 0) {
+              const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
+              const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
+
+              const articlesToPut = fetchedArticles.map(fetchedArticle => {
+                const existingArticle = existingArticlesMap.get(fetchedArticle.id);
+                if (existingArticle) {
+                  // Merge to preserve user-specific state
+                  return {
+                    ...fetchedArticle, // Fresh data from feed
+                    isRead: existingArticle.isRead,
+                    isStarred: existingArticle.isStarred,
+                    scrollPosition: existingArticle.scrollPosition,
+                    isReadLater: existingArticle.isReadLater,
+                  };
+                } else {
+                  return fetchedArticle; // New article
+                }
+              });
+
+              await db.articles.bulkPut(articlesToPut);
+              await updateUnreadCountOptimized(db, feed.id!);
+            }
+          }
+        }
+        
+        triggerArticleListRefresh();
+
       } else {
-        console.log('No feeds to refresh.');
+        // console.log('No feeds to refresh.');
       }
     } catch (error) {
-      console.error("Error during refresh all:", error);
+      console.error('Error during refresh all:', error);
       if (!options?.silent) {
-        message.error('刷新失败');
+        notification.error({
+          message: '刷新失败',
+          description: '同步订阅源时发生错误，请稍后重试。',
+          placement: 'bottomRight',
+        });
       }
     } finally {
       if (!options?.silent) {
@@ -314,10 +353,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         setIsPullRefreshing(false);
       }
     }
-  }, [db, feeds, triggerRefresh, settings.general.backgroundRefresh]);
+  }, [db, feeds, triggerArticleListRefresh]);
   
   const handleLocalListRefresh = useCallback(() => {
-    console.log('[HomePage] Triggering local list refresh via key increment.');
+    // console.log('[HomePage] Triggering local list refresh via key increment.');
   }, []);
 
   useEffect(() => {
@@ -329,7 +368,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   useEffect(() => {
     if (dbInitialized && isTodayView && !initialLoadRefreshed) {
-      console.log('[HomePage] Initial load on Today view, triggering silent auto-refresh.');
+      // console.log('[HomePage] Initial load on Today view, triggering silent auto-refresh.');
       setInitialLoadRefreshed();
       handleRefreshAll({ silent: true });
     }
@@ -392,8 +431,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     handleRefreshAll();
   };
 
-  const getArticleFilter = useCallback(() => {
-    console.log('[HomePage] getArticleFilter CALLED. Inputs:', { feedId, groupId, activeListFilter, filterProp: filter });
+  const articleFilterForList = useMemo(() => {
     const conditions: any = {};
 
     // 1. Establish the main context from URL params or filter prop
@@ -418,15 +456,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     } else if (activeListFilter === 'unread') {
       conditions.isRead = 'false';
     }
-    // If activeListFilter is 'all', no extra condition is added.
-
-    console.log(`[HomePage] getArticleFilter RETURNING conditions:`, conditions);
+    
     return conditions;
   }, [feedId, groupId, activeListFilter, filter]);
 
   const handleAddFirstFeed = (feed: FeedSource) => {
     navigate(`/feed/${feed.id}`);
-    triggerRefresh();
+    triggerArticleListRefresh();
   };
 
   const handleArticleDetailViewModeChange = (mode: 'full' | 'web' | 'original') => {
@@ -436,7 +472,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const handleMarkAllReadLocal = async () => {
     if (!db) return;
 
-    const currentFilter = getArticleFilter();
+    const currentFilter = articleFilterForList;
     let articlesToUpdateQuery = db.articles.where('isRead').equals('false');
     
     // Special handling for groupId, as articles don't have it directly.
@@ -488,9 +524,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             await updateUnreadCountOptimized(db, sId);
           }
           
-          // message.success('所有文章已标记为已读');
-          
-          triggerRefresh();
+          triggerArticleListRefresh();
 
         } catch (error) {
           console.error('Failed to mark all as read:', error);
@@ -499,9 +533,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       },
     });
   };
-
-  const articleFilterForList = getArticleFilter();
-  console.log('[HomePage] RENDERING ArticleList with props:', { filterPropForArticleList: articleFilterForList, currentFeedId: feedId, currentGroupId: groupId, activeListFilterState: activeListFilter });
 
   const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !searchTerm;
 
@@ -601,7 +632,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       <ArticleList
                         ref={articleListRef}
                         key={`${feedId}-${groupId}-${activeListFilter}-${listRefreshKey}`}
-                        filter={getArticleFilter()}
+                        filter={articleFilterForList}
                         searchTerm={searchTerm}
                         onSelectArticle={handleArticleSelect}
                         selectedArticleId={selectedArticleId}
@@ -610,6 +641,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                         currentGroupId={groupId}
                         lastUpdatedArticleInfo={lastUpdatedArticleInfo}
                         onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
+                        isPullingDown={pullDownProgress > 0}
                       />
                     ) : (
                       <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
@@ -620,7 +652,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       value={activeListFilter}
                       onChange={(e) => {
                           const newFilter = e.target.value as FilterType;
-                          console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
+                          // console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
                           setFilter(newFilter);
                         }}
                       style={{ width: '100%', display: 'flex' }}

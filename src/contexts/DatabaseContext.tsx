@@ -5,10 +5,10 @@ import { RssDatabase, initializeDatabaseSingleton, dbInstance, isDbInitialized }
 interface DatabaseContextType {
   db: RssDatabase | null;
   isInitialized: boolean;
-  refreshTrigger: number;
-  triggerRefresh: () => void;
-  feedListRefreshTrigger: number;
-  triggerFeedListRefresh: () => void;
+  articleListRefreshTrigger: number;
+  triggerArticleListRefresh: () => void;
+  feedCountRefreshTrigger: number;
+  triggerFeedCountRefresh: () => void;
   initialLoadRefreshed: boolean;
   setInitialLoadRefreshed: () => void;
 }
@@ -25,8 +25,8 @@ interface DatabaseProviderProps {
 export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) => {
   // state 现在只用于触发重新渲染，而不是存储实例
   const [initializationCompleted, setInitializationCompleted] = useState(isDbInitialized);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [feedListRefreshTrigger, setFeedListRefreshTrigger] = useState(0);
+  const [articleListRefreshTrigger, setArticleListRefreshTrigger] = useState(0);
+  const [feedCountRefreshTrigger, setFeedCountRefreshTrigger] = useState(0);
   const [initialLoadRefreshed, setInitialLoadRefreshed] = useState(false);
 
   useEffect(() => {
@@ -45,15 +45,15 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
     }
   }, [initializationCompleted]);
 
-  const triggerRefresh = useCallback(() => {
-    setRefreshTrigger(prev => {
-      console.log('[DatabaseContext] Data refresh triggered. Old trigger:', prev, 'New trigger:', prev + 1);
+  const triggerArticleListRefresh = useCallback(() => {
+    setArticleListRefreshTrigger(prev => {
+      console.log('[DatabaseContext] Article list refresh triggered. Old trigger:', prev, 'New trigger:', prev + 1);
       return prev + 1;
     });
   }, []);
 
-  const triggerFeedListRefresh = useCallback(() => {
-    setFeedListRefreshTrigger(prev => prev + 1);
+  const triggerFeedCountRefresh = useCallback(() => {
+    setFeedCountRefreshTrigger(prev => prev + 1);
   }, []);
 
   const handleSetInitialLoadRefreshed = useCallback(() => {
@@ -63,10 +63,10 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
   const value = {
     db: dbInstance,
     isInitialized: initializationCompleted,
-    refreshTrigger,
-    triggerRefresh,
-    feedListRefreshTrigger,
-    triggerFeedListRefresh,
+    articleListRefreshTrigger,
+    triggerArticleListRefresh,
+    feedCountRefreshTrigger,
+    triggerFeedCountRefresh,
     initialLoadRefreshed,
     setInitialLoadRefreshed: handleSetInitialLoadRefreshed
   };

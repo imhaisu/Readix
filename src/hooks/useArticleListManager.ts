@@ -29,7 +29,7 @@ export const useArticleListManager = ({
   onSelectArticle,
   onLastUpdatedArticleInfoChange,
 }: UseArticleListManagerProps) => {
-  const { db, isInitialized, triggerRefresh, refreshTrigger } = useDatabase();
+  const { db, isInitialized, triggerFeedCountRefresh, articleListRefreshTrigger } = useDatabase();
   const { settings } = useSettings();
 
   const [loading, setLoading] = useState(true);
@@ -40,6 +40,7 @@ export const useArticleListManager = ({
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exemptedArticleIds, setExemptedArticleIds] = useState<Set<string>>(new Set());
+  const [persistentlyExemptedIds, setPersistentlyExemptedIds] = useState<Set<string>>(new Set());
 
   const articlesRef = useRef(allArticles);
   articlesRef.current = allArticles;
@@ -65,13 +66,13 @@ export const useArticleListManager = ({
           await db.feeds.where('id').equals(feed.id).modify((f) => {
             f.unreadCount = (f.unreadCount || 0) + change;
           });
-          triggerRefresh();
+          triggerFeedCountRefresh();
         }
       }
     } catch (error) {
       console.error("Error toggling article read status:", error);
     }
-  }, [db, feedInfoMap, triggerRefresh, onLastUpdatedArticleInfoChange, lastUpdatedArticleInfo]);
+  }, [db, feedInfoMap, triggerFeedCountRefresh, onLastUpdatedArticleInfoChange, lastUpdatedArticleInfo]);
 
   const toggleFnRef = useRef(toggleArticleReadStatus);
   toggleFnRef.current = toggleArticleReadStatus;
@@ -115,6 +116,8 @@ export const useArticleListManager = ({
         setIsRefreshing(true); // Spinner on subsequent loads
       }
       setError(null);
+      setExemptedArticleIds(new Set());
+      setPersistentlyExemptedIds(new Set());
 
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
@@ -175,11 +178,12 @@ export const useArticleListManager = ({
 
     loadArticlesForContext();
     
-  }, [db, isInitialized, currentFeedId, currentGroupId, listRefreshKey, refreshTrigger]);
+  }, [db, isInitialized, currentFeedId, currentGroupId, listRefreshKey, articleListRefreshTrigger]);
 
   // Effect to clear exemptions when the main context (feed or group) changes
   useEffect(() => {
     setExemptedArticleIds(new Set());
+    setPersistentlyExemptedIds(new Set());
   }, [currentFeedId, currentGroupId]);
 
   // Effect 2: Filter and sort articles for display when data or filters change
@@ -200,7 +204,7 @@ export const useArticleListManager = ({
     // Apply main filters from the 'filter' prop
     if (filter) {
       filtered = filtered.filter(article => {
-        if (exemptedArticleIds.has(article.id)) return true;
+        if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) return true;
 
         let passes = true;
         if (typeof filter.isRead === 'string' && article.isRead !== filter.isRead) {
@@ -228,6 +232,7 @@ export const useArticleListManager = ({
       if (!isSelectedInList) {
         const selectedArticle = allArticles.find((a: Article) => a.id === selectedArticleId);
         if (selectedArticle) {
+          setPersistentlyExemptedIds(prev => new Set(prev).add(selectedArticleId));
           // Instead of pushing and re-sorting, find the correct position and insert
           const insertIndex = filtered.findIndex((a: Article) => a.publishDate < selectedArticle.publishDate);
           if (insertIndex === -1) {
@@ -247,7 +252,7 @@ export const useArticleListManager = ({
         onSelectArticle(null);
       }
     }
-  }, [allArticles, filter, searchTerm, selectedArticleId, onSelectArticle, prevFilter, exemptedArticleIds]);
+  }, [allArticles, filter, searchTerm, selectedArticleId, onSelectArticle, prevFilter, exemptedArticleIds, persistentlyExemptedIds]);
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;
@@ -285,7 +290,7 @@ export const useArticleListManager = ({
           }
         }
       }
-      triggerRefresh();
+      triggerFeedCountRefresh();
       return articlesToMark.length;
     } catch (error) {
       console.error('批量标记文章为已读失败:', error);

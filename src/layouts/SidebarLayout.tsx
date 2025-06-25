@@ -25,7 +25,7 @@ import { useSettings } from '../contexts/SettingsContext';
 import { FeedSource, Group, Article as DbArticle } from '../db/database';
 import { refreshAllFeeds, fetchRssFeed } from '../utils/rssParser';
 import { cleanupOldArticles } from '../utils/cleanupHelper';
-import { getTodayRange } from '../utils/helpers';
+import { getTodayRange, updateUnreadCountOptimized } from '../utils/helpers';
 import { processFeedIcons } from '../utils/iconUtils';
 import { useFilter } from '../contexts/FilterContext';
 import styles from './SidebarLayout.module.css';
@@ -48,7 +48,7 @@ const SidebarLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { settings, isInitialized: settingsInitialized, updateLayoutSettings } = useSettings();
-  const { db, refreshTrigger, isInitialized: dbInitialized, triggerRefresh } = useDatabase();
+  const { db, articleListRefreshTrigger, feedCountRefreshTrigger, isInitialized: dbInitialized, triggerArticleListRefresh, triggerFeedCountRefresh } = useDatabase();
   const { filter } = useFilter();
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
@@ -154,28 +154,28 @@ const SidebarLayout: React.FC = () => {
 
   // 日志：监控弹窗状态变化
   useEffect(() => {
-    console.log(`[SidebarLayout] isDiscoverModalOpen 状态变为: ${isDiscoverModalOpen}`);
+    // console.log(`[SidebarLayout] isDiscoverModalOpen 状态变为: ${isDiscoverModalOpen}`);
   }, [isDiscoverModalOpen]);
 
   useEffect(() => {
     if (dbInitialized && settingsInitialized && db && !startupTasksDone.current) {
-      console.log('[SidebarLayout] Running startup tasks...');
+      // console.log('[SidebarLayout] Running startup tasks...');
       
       cleanupOldArticles(db, settings.general.retentionDays)
         .then(() => console.log('[SidebarLayout] Article cleanup task completed on startup.'))
         .catch(err => console.error('[SidebarLayout] Error during startup article cleanup:', err))
         .finally(() => {
-          triggerRefresh(); 
+          triggerArticleListRefresh(); 
         });
 
       if (settings.general.syncOnStartup) {
-        console.log('[SidebarLayout] Syncing feeds on startup...');
+        // console.log('[SidebarLayout] Syncing feeds on startup...');
         handleRefreshAll(true);
       }
       
       startupTasksDone.current = true;
     }
-  }, [dbInitialized, settingsInitialized, db, settings.general.syncOnStartup, settings.general.retentionDays, triggerRefresh]);
+  }, [dbInitialized, settingsInitialized, db, settings.general.syncOnStartup, settings.general.retentionDays, triggerArticleListRefresh]);
 
   useEffect(() => {
     if (refreshIntervalId.current) {
@@ -185,10 +185,10 @@ const SidebarLayout: React.FC = () => {
 
     if (dbInitialized && settingsInitialized && db && settings.general.updateFrequency > 0) {
       const intervalMinutes = settings.general.updateFrequency;
-      console.log(`[SidebarLayout] Setting up periodic refresh every ${intervalMinutes} minutes.`);
+      // console.log(`[SidebarLayout] Setting up periodic refresh every ${intervalMinutes} minutes.`);
       
       refreshIntervalId.current = setInterval(() => {
-        console.log('[SidebarLayout] Performing periodic feeds refresh...');
+        // console.log('[SidebarLayout] Performing periodic feeds refresh...');
         handleRefreshAll(true);
       }, intervalMinutes * 60 * 1000);
     }
@@ -196,7 +196,7 @@ const SidebarLayout: React.FC = () => {
     return () => {
       if (refreshIntervalId.current) {
         clearInterval(refreshIntervalId.current);
-        console.log('[SidebarLayout] Cleared periodic refresh interval.');
+        // console.log('[SidebarLayout] Cleared periodic refresh interval.');
       }
     };
   }, [dbInitialized, settingsInitialized, db, settings.general.updateFrequency]);
@@ -205,7 +205,7 @@ const SidebarLayout: React.FC = () => {
     if (!db) return;
     const loadSupportingData = async () => {
       try {
-      console.log('[SidebarLayout] Initial data load or db instance changed.');
+      // console.log('[SidebarLayout] Initial data load or db instance changed.');
       const groupsData = await db.groups.toArray();
       const feedsData = await db.feeds.toArray();
         
@@ -224,19 +224,19 @@ const SidebarLayout: React.FC = () => {
 
   useEffect(() => {
     if (!db || !dbInitialized) {
-      console.log('[SidebarLayout] Skipping feed reload because db or dbInitialized is not ready.');
+      // console.log('[SidebarLayout] Skipping feed reload because db or dbInitialized is not ready.');
       return;
     }
 
     const reloadFeedsForRefresh = async () => {
-      console.log(`[SidebarLayout] refreshTrigger changed to ${refreshTrigger}. Reloading feeds and groups for UI update.`);
+      // console.log(`[SidebarLayout] articleListRefreshTrigger changed to ${articleListRefreshTrigger}. Reloading feeds and groups for UI update.`);
       try {
         const [feedsData, groupsData] = await Promise.all([
           db.feeds.toArray(),
           db.groups.toArray()
         ]);
 
-        console.log('[SidebarLayout] Fetched data after refresh trigger. Feeds count:', feedsData.length, 'Groups count:', groupsData.length);
+        // console.log('[SidebarLayout] Fetched data after refresh trigger. Feeds count:', feedsData.length, 'Groups count:', groupsData.length);
         
         // 处理订阅源图标
         const processedFeedsData = await processFeedIcons(feedsData);
@@ -249,13 +249,13 @@ const SidebarLayout: React.FC = () => {
       }
     };
 
-    if (typeof refreshTrigger === 'number' && refreshTrigger > 0) {
-      console.log(`[SidebarLayout] Condition met for reloading feeds: refreshTrigger (${refreshTrigger}) > 0 and db is initialized.`);
+    if (typeof articleListRefreshTrigger === 'number' && articleListRefreshTrigger > 0) {
+      // console.log(`[SidebarLayout] Condition met for reloading feeds: articleListRefreshTrigger (${articleListRefreshTrigger}) > 0 and db is initialized.`);
       reloadFeedsForRefresh();
     } else {
-      console.log(`[SidebarLayout] Condition NOT met for reloading feeds: refreshTrigger=${refreshTrigger}, dbInitialized=${dbInitialized}`);
+      // console.log(`[SidebarLayout] Condition NOT met for reloading feeds: articleListRefreshTrigger=${articleListRefreshTrigger}, dbInitialized=${dbInitialized}`);
     }
-  }, [db, refreshTrigger, dbInitialized]);
+  }, [db, articleListRefreshTrigger, dbInitialized]);
 
   // useEffect 用于获取和更新文章数量
   useEffect(() => {
@@ -263,6 +263,8 @@ const SidebarLayout: React.FC = () => {
 
     const fetchCounts = async () => {
       try {
+        // console.log('[SidebarLayout] Calculating counts based on filter:', filter);
+        
         // 根据 filter 状态构建查询条件
         const filterCondition = (article: DbArticle) => {
           if (filter === 'unread') {
@@ -274,27 +276,24 @@ const SidebarLayout: React.FC = () => {
           return true; // 'all' 或其他情况
         };
 
-        // 1. 计算今日文章数
+        const allArticles = await db.articles.toArray();
+        
+        // 分别计算各个分类的数量
         const todayRange = getTodayRange();
         const todayPromise = db.articles
           .where('publishDate').between(todayRange.start, todayRange.end, true, true)
           .filter(filterCondition)
           .count();
 
-        // 2. 计算所有文章数
         const allPromise = db.articles.filter(filterCondition).count();
-        
-        // 3. 计算 "稍后读" 数量
+         
         const readLaterPromise = db.articles
           .where({ isReadLater: 'true' })
           .filter(filterCondition)
           .count();
 
-        // 4. 计算未读总数 (这个通常用于应用角标，可能不需要遵循筛选器)
         const totalUnreadPromise = db.articles.where('isRead').equals('false').count();
-        
-        // 5. 计算收藏总数 (同上，这个特定视图的 count 可能也不需要遵循筛选器)
-        // 在这里我们让它遵循筛选器，以保持UI一致性
+         
         const starredPromise = db.articles
           .where({ isStarred: 'true' })
           .filter(filterCondition)
@@ -304,15 +303,15 @@ const SidebarLayout: React.FC = () => {
           todayPromise,
           allPromise,
           readLaterPromise,
-          totalUnreadPromise, // totalUnreadPromise 仍然计算总未读
+          totalUnreadPromise,
           starredPromise
         ]);
 
         setTodayCount(today);
         setAllCount(all);
         setReadLaterCount(readLater);
-        setUnreadCount(unread); // 这个 state 也许可以重命名为 totalUnreadCount
-        setStarredCount(starred); // 这个 state 也许可以重命名为 totalStarredCount
+        setUnreadCount(unread);
+        setStarredCount(starred);
       } catch (error) {
         console.error("[SidebarLayout] Error fetching article counts:", error);
       }
@@ -321,8 +320,8 @@ const SidebarLayout: React.FC = () => {
     if (dbInitialized) {
       fetchCounts();
     }
-    // 3. 将 filter 和 refreshTrigger 添加到依赖项
-  }, [db, dbInitialized, refreshTrigger, filter]);
+    // 3. 将 filter 和 articleListRefreshTrigger 添加到依赖项
+  }, [db, dbInitialized, filter, articleListRefreshTrigger, feedCountRefreshTrigger]);
 
   const getSelectedKey = () => {
     const path = location.pathname;
@@ -346,101 +345,59 @@ const SidebarLayout: React.FC = () => {
     if (!isSilent) {
         setRefreshing(true);
     }
-    console.log(`[SidebarLayout] handleRefreshAll called. Silent: ${isSilent}`);
+    
     try {
-      await refreshAllFeeds(
-        feeds,
-        (feed, articles) => { /* perFeedCallback */ },
-        async (results) => { /* allDoneCallback */
-          let totalTrulyNewArticles = 0;
-          const feedUpdatePromises = [];
-          const updatedFeedIds = new Set<string>();
+      const feedsToRefresh = await db.feeds.toArray();
+      if(feedsToRefresh.length === 0) {
+        setRefreshing(false);
+        return;
+      }
+      
+      const results = await refreshAllFeeds(feedsToRefresh);
 
-          for (const result of results) {
-            if (!result.feed.id) {
-              console.warn('[SidebarLayout] Skipping feed without ID:', result.feed);
-              continue;
+      for (const result of results) {
+        const { feed, articles: fetchedArticles } = result;
+        if (fetchedArticles.length > 0 && feed.id) {
+          const existingArticles = await db.articles.where('sourceId').equals(feed.id).toArray();
+          const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
+
+          const articlesToPut = fetchedArticles.map(fetchedArticle => {
+            const existingArticle = existingArticlesMap.get(fetchedArticle.id);
+            if (existingArticle) {
+              return {
+                ...fetchedArticle,
+                isRead: existingArticle.isRead,
+                isStarred: existingArticle.isStarred,
+                scrollPosition: existingArticle.scrollPosition,
+                isReadLater: existingArticle.isReadLater,
+              };
+            } else {
+              return fetchedArticle;
             }
-            const incomingArticles = result.articles.map(a => ({...a, sourceId: result.feed.id! }));
-            
-            if (incomingArticles.length > 0 && db) {
-              try {
-                const incomingArticleIds = incomingArticles.map(a => a.id);
-                
-                const existingArticles = await db.articles.where('id').anyOf(incomingArticleIds).toArray();
-                const existingArticleIds = new Set(existingArticles.map(a => a.id));
-                
-                const articlesToAdd = incomingArticles.filter(a => !existingArticleIds.has(a.id));
-                
-                let newlyAddedCount = 0;
-                if (articlesToAdd.length > 0) {
-                  await db.articles.bulkAdd(articlesToAdd);
-                  newlyAddedCount = articlesToAdd.length;
-                  totalTrulyNewArticles += newlyAddedCount;
-                }
-                
-                const currentFeed = await db.feeds.get(result.feed.id!);
-                if (currentFeed) {
-                  const feedChanges: Partial<FeedSource> = {
-                    lastUpdated: new Date()
-                  };
-                  if (result.feed.title && currentFeed.title !== result.feed.title) {
-                    feedChanges.title = result.feed.title;
-                  }
-                  if (newlyAddedCount > 0) {
-                    feedChanges.unreadCount = (currentFeed.unreadCount || 0) + newlyAddedCount;
-                  }
-                  
-                  if (Object.keys(feedChanges).length > 1 || newlyAddedCount > 0 || (feedChanges.title && feedChanges.title !== currentFeed.title)) {
-                     feedUpdatePromises.push(db.feeds.update(result.feed.id!, feedChanges));
-                     updatedFeedIds.add(result.feed.id!);
-                  } else if (!updatedFeedIds.has(result.feed.id!)) {
-                    feedUpdatePromises.push(db.feeds.update(result.feed.id!, { lastUpdated: new Date() }));
-                  }
-                }
-              } catch(e: any) {
-                console.error(`[SidebarLayout] Error processing articles for feed: ${result.feed.id}`, e);
-                if (e && e.name === 'BulkError') {
-                    console.warn(`[SidebarLayout] BulkError occurred for feed ${result.feed.id} despite pre-filtering. This may indicate issues with ID generation or concurrent updates. Failures:`, e.failures);
-                }
-              }
-            } else if (result.feed.title && db) {
-               const currentFeed = await db.feeds.get(result.feed.id!);
-               if (currentFeed && currentFeed.title !== result.feed.title) {
-                   feedUpdatePromises.push(db.feeds.update(result.feed.id!, { title: result.feed.title, lastUpdated: new Date() }));
-                   updatedFeedIds.add(result.feed.id!);
-               } else if (currentFeed) {
-                   feedUpdatePromises.push(db.feeds.update(result.feed.id!, { lastUpdated: new Date() }));
-               }
-            }
-          }
+          });
           
-          if (feedUpdatePromises.length > 0) {
-            await Promise.all(feedUpdatePromises);
-          }
-          
-          console.log(`[SidebarLayout] Feeds refresh complete. ${totalTrulyNewArticles} new articles actually added.`);
-          
-          if (totalTrulyNewArticles > 0 || updatedFeedIds.size > 0) {
-            triggerRefresh();
-          }
+          await db.articles.bulkPut(articlesToPut);
+          await updateUnreadCountOptimized(db, feed.id);
         }
-      );
+      }
+
+      triggerFeedCountRefresh();
+      triggerArticleListRefresh();
+
     } catch (error) {
       console.error('[SidebarLayout] Feed refresh operation failed:', error);
     } finally {
       if (!isSilent) {
         setRefreshing(false);
       }
-      console.log('[SidebarLayout] handleRefreshAll finished.');
     }
-  }, [db, refreshing, feeds, triggerRefresh]);
+  }, [db, refreshing, feeds, triggerArticleListRefresh, triggerFeedCountRefresh]);
 
   // 新增: 应用启动时自动刷新
   useEffect(() => {
     // 确保只在DB初始化后执行一次
     if (dbInitialized && !startupTasksDone.current) {
-      console.log('[SidebarLayout] Initializing startup refresh.');
+      // console.log('[SidebarLayout] Initializing startup refresh.');
       handleRefreshAll(true); // silent refresh
       startupTasksDone.current = true;
     }
@@ -452,7 +409,7 @@ const SidebarLayout: React.FC = () => {
       console.error('[SidebarLayout] DB not available or feed ID missing for refreshSingleFeedArticles');
       return;
     }
-    console.log(`[SidebarLayout] Refreshing articles for feed: ${feedToRefresh.title} (ID: ${feedToRefresh.id})`);
+    // console.log(`[SidebarLayout] Refreshing articles for feed: ${feedToRefresh.title} (ID: ${feedToRefresh.id})`);
     // 我们可以暂时不设置全局 refreshing 状态，或者创建一个更细粒度的状态
     // setRefreshing(true); 
     try {
@@ -470,20 +427,20 @@ const SidebarLayout: React.FC = () => {
             // title: feedToRefresh.title // 假设 title 可能在解析时被修正
           });
         }
-        console.log(`[SidebarLayout] Added ${articles.length} new articles for feed: ${feedToRefresh.title}`);
+        // console.log(`[SidebarLayout] Added ${articles.length} new articles for feed: ${feedToRefresh.title}`);
       } else {
         // 即使没有新文章，也更新 lastUpdated 时间戳
         await db.feeds.update(feedToRefresh.id!, { lastUpdated: new Date() });
-        console.log(`[SidebarLayout] No new articles for feed: ${feedToRefresh.title}. Updated lastUpdated.`);
+        // console.log(`[SidebarLayout] No new articles for feed: ${feedToRefresh.title}. Updated lastUpdated.`);
       }
       // 再次触发刷新，以确保UI（如未读计数、文章列表本身如果正在查看该源）得到更新
-      triggerRefresh(); 
+      triggerArticleListRefresh(); 
     } catch (error) {
       console.error(`[SidebarLayout] Error refreshing single feed ${feedToRefresh.title}:`, error);
     } finally {
       // setRefreshing(false);
     }
-  }, [db, triggerRefresh]);
+  }, [db, triggerArticleListRefresh]);
 
   const handleAddFeedSuccess = async (addedFeedFromModal: FeedSource) => {
     if (!db) { 
@@ -491,42 +448,15 @@ const SidebarLayout: React.FC = () => {
       return;
     }
     setShowAddFeedModal(false);
-
-    // 1. 确保数据库中的 feed 已经被添加 (AddFeedModal 做的事情)
-    // 2. 更新 SidebarLayout 自身的 feeds 状态，并触发 FeedList 的重新渲染
-    try {
-      console.log('[SidebarLayout] Fetching all feeds from DB after add to update SidebarLayout state...');
-      const allFeedsFromDb = await db.feeds.toArray();
-      setFeeds(allFeedsFromDb); // 直接更新 SidebarLayout 的 feeds 状态
-      console.log('[SidebarLayout] SidebarLayout feeds state updated. Count:', allFeedsFromDb.length);
-      // triggerRefresh(); // 调用 triggerRefresh() 可能仍然有益，以防其他依赖于它的组件
-    } catch (error) {
-      console.error('[SidebarLayout] Error fetching feeds directly after add:', error);
-    }
+    // console.log('[SidebarLayout] handleAddFeedSuccess received feed:', addedFeedFromModal);
     
-    // 3. 导航到首页
-    navigate('/');
-    console.log('[SidebarLayout] New feed added, redirecting to home.');
+    // 触发数据库和UI的全面刷新
+    triggerArticleListRefresh();
 
-    // 4. 专门为这个新添加的订阅源获取文章
-    // 确保我们用的是正确的 feed 对象，最好是从 allFeedsFromDb 中找到它
-    if (!addedFeedFromModal.id) {
-      console.error('[SidebarLayout] Added feed missing ID');
-      return;
+    // 添加成功后，自动跳转到新添加的订阅源
+    if (addedFeedFromModal.id) {
+      navigate(`/feed/${addedFeedFromModal.id}`);
     }
-    const newlyAddedFeedInDb = await db.feeds.get(addedFeedFromModal.id);
-
-    if (newlyAddedFeedInDb) {
-      console.log(`[SidebarLayout] Attempting to refresh articles for new feed: ${newlyAddedFeedInDb.title}`);
-      await refreshSingleFeedArticles(newlyAddedFeedInDb);
-      console.log(`[SidebarLayout] Finished refreshing articles for new feed: ${newlyAddedFeedInDb.title}`);
-    } else {
-      console.error(`[SidebarLayout] Could not find newly added feed with ID ${addedFeedFromModal.id} in DB before refreshing articles.`);
-      // 即使找不到，也触发一次全局刷新尝试恢复
-      triggerRefresh();
-    }
-    // 确保最终的UI状态是最新的
-    triggerRefresh();
   };
 
   const handleAddGroupSuccess = async (group: Group) => {
@@ -535,11 +465,11 @@ const SidebarLayout: React.FC = () => {
       return;
     }
     setShowAddGroupModal(false);
-    const updatedGroups = await db.groups.toArray();
-    setGroups(updatedGroups.sort((a,b) => a.order - b.order));
+    triggerArticleListRefresh();
   };
 
   const handleSiderCollapseToggle = (collapsed: boolean) => {
+    // console.log(`[SidebarLayout] Sider panel collapsed state changed to: ${collapsed}`);
     setIsPanelCollapsed(collapsed);
     if (collapsed) {
       siderPanelRef.current?.collapse();
@@ -610,7 +540,7 @@ const SidebarLayout: React.FC = () => {
                             } else if (key === 'add-group') {
                                 setShowAddGroupModal(true);
                             } else if (key === 'discover-feeds') {
-                                console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
+                                // console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
                                 setIsDiscoverModalOpen(true);
                             }
                         }

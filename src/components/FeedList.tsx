@@ -30,7 +30,7 @@ interface FeedListProps {
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
   const { feedId, groupId: currentRouteGroupId } = useParams<{ feedId?: string; groupId?: string }>();
-  const { db, triggerRefresh: triggerDbRefresh, feedListRefreshTrigger } = useDatabase();
+  const { db, triggerArticleListRefresh, feedCountRefreshTrigger } = useDatabase();
   const { filter } = useFilter();
   const [loading, setLoading] = useState(true);
   const [expandedKeys, setExpandedKeys] = useState<ReactKey[]>([]);
@@ -75,7 +75,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
 
     calculateCounts();
-  }, [db, filter, feedsFromProps, feedListRefreshTrigger]);
+  }, [db, filter, feedsFromProps, feedCountRefreshTrigger]);
 
   useEffect(() => {
     if (groupsFromProps) {
@@ -183,7 +183,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             await db.feeds.delete(feedIdToDelete);
             await db.articles.where('sourceId').equals(feedIdToDelete).delete();
           });
-          triggerDbRefresh();
+          triggerArticleListRefresh();
           if (selectedKeys[0] === `feed-${feedIdToDelete}`) {
             navigate('/');
           }
@@ -227,7 +227,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       
       // 根据影响的行数判断是否成功
       if (updatedCount > 0) {
-        triggerDbRefresh();
+        triggerArticleListRefresh();
         message.success("分组已重命名");
       } else {
         // 这种情况很少见，但可能发生（例如，在另一处删除了该分组）
@@ -254,20 +254,22 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       cancelText: '取消',
       onOk: async () => {
         try {
-          const feedsInGroup = await db.feeds.where('groupId').equals(groupId).toArray();
-          const rootFeedsCount = await db.feeds.filter(f => !f.groupId).count();
           await db.transaction('rw', db.feeds, db.groups, async () => {
-            const feedUpdates = feedsInGroup.map((feed, index) => 
-              db.feeds.update(feed.id!, { groupId: undefined, order: rootFeedsCount + index })
-            );
-            await Promise.all(feedUpdates);
+            const feedsInGroup = await db.feeds.where('groupId').equals(groupId).toArray();
+            
+            // 将这些订阅源移动到默认分组（无分组）
+            for (const feed of feedsInGroup) {
+              await db.feeds.update(feed.id!, { groupId: null });
+            }
+
+            // 删除分组
             await db.groups.delete(groupId);
           });
-          triggerDbRefresh();
+          triggerArticleListRefresh();
           if (selectedKeys[0] === `group-${groupId}`) {
             navigate('/');
           }
-          message.success(`分组 "${groupName}" 已删除。`);
+          message.success(`分组 "${groupName}" 已删除，其下的订阅源已移至默认分组。`);
         } catch (error) {
           console.error(`Error deleting group ${groupId}:`, error);
           Modal.error({ title: '删除分组失败', content: `删除分组时发生错误。`});
@@ -291,7 +293,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             const idsToUpdate = articlesToUpdate.map(a => a.id);
             await db.articles.where('id').anyOf(idsToUpdate).modify({ isRead: 'true' });
             await db.feeds.update(feedId, { unreadCount: 0 });
-            triggerDbRefresh();
+            triggerArticleListRefresh();
             message.success(`"${feedTitle}" 下 ${articlesToUpdate.length} 篇文章已标为已读。`);
           } else {
             message.info(`"${feedTitle}" 没有未读文章。`);
@@ -327,7 +329,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
                         }
                     }
                 }
-                triggerDbRefresh();
+                triggerArticleListRefresh();
                 if (totalMarked > 0) {
                     message.success(`分组 "${gName}" 下 ${totalMarked} 篇文章已标为已读。`);
                 } else {
@@ -347,7 +349,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   };
   
   const handleEditFeedSuccess = (updatedFeed: FeedSource) => {
-    triggerDbRefresh();
+    triggerArticleListRefresh();
     setIsEditFeedModalVisible(false);
     setEditingFeedData(null);
   };

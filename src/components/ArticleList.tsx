@@ -34,6 +34,7 @@ interface ArticleListProps {
   lastUpdatedArticleInfo?: { id: string, changes: Partial<Article> } | null;
   listRefreshKey?: number;
   onLastUpdatedArticleInfoChange: (info: { id: string, changes: Partial<Article> } | null) => void;
+  isPullingDown?: boolean;
 }
 
 // 辅助函数：格式化日期
@@ -63,9 +64,12 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
   currentGroupId,
   lastUpdatedArticleInfo,
   listRefreshKey,
-  onLastUpdatedArticleInfoChange
+  onLastUpdatedArticleInfoChange,
+  isPullingDown,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  console.log(`[ArticleList Render] isPullingDown prop: ${isPullingDown}`);
 
   const {
     loading,
@@ -87,6 +91,31 @@ const ArticleList = forwardRef<ArticleListHandle, ArticleListProps>(({
     onSelectArticle,
     onLastUpdatedArticleInfoChange,
   });
+
+  useEffect(() => {
+    if (selectedArticleId && !isPullingDown) {
+      setTimeout(() => {
+        if (!containerRef.current) return;
+        const articleElement = containerRef.current.querySelector(`[data-article-id="${selectedArticleId}"]`) as HTMLElement;
+        if (articleElement) {
+          const rect = articleElement.getBoundingClientRect();
+          const containerRect = containerRef.current.getBoundingClientRect();
+          
+          const isFullyVisible = (
+              rect.top >= containerRect.top &&
+              rect.bottom <= containerRect.bottom
+          );
+
+          if (!isFullyVisible) {
+            articleElement.scrollIntoView({
+              behavior: 'auto',
+              block: 'center',
+            });
+          }
+        }
+      }, 0);
+    }
+  }, [displayedArticles, selectedArticleId, isPullingDown]);
 
   // 键盘事件处理函数
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
