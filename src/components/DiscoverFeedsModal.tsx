@@ -3,7 +3,7 @@ import { Modal, List, Button, Avatar, Typography } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { presetFeeds, PresetFeed } from '../data/presetFeeds';
-import { FeedSource } from '../contexts/DatabaseContext';
+import { FeedSource } from '../db/database';
 
 interface DiscoverFeedsModalProps {
   isOpen: boolean;
@@ -58,7 +58,7 @@ const DiscoverFeedItem: React.FC<DiscoverFeedItemProps> = ({ feed, isSubscribed,
 };
 
 const DiscoverFeedsModal: React.FC<DiscoverFeedsModalProps> = ({ isOpen, onClose, existingFeeds }) => {
-  const { db, triggerRefresh } = useDatabase();
+  const { db, triggerFeedCountRefresh, triggerArticleListRefresh } = useDatabase();
 
   const subscribedUrls = useMemo(() => {
     return new Set((existingFeeds || []).map(feed => feed.url));
@@ -82,11 +82,12 @@ const DiscoverFeedsModal: React.FC<DiscoverFeedsModalProps> = ({ isOpen, onClose
 
     try {
       await db.feeds.add(newFeed);
-      triggerRefresh();
+      triggerFeedCountRefresh();
+      triggerArticleListRefresh();
     } catch (error) {
       console.error(`添加订阅源失败: ${feed.name}`, error);
     }
-  }, [db, triggerRefresh]);
+  }, [db, triggerFeedCountRefresh, triggerArticleListRefresh]);
 
   const handleRemoveFeed = useCallback(async (feedUrl: string) => {
     if (!db) return;
@@ -95,12 +96,13 @@ const DiscoverFeedsModal: React.FC<DiscoverFeedsModalProps> = ({ isOpen, onClose
     if (feedToRemove && feedToRemove.id) {
       try {
         await db.feeds.delete(feedToRemove.id);
-        triggerRefresh();
+        triggerFeedCountRefresh();
+        triggerArticleListRefresh();
       } catch (error) {
         console.error(`移除订阅源失败: ${feedUrl}`, error);
       }
     }
-  }, [db, triggerRefresh, existingFeeds]);
+  }, [db, triggerFeedCountRefresh, triggerArticleListRefresh, existingFeeds]);
 
   return (
     <Modal

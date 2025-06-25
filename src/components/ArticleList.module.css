@@ -30,6 +30,8 @@
   padding: 10px;
   /* 移除阴影和transform效果 */
   box-shadow: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .listItemV5:hover {

@@ -141,10 +141,18 @@
   background-color: #ffe58f;
   border-radius: 3px;
   padding: 2px 1px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+/* 带笔记的高亮有特殊样式 */
+:global(.customHighlightWithNote) {
+  background-color: #ffd591; /* 更深的颜色 */
+  border-bottom: 2px dotted #fa8c16; /* 添加底部虚线，更容易识别为带笔记 */
 }
 
 :global(.customHighlight:hover) {
-  cursor: pointer;
+  background-color: #faad14;
 }
 
 .loadingContainer,
@@ -275,6 +283,21 @@
   margin: 1.2em auto;
   display: block;
   border-radius: 4px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  object-fit: contain;
+  object-position: center;
+  /* 确保图片不会超过文章宽度 */
+  max-height: 80vh;
+}
+
+.articleContent img.broken-image {
+  display: none; /* 隐藏损坏的图片 */
+}
+
+.articleContent img:hover {
+  transform: scale(1.01);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .articleContent a {

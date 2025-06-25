@@ -668,6 +668,7 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
     const dom = await JSDOM.fromURL(articleUrl, {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
       referrer: articleUrl,
+      resources: "usable", // 允许加载外部资源
     });
     
     const reader = new Readability(dom.window.document);
@@ -684,24 +685,58 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
         const src = img.getAttribute('src');
         if (src) {
           try {
-            const absoluteSrc = new URL(src, articleUrl).href;
-            img.setAttribute('src', absoluteSrc);
+            // 处理数据URL和已经是绝对URL的情况
+            if (src.startsWith('data:') || src.match(/^https?:\/\//i)) {
+              // 不需要修改，已经是绝对路径或数据URL
+            } else {
+              const absoluteSrc = new URL(src, articleUrl).href;
+              img.setAttribute('src', absoluteSrc);
+            }
+            
+            // 添加错误处理，当图片加载失败时提供备用方案
+            img.setAttribute('onerror', "this.onerror=null; this.style.display='none';");
+            
+            // 确保图片不会超出容器宽度
+            img.setAttribute('style', 'max-width: 100%; height: auto;');
           } catch (e) {
             console.error(`无效的图片 URL ${src} 在 ${articleUrl}:`, e);
+            img.setAttribute('alt', '无法加载的图片');
           }
         }
       });
       
-      // 你也可以在这里处理其他元素的相对链接，例如 <a> 标签
+      // 处理其他元素的相对链接，例如 <a> 标签
       const links = document.querySelectorAll('a');
       links.forEach(link => {
         const href = link.getAttribute('href');
         if (href) {
-           try {
-            const absoluteHref = new URL(href, articleUrl).href;
-            link.setAttribute('href', absoluteHref);
+          try {
+            if (!href.match(/^https?:\/\//i) && !href.startsWith('#')) {
+              const absoluteHref = new URL(href, articleUrl).href;
+              link.setAttribute('href', absoluteHref);
+            }
           } catch (e) {
             console.error(`无效的链接 URL ${href} 在 ${articleUrl}:`, e);
+          }
+        }
+      });
+      
+      // 处理具有背景图片的元素
+      const elementsWithBgImage = document.querySelectorAll('[style*="background-image"]');
+      elementsWithBgImage.forEach(el => {
+        const style = el.getAttribute('style');
+        if (style) {
+          const urlMatch = style.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/i);
+          if (urlMatch && urlMatch[1]) {
+            try {
+              if (!urlMatch[1].match(/^https?:\/\//i) && !urlMatch[1].startsWith('data:')) {
+                const absoluteUrl = new URL(urlMatch[1], articleUrl).href;
+                const newStyle = style.replace(urlMatch[1], absoluteUrl);
+                el.setAttribute('style', newStyle);
+              }
+            } catch (e) {
+              console.error(`无效的背景图片 URL ${urlMatch[1]} 在 ${articleUrl}:`, e);
+            }
           }
         }
       });

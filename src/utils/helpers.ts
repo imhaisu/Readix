@@ -175,12 +175,89 @@ export const debounceDataUpdate = <T extends any[]>(
 }; 
 
 /**
- * 从 HTML 内容中提取第一张图片的 URL
+ * 从 HTML 内容中提取第一张有效图片的 URL
  * @param htmlContent HTML 字符串
  * @returns 图片的 URL，如果找不到则返回 null
  */
 export const extractFirstImage = (htmlContent: string): string | null => {
   if (!htmlContent) return null;
+  
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    
+    // 查找所有图片元素
+    const imgElements = doc.querySelectorAll('img');
+    
+    for (let i = 0; i < imgElements.length; i++) {
+      const img = imgElements[i];
+      const src = img.getAttribute('src');
+      
+      if (src) {
+        // 排除常见的小图标、头像等
+        const width = parseInt(img.getAttribute('width') || '0');
+        const height = parseInt(img.getAttribute('height') || '0');
+        
+        // 检查是否在style属性中设置了宽高
+        let styleWidth = 0;
+        let styleHeight = 0;
+        
+        if (img.hasAttribute('style')) {
+          const style = img.getAttribute('style') || '';
+          
+          const widthMatch = style.match(/width\s*:\s*(\d+)px/);
+          if (widthMatch) styleWidth = parseInt(widthMatch[1]);
+          
+          const heightMatch = style.match(/height\s*:\s*(\d+)px/);
+          if (heightMatch) styleHeight = parseInt(heightMatch[1]);
+        }
+        
+        const effectiveWidth = width || styleWidth;
+        const effectiveHeight = height || styleHeight;
+        
+        // 忽略小图片和1x1像素的追踪图像
+        if ((effectiveWidth > 0 && effectiveWidth < 30) || 
+            (effectiveHeight > 0 && effectiveHeight < 30) || 
+            (effectiveWidth === 1 && effectiveHeight === 1)) {
+          continue;
+        }
+        
+        // 忽略常见的图标和追踪图像的URL模式
+        if (src.includes('icon') || src.includes('logo') || 
+            src.includes('pixel') || src.includes('tracker') || 
+            src.includes('avatar') || src.includes('blank.gif') ||
+            src.includes('spacer.gif') || src.includes('transparent.gif')) {
+          continue;
+        }
+        
+        // 检查背景图片的父元素，这可能是文章的主图
+        if (!src.match(/\.(jpg|jpeg|png|webp|gif)$/i)) {
+          // 如果不是直接的图片URL，检查下一个
+          continue; 
+        }
+        
+        return src;
+      }
+    }
+    
+    // 检查背景图片
+    const elementsWithBgImage = doc.querySelectorAll('[style*="background-image"]');
+    for (let i = 0; i < elementsWithBgImage.length; i++) {
+      const el = elementsWithBgImage[i];
+      const style = window.getComputedStyle(el).backgroundImage;
+      
+      if (style && style !== 'none') {
+        const match = style.match(/url\(['"]?([^'"]+)['"]?\)/);
+        if (match && match[1]) {
+          return match[1];
+        }
+      }
+    }
+  } catch (e) {
+    console.error("提取图片时出错:", e);
+  }
+  
+  // 如果上面的方法都失败了，尝试基本的正则表达式方法
   const imgRegex = /<img[^>]+src="([^">]+)"/;
   const match = htmlContent.match(imgRegex);
   return match ? match[1] : null;

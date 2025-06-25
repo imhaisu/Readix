@@ -536,6 +536,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !searchTerm;
 
+  if (showWelcomePage) {
+    return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;
+  }
+
   if (!dbInitialized || !settingsInitialized) {
     return (
       <Layout className={styles.homeLayout}>
@@ -701,7 +705,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                   onArticleModified={handleArticleModified}
                 />
               ) : (
-                <Empty description="请选择一篇文章阅读" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
+                <div className={styles.emptyDetailPane}>
+                  <Empty description="请选择一篇文章阅读" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
+                </div>
               )}
             </div>
           </Panel>

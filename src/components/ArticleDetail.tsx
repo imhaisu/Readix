@@ -39,7 +39,7 @@ interface ArticleDetailProps {
 }
 
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified }) => {
-  const { db, triggerRefresh, triggerFeedListRefresh } = useDatabase();
+  const { db } = useDatabase();
   const { settings } = useSettings();
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
@@ -300,27 +300,82 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     };
   }, [articleId, viewMode]);
 
-  useEffect(() => {
+  const enhanceImageClickability = useCallback(() => {
     const contentElement = contentRef.current;
     if (!contentElement) return;
 
-    const handleImageClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
-      if (target.tagName === 'IMG') {
-        const url = target.getAttribute('src');
-        if (url) {
-          setImageModalUrl(url);
-          setImageModalVisible(true);
+    const enhanceImgElements = () => {
+      const imgElements = contentElement.querySelectorAll('img');
+      imgElements.forEach(img => {
+        if (!img.hasAttribute('data-enhanced-click')) {
+          img.setAttribute('data-enhanced-click', 'true');
+          img.style.cursor = 'pointer';
+          
+          // 添加图片错误处理
+          img.addEventListener('error', () => {
+            img.classList.add('broken-image');
+            console.log('图片加载失败:', img.getAttribute('src'));
+            
+            // 尝试替换http为https，有时候这能解决问题
+            const src = img.getAttribute('src');
+            if (src && src.startsWith('http:')) {
+              const newSrc = src.replace('http:', 'https:');
+              img.setAttribute('src', newSrc);
+            }
+          });
+          
+          img.addEventListener('click', (e) => {
+            if (img.classList.contains('broken-image')) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            const src = img.getAttribute('src');
+            if (src) {
+              setImageModalUrl(src);
+              setImageModalVisible(true);
+            }
+          });
         }
-      }
+      });
+
+      const potentialBgImgElements = contentElement.querySelectorAll('figure, div.image, div[style*="background-image"], span[style*="background-image"]');
+      potentialBgImgElements.forEach(el => {
+        if (!el.hasAttribute('data-enhanced-click')) {
+          el.setAttribute('data-enhanced-click', 'true');
+          const style = window.getComputedStyle(el);
+          if (style.backgroundImage && style.backgroundImage !== 'none') {
+            (el as HTMLElement).style.cursor = 'pointer';
+            el.addEventListener('click', (e) => {
+              const match = style.backgroundImage.match(/url\(['"]?([^'"]+)['"]?\)/);
+              if (match && match[1]) {
+                e.preventDefault();
+                e.stopPropagation();
+                setImageModalUrl(match[1]);
+                setImageModalVisible(true);
+              }
+            });
+          }
+        }
+      });
     };
 
-    contentElement.addEventListener('click', handleImageClick);
+    enhanceImgElements();
 
-    return () => {
-      contentElement.removeEventListener('click', handleImageClick);
-    };
-  }, [processedContent]);
+    const observer = new MutationObserver(enhanceImgElements);
+    observer.observe(contentElement, { 
+      childList: true, 
+      subtree: true 
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (article && !loading && processedContent) {
+      const cleanup = enhanceImageClickability();
+      return cleanup;
+    }
+  }, [article, loading, processedContent, enhanceImageClickability]);
 
   const handleToggleStar = async () => {
     if (!db || !article || !articleId) return;
@@ -328,7 +383,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     await db.articles.update(articleId, { isStarred: newIsStarred });
     setArticle(prev => prev ? { ...prev, isStarred: newIsStarred } : null);
     onArticleModified(articleId, { isStarred: newIsStarred });
-    triggerRefresh();
   };
 
   const handleToggleReadLater = async () => {
@@ -345,13 +399,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       const newReadStatus = article.isRead === 'true' ? 'false' : 'true';
 
       try {
-        // 在一次数据库操作中同时更新已读状态和滚动位置
         await db.articles.update(article.id, { 
           isRead: newReadStatus,
           ...(currentScrollPosition !== undefined && { scrollPosition: currentScrollPosition })
         });
 
-        // 乐观地更新本地文章状态，包含滚动位置
         const updatedArticle = { 
           ...article, 
           isRead: newReadStatus,
@@ -359,18 +411,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         };
         setArticle(updatedArticle);
         
-        // 通知父组件文章已修改（用于更新列表项状态）
         onArticleModified(article.id, { isRead: newReadStatus });
 
         if (article.sourceId) {
-          // 更新订阅源的未读计数
           updateUnreadCountOptimized(db, article.sourceId);
-          // 触发 FeedList 更新
-          triggerFeedListRefresh();
         }
-        
-        // 移除全局刷新，因为它会导致不必要的重渲染和滚动问题
-        // triggerRefresh();
 
       } catch (error) {
         console.error('更新文章已读状态失败:', error);

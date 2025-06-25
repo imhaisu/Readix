@@ -68,6 +68,8 @@
   flex-shrink: 0;
   background-color: #ffffff;
   margin: 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* 使用全局选择器强制覆盖Ant Design样式 */
@@ -351,11 +353,12 @@
 }
 
 .emptyDetailPane {
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  color: var(--text-secondary);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .viewModePopoverContent {
@@ -412,13 +415,20 @@
   background-color: #ffffff;
   flex-shrink: 0;
   margin-top: 0;
+  gap: 8px;
 }
 
 .panelHeaderTitle {
-  font-size: 14px; /* 缩小标题字体 */
+  flex: 1;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-color);
+  color: var(--text-secondary);
   margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .panelHeaderControls {
@@ -504,10 +514,11 @@
 
 .listTitle {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-end; /* 修改：底部对齐 */
-  padding: 8px 12px 2px 12px; /* 修改：进一步减小底部内边距 */
-  /* 移除分割线 */
+  padding: 8px 12px;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* 提高标题选择器的优先级 */

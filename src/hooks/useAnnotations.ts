@@ -1,23 +1,43 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { message } from 'antd';
-import { useDatabase, Annotation } from '../contexts/DatabaseContext';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { Annotation } from '../db/database';
 
 // a helper function that might be moved to utils later
 const applyHighlights = (content: string, annotationsToApply: Annotation[]): string => {
   let newContent = content;
-  annotationsToApply.forEach(anno => {
-    // Make sure the highlight tag has a unique ID
-    const markTag = `<mark id="annotation-${anno.id}" class="customHighlight">`;
+  
+  // 按照创建时间排序，确保高亮按顺序应用
+  const sortedAnnotations = [...annotationsToApply].sort((a, b) => a.createdAt - b.createdAt);
+  
+  sortedAnnotations.forEach(anno => {
+    // 为高亮和笔记使用不同的样式类
+    const cssClass = anno.type === 'note' ? 'customHighlight customHighlightWithNote' : 'customHighlight';
     
-    // This is a naive replacement. A more robust solution might be needed
-    // if the prefix/suffix context is not unique enough.
+    // 添加独特的ID和类名
+    const markTag = `<mark id="annotation-${anno.id}" class="${cssClass}">`;
+    
+    // 使用前缀和后缀上下文来定位
     const searchString = `${anno.prefix}${anno.text}${anno.suffix}`;
     const replacementString = `${anno.prefix}${markTag}${anno.text}</mark>${anno.suffix}`;
     
+    // 如果找到精确匹配，则应用高亮
     if (newContent.includes(searchString)) {
       newContent = newContent.replace(searchString, replacementString);
+    } 
+    // 如果没有精确匹配，尝试只使用文本进行匹配
+    else if (newContent.includes(anno.text)) {
+      // 这是一个简化的模糊匹配方法，可以根据需要进一步改进
+      // 只替换第一个出现的匹配，避免多处替换造成问题
+      const textIndex = newContent.indexOf(anno.text);
+      if (textIndex >= 0) {
+        const beforeText = newContent.substring(0, textIndex);
+        const afterText = newContent.substring(textIndex + anno.text.length);
+        newContent = `${beforeText}${markTag}${anno.text}</mark>${afterText}`;
+      }
     }
   });
+  
   return newContent;
 };
 
@@ -157,8 +177,9 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     suffixRange.setEnd(range.endContainer, Math.min(range.endContainer.textContent?.length || 0, range.endOffset + 20));
     const suffix = suffixRange.toString();
 
+    const tempId = `pending-${Date.now()}`;
     const tempAnnotation: Annotation = {
-      id: `pending-${Date.now()}`,
+      id: tempId,
       articleId,
       type: 'note',
       text,
@@ -168,11 +189,16 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       createdAt: Date.now()
     };
 
+    // 先应用高亮到内容中，立即提供视觉反馈
+    setProcessedContent(prev => applyHighlights(prev, [tempAnnotation]));
+    
+    // 然后设置pendingAnnotation状态
     setPendingAnnotation(tempAnnotation);
+    
     if (!isSidebarVisible) {
       handleToggleSidebar();
     }
-    setAutoEditNoteId(tempAnnotation.id);
+    setAutoEditNoteId(tempId);
 
     window.getSelection()?.removeAllRanges();
     setSelectionPopup({ visible: false, top: 0, left: 0, range: null });
@@ -182,15 +208,46 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     if (!db || !articleId) return;
     try {
       if (annotationId.startsWith('pending-')) {
-        const newAnnotationData = { ...pendingAnnotation!, noteContent: content, id: `annotation-${Date.now()}` };
+        // 创建新的annotation对象，保持与临时ID相同的前缀/后缀
+        const newId = `annotation-${Date.now()}`;
+        const newAnnotationData: Annotation = { 
+          ...pendingAnnotation!, 
+          noteContent: content, 
+          id: newId,
+          type: 'note' as 'note' // 明确指定类型为 'note'
+        };
+        
+        // 保存到数据库
         await db.annotations.add(newAnnotationData);
+        
+        // 查找并更新临时高亮元素
+        const tempHighlight = document.getElementById(`annotation-${pendingAnnotation!.id}`);
+        if (tempHighlight) {
+          // 更新ID和样式
+          tempHighlight.id = `annotation-${newId}`;
+          // 确保这是带笔记的高亮
+          tempHighlight.classList.add('customHighlightWithNote');
+        } else {
+          // 如果找不到临时高亮元素，重新应用高亮
+          setProcessedContent(prev => applyHighlights(prev, [newAnnotationData]));
+        }
+        
         setPendingAnnotation(null);
-        setProcessedContent(prev => applyHighlights(prev, [newAnnotationData]));
         message.success("笔记已创建");
       } else {
+        // 更新现有笔记
         await db.annotations.update(annotationId, { noteContent: content });
+        
+        // 确保高亮元素有正确的样式
+        const highlightElement = document.getElementById(`annotation-${annotationId}`);
+        if (highlightElement) {
+          highlightElement.classList.add('customHighlightWithNote');
+        }
+        
         message.success("笔记已保存");
       }
+      
+      // 重新加载所有注释数据
       await loadAnnotations();
     } catch (error) {
       console.error("保存笔记失败:", error);
