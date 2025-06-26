@@ -31,3 +31,9 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw? 
+# 临时忽略异常文件
+"src/components/ArticleDetail.tsx
+src/components/ArticleDetail.module.css"
+"src/pages/HomePage.tsx
+src/components/ArticleDetail.tsx
+src/components/ArticleDetail.module.css"
