@@ -1,17 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Settings, defaultSettings } from '../types/settings';
-import { deepMerge } from '../utils/helpers'; // 假设你有一个 deepMerge 工具函数
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { mergeWith } from 'lodash';
+import { Settings, defaultSettings, GeneralSettings, AppearanceSettings, AdvancedSettings, LayoutSettings } from '../types/settings';
+import { message } from 'antd';
 
-// 设置上下文类型
+type Theme = 'light' | 'dark' | 'system';
+
+// 定义 Context 的类型
 interface SettingsContextType {
   settings: Settings;
-  updateSettings: (newSettings: Partial<Settings>) => void;
-  updateGeneralSettings: (newSettings: Partial<Settings['general']>) => void;
-  updateAppearanceSettings: (newSettings: Partial<Settings['appearance']>) => void;
-  updateAdvancedSettings: (newSettings: Partial<Settings['advanced']>) => void;
-  updateLayoutSettings: (newSettings: Partial<Settings['layout']>) => void; // 新增
-  resetSettings: () => void;
   isInitialized: boolean;
+  theme: Theme;
+  updateSettings: (settings: Partial<Settings>) => void;
+  updateGeneralSettings: (settings: Partial<GeneralSettings>) => void;
+  updateAppearanceSettings: (settings: Partial<AppearanceSettings>) => void;
+  updateAdvancedSettings: (settings: Partial<AdvancedSettings>) => void;
+  updateLayoutSettings: (settings: Partial<LayoutSettings>) => void;
+  resetSettings: () => void;
+  setTheme: (theme: Theme) => void;
 }
 
 // 创建上下文，并使用导入的默认设置
@@ -19,85 +24,123 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 // 提供者组件Props类型
 interface SettingsProviderProps {
-  children: ReactNode;
+  children: React.ReactNode;
 }
 
 // 设置提供者组件
 export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) => {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [theme, setTheme] = useState<Theme>('light');
 
   // 从本地存储加载设置
   useEffect(() => {
-    const initializeSettings = async () => {
+    const loadSettings = async () => {
       try {
-        const savedSettings = localStorage.getItem('settings');
-        if (savedSettings) {
-          const parsedSettings = JSON.parse(savedSettings);
-          // 使用 deepMerge 来合并，防止部分设置丢失
-          const mergedSettings = deepMerge(defaultSettings, parsedSettings);
+        const storedSettings = await window.electron.getSettings();
+        if (storedSettings) {
+          const mergedSettings = mergeWith({}, defaultSettings, storedSettings, (objValue, srcValue) => {
+            if (Array.isArray(objValue)) {
+              return srcValue; // 对于数组，直接使用新值替换旧值
+            }
+          });
           setSettings(mergedSettings);
         }
       } catch (error) {
-        console.error('[SettingsContext] Failed to load settings:', error);
+        console.error('Failed to load settings, using defaults.', error);
+        setSettings(defaultSettings);
       } finally {
         setIsInitialized(true);
       }
     };
-    initializeSettings();
+
+    loadSettings();
   }, []);
 
-  const saveSettings = (newSettings: Settings) => {
-    try {
-      localStorage.setItem('settings', JSON.stringify(newSettings));
-    } catch (error) {
-      console.error('[SettingsContext] Failed to save settings:', error);
+  // 当设置变化时，持久化存储
+  useEffect(() => {
+    if (isInitialized) {
+      // Persist settings whenever they change
+      window.electron.saveSettings(settings);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SettingsContext] Settings saved:', settings);
+      }
     }
-  };
+  }, [settings, isInitialized]);
 
-  const updateSettings = (newSettings: Partial<Settings>) => {
-    const updatedSettings = deepMerge(settings, newSettings);
-    setSettings(updatedSettings);
-    saveSettings(updatedSettings);
-  };
+  const updateSettings = useCallback((newSettings: Partial<Settings>) => {
+    setSettings(prev => {
+      // 使用 lodash.merge 进行深度合并
+      const mergedSettings = mergeWith({}, prev, newSettings, (objValue, srcValue) => {
+        if (Array.isArray(objValue)) {
+          return srcValue; // 对于数组，直接使用新值替换旧值
+        }
+      });
+      console.log('[SettingsContext] Settings saved:', mergedSettings);
+      if (window.electron && window.electron.saveSettings) {
+        window.electron.saveSettings(mergedSettings);
+      }
+      return mergedSettings;
+    });
+  }, []);
 
-  const createSettingUpdater = <K extends keyof Settings>(key: K) => (
-    (newValues: Partial<Settings[K]>) => {
-      const newSettings = {
-        ...settings,
-        [key]: {
-          ...settings[key],
-          ...newValues,
-        },
-      };
-      setSettings(newSettings);
-      saveSettings(newSettings);
-    }
-  );
+  // 更新通用设置
+  const updateGeneralSettings = useCallback((newGeneralSettings: Partial<GeneralSettings>) => {
+    setSettings(prev => ({ ...prev, general: mergeWith({}, prev.general, newGeneralSettings, (objValue, srcValue) => {
+      if (Array.isArray(objValue)) {
+        return srcValue; // 对于数组，直接使用新值替换旧值
+      }
+    }) }));
+  }, []);
 
-  const updateGeneralSettings = createSettingUpdater('general');
-  const updateAppearanceSettings = createSettingUpdater('appearance');
-  const updateAdvancedSettings = createSettingUpdater('advanced');
-  const updateLayoutSettings = createSettingUpdater('layout');
+  // 更新外观设置
+  const updateAppearanceSettings = useCallback((newAppearanceSettings: Partial<AppearanceSettings>) => {
+    setSettings(prev => ({ ...prev, appearance: mergeWith({}, prev.appearance, newAppearanceSettings, (objValue, srcValue) => {
+      if (Array.isArray(objValue)) {
+        return srcValue; // 对于数组，直接使用新值替换旧值
+      }
+    }) }));
+  }, []);
 
-  const resetSettings = () => {
+  // 更新高级设置
+  const updateAdvancedSettings = useCallback((newAdvancedSettings: Partial<AdvancedSettings>) => {
+    setSettings(prev => ({ ...prev, advanced: mergeWith({}, prev.advanced, newAdvancedSettings, (objValue, srcValue) => {
+      if (Array.isArray(objValue)) {
+        return srcValue; // 对于数组，直接使用新值替换旧值
+      }
+    }) }));
+  }, []);
+
+  // 更新布局设置
+  const updateLayoutSettings = useCallback((newLayoutSettings: Partial<LayoutSettings>) => {
+    setSettings(prev => ({ ...prev, layout: mergeWith({}, prev.layout, newLayoutSettings, (objValue, srcValue) => {
+      if (Array.isArray(objValue)) {
+        return srcValue; // 对于数组，直接使用新值替换旧值
+      }
+    }) }));
+  }, []);
+
+  // 重置所有设置
+  const resetSettings = useCallback(() => {
     setSettings(defaultSettings);
-    saveSettings(defaultSettings);
-  };
+    message.success('所有设置已恢复为默认值。');
+  }, []);
 
-  const value = {
+  const contextValue = {
     settings,
+    isInitialized,
+    theme,
     updateSettings,
     updateGeneralSettings,
     updateAppearanceSettings,
     updateAdvancedSettings,
-    updateLayoutSettings, // 新增
+    updateLayoutSettings,
     resetSettings,
-    isInitialized,
+    setTheme,
   };
 
   return (
-    <SettingsContext.Provider value={value}>
+    <SettingsContext.Provider value={contextValue}>
       {children}
     </SettingsContext.Provider>
   );

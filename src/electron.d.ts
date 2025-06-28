@@ -47,6 +47,12 @@ declare global {
 
       // 通信与事件监听
       onMessage: (channel: string, callback: (...args: any[]) => void) => () => void;
+
+      // AI 功能
+      invokeAI: (type: 'summary' | 'mindmap' | 'highlight', content: string, contentText: string) => Promise<{ success: boolean; data?: any; error?: string }>;
+      testDoubaoApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
+      streamAiSummary: (contentText: string) => void;
+      onAiSummaryUpdate: (callback: (type: 'chunk' | 'end' | 'error', data?: any) => void) => () => void;
     };
   }
 }

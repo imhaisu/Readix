@@ -37,6 +37,7 @@ export interface AdvancedSettings {
         swipeRight: string;
         pullToRefresh: boolean;
     };
+    doubaoApiKey?: string;
 }
 
 export interface LayoutSettings {
@@ -87,6 +88,7 @@ export const defaultSettings: Settings = {
             swipeRight: 'previousArticle',
             pullToRefresh: true,
         },
+        doubaoApiKey: '',
     },
     layout: {
         windowSize: {

@@ -9,6 +9,10 @@ import axios from 'axios';
 import crypto from 'crypto';
 import type { Settings } from '../src/types/settings'; // 导入类型
 
+// AI 服务配置
+const AI_MODEL = 'doubao-seed-1-6-250615';
+const AI_API_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+
 // 初始化配置存储
 const store = new Store< { settings: Settings } >();
 
@@ -753,6 +757,191 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
   } catch (error) {
     console.error('获取和解析文章失败:', error);
     return null;
+  }
+});
+
+ipcMain.handle('invokeAI', async (event, type, content, contentText) => {
+  const settings = store.get('settings');
+  const apiKey = settings?.advanced?.doubaoApiKey;
+
+  if (!apiKey) {
+    return { success: false, error: '请在设置中配置您的豆包 API Key' };
+  }
+
+  const model = AI_MODEL;
+  const url = AI_API_URL;
+
+  let systemPrompt = '';
+  let userPrompt = '';
+
+  switch (type) {
+    case 'mindmap':
+      systemPrompt = `你是一个高度智能的思维导图专家。你的任务是分析用户提供的文章，并将其转化为一个结构清晰、内容精炼的思维导图。请遵循以下规则：
+1.  **高度概括**：只提取最高层级的核心概念和关键要点。
+2.  **极致精简**：每个节点（每行文字）应为简短的短语或关键词，避免出现长句。
+3.  **层级清晰**：使用 Markdown 的无序列表格式（-、*）来表示层级关系，最多不超过4层。
+4.  **专注于结构**：你的输出应该是纯粹的 Markdown，不包含任何额外的解释或标题。
+5.  **输出语言与输入一致**：如果输入是中文，则输出中文导图。`;
+      userPrompt = `请为以下文章生成思维导图的Markdown表示：\n\n${contentText}`;
+      break;
+    case 'highlight':
+      systemPrompt = `你是一个智能文本分析器。请从用户提供的文本中，抽取出10到15个最重要、最核心的句子。你的输出必须是一个符合JSON格式的字符串数组(string[])，数组中的每个字符串都必须是原文中存在的、未经修改的句子。不要添加任何解释或多余的文字，只返回JSON数组。`;
+      userPrompt = `请分析以下文本并提取关键句：\n\n${contentText}`;
+      break;
+    default:
+      return { success: false, error: '无效的 AI 操作类型' };
+  }
+
+  try {
+    const response = await axios.post(
+      url,
+      {
+        model: model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    const result = response.data.choices[0].message.content;
+    
+    if (type === 'highlight') {
+      try {
+        // 尝试从返回结果中提取 JSON 部分
+        const jsonMatch = result.match(/\[.*\]/s);
+        if (!jsonMatch) {
+          throw new Error('无法在返回结果中找到有效的JSON数组。');
+        }
+        const sentences = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(sentences) && sentences.every(s => typeof s === 'string')) {
+          return { success: true, data: sentences };
+        } else {
+          throw new Error('AI 返回的不是一个有效的字符串数组。');
+        }
+      } catch (e: any) {
+        console.error('解析高亮结果失败:', e.message);
+        console.error('AI 原始返回:', result);
+        return { success: false, error: '智能高亮返回格式错误，无法解析。' };
+      }
+    }
+
+    return { success: true, data: result };
+
+  } catch (error: any) {
+    console.error('AI 调用失败:', error.response?.data || error.message);
+    const errorMessage = error.response?.data?.error?.message || '调用AI服务失败，请检查网络或API Key。';
+    return { success: false, error: errorMessage };
+  }
+});
+
+// 新增：专门处理流式AI摘要
+ipcMain.on('stream-ai-summary', async (event, contentText) => {
+  const settings = store.get('settings');
+  const apiKey = settings?.advanced?.doubaoApiKey;
+
+  if (!apiKey) {
+    mainWindow?.webContents.send('ai-summary-stream-error', '请在设置中配置您的豆包 API Key');
+    return;
+  }
+
+  const model = AI_MODEL;
+  const url = AI_API_URL;
+
+  try {
+    const response = await axios.post(
+      url,
+      {
+        model: model,
+        messages: [
+          { role: 'system', content: '你是一个专业的文章摘要助手。请根据用户提供的文章内容，生成一段简洁、流畅、准确的摘要，字数在300字以内。' },
+          { role: 'user', content: `请为以下文章生成摘要：\n\n${contentText}` },
+        ],
+        stream: true,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        responseType: 'stream',
+      }
+    );
+
+    response.data.on('data', (chunk: Buffer) => {
+      const text = chunk.toString('utf-8');
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const jsonStr = line.substring(6);
+          if (jsonStr === '[DONE]') {
+            mainWindow?.webContents.send('ai-summary-stream-end');
+            return;
+          }
+          try {
+            const parsed = JSON.parse(jsonStr);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              mainWindow?.webContents.send('ai-summary-stream-chunk', { type: 'chunk', data: delta });
+            }
+          } catch (e) {
+            console.error('解析AI流式数据失败:', e);
+          }
+        }
+      }
+    });
+
+    response.data.on('end', () => {
+      mainWindow?.webContents.send('ai-summary-stream-end');
+    });
+
+    response.data.on('error', (err: Error) => {
+      console.error('AI流式传输错误:', err);
+      mainWindow?.webContents.send('ai-summary-stream-error', err.message);
+    });
+
+  } catch (error: any) {
+    console.error('AI 调用失败:', error.response?.data || error.message);
+    const errorMessage = error.response?.data?.error?.message || '调用AI服务失败，请检查网络或API Key。';
+    mainWindow?.webContents.send('ai-summary-stream-error', errorMessage);
+  }
+});
+
+ipcMain.handle('test-doubao-api', async (event, apiKey) => {
+  if (!apiKey) {
+    return { success: false, error: 'API Key 不能为空' };
+  }
+
+  const model = AI_MODEL;
+  const url = AI_API_URL;
+
+  try {
+    await axios.post(
+      url,
+      {
+        model: model,
+        messages: [{ role: 'user', content: 'Say hello.' }],
+        max_tokens: 10,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000, // 10秒超时
+      }
+    );
+    return { success: true };
+  } catch (error: any) {
+    console.error('API Key 测试失败:', error.response?.data || error.message);
+    const errorMessage = error.response?.data?.error?.message || '无法连接到AI服务，请检查API Key或网络连接。';
+    return { success: false, error: errorMessage };
   }
 });
 

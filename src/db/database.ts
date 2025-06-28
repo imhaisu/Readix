@@ -37,6 +37,17 @@ export class RssDatabase extends Dexie {
     this.version(10).stores({
       articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, [sourceId+isRead], [sourceId+isStarred]'
     });
+
+    this.version(11).stores({
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, [sourceId+isRead], [sourceId+isStarred]'
+    });
+
+    this.version(12).stores({
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, aiMindMap, aiHighlightedContent, [sourceId+isRead], [sourceId+isStarred]'
+    }).upgrade(tx => {
+      // New fields aiMindMap and aiHighlightedContent are added.
+      // No data migration needed, they will be undefined by default for existing articles.
+    });
     
     // 定义类型
     this.feeds = this.table('feeds');
@@ -44,6 +55,11 @@ export class RssDatabase extends Dexie {
     this.groups = this.table('groups');
     this.savedLinks = this.table('savedLinks');
     this.annotations = this.table('annotations');
+  }
+
+  async getUnreadCount(): Promise<Record<string, number>> {
+    // Implementation of getUnreadCount method
+    return {};
   }
 }
 
@@ -84,6 +100,10 @@ export interface Article {
   guid?: string;
   scrollPosition?: number;
   isFullText?: boolean;
+  aiSummary?: string;
+  aiMindMap?: string;
+  aiHighlightedContent?: string;
+  annotations?: Annotation[];
 }
 
 export interface Group {

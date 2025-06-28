@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Skeleton, Tooltip, Spin, Empty, message, Modal } from 'antd';
+import { Button, Skeleton, Tooltip, Spin, Empty, message, Modal, Dropdown } from 'antd';
+import type { MenuProps } from 'antd';
 import { 
   StarOutlined, 
   StarFilled,
@@ -17,17 +18,26 @@ import {
   ZoomInOutlined,
   ZoomOutOutlined,
   ReloadOutlined,
+  ExperimentOutlined,
+  CopyOutlined,
+  FileTextOutlined,
+  ApartmentOutlined,
+  BgColorsOutlined,
+  HighlightFilled,
+  FileTextFilled,
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { Article } from '../db/database';
 import { useSettings } from '../contexts/SettingsContext';
 import { format } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
+import { zhCN, enUS } from 'date-fns/locale';
 import { debounce, updateUnreadCountOptimized } from '../utils/helpers';
 import styles from './ArticleDetail.module.css';
 import AnnotationSidebar from './AnnotationSidebar';
 import { useAnnotations } from '../hooks/useAnnotations';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import MindMapModal from './MindMapModal';
+import { useArticleListManager } from '../hooks/useArticleListManager';
 
 interface ArticleDetailProps {
   articleId: string | null;
@@ -53,7 +63,24 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const [isMounted, setIsMounted] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
   const [imageModalUrl, setImageModalUrl] = useState('');
+  const [isSummaryModalVisible, setIsSummaryModalVisible] = useState(false);
+  const [summaryContent, setSummaryContent] = useState('');
+  const [isMindmapModalVisible, setIsMindmapModalVisible] = useState(false);
+  const [mindmapContent, setMindmapContent] = useState('');
+  const [isMindmapLoading, setIsMindmapLoading] = useState(false);
+  const [isHighlightLoading, setIsHighlightLoading] = useState(false);
+  const [hasHighlight, setHasHighlight] = useState(false);
+  const [mindMapMarkdown, setMindMapMarkdown] = useState('');
   
+  // 新增：智能摘要的状态
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [inlineSummaryContent, setInlineSummaryContent] = useState('');
+
+  // 新增：控制AI内容可见性的状态
+  const [isSummaryVisible, setIsSummaryVisible] = useState(false);
+  const [isAiHighlightsVisible, setIsAiHighlightsVisible] = useState(false);
+
   const iconButtonStyle: React.CSSProperties = {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: '50%',
@@ -92,6 +119,265 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     handleCancelPendingAnnotation,
     handleAutoEditApplied,
   } = useAnnotations({ articleId, scrollableContentRef });
+
+  const isAiDisabled = !settings.advanced.doubaoApiKey;
+
+  // 保存AI摘要到数据库
+  const saveAiSummary = async (summary: string) => {
+    if (!db || !articleId) return;
+    try {
+      await db.articles.update(articleId, { aiSummary: summary });
+      setArticle(prev => (prev ? { ...prev, aiSummary: summary } : null));
+    } catch (error) {
+      console.error('保存AI摘要失败:', error);
+      message.error('保存摘要失败');
+    }
+  };
+
+  // 处理智能摘要的流式响应
+  useEffect(() => {
+    if (!articleId) return;
+
+    // 清理上一个文章的摘要状态
+    setInlineSummaryContent('');
+    setSummaryError(null);
+    setIsSummaryLoading(false);
+    setIsSummaryVisible(false); // 新文章默认不显示摘要
+
+    let summaryAccumulator = '';
+
+    const unsubscribe = window.electron.onAiSummaryUpdate((type, data) => {
+      if (type === 'chunk') {
+        setIsSummaryLoading(false); // 收到第一个chunk后就停止loading动画
+        const chunk = data.data;
+        summaryAccumulator += chunk;
+        setInlineSummaryContent(prev => prev + chunk);
+      } else if (type === 'end') {
+        setIsSummaryLoading(false);
+        if (summaryAccumulator.trim().length > 0) {
+          saveAiSummary(summaryAccumulator);
+        }
+      } else if (type === 'error') {
+        setSummaryError(data || '生成摘要时发生未知错误');
+        setIsSummaryLoading(false);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [articleId, db]);
+  
+  // 触发智能摘要
+  const handleToggleSummary = () => {
+    if (!article || isSummaryLoading) return;
+  
+    // 如果已有摘要，直接切换可见性
+    if (article.aiSummary) {
+      setIsSummaryVisible(!isSummaryVisible);
+      return;
+    }
+  
+    // 如果没有摘要，则开始生成流程
+    if (!article.content) return;
+  
+    setIsSummaryVisible(true); // 打开摘要区域以显示加载状态
+    setInlineSummaryContent('');
+    setSummaryError(null);
+    setIsSummaryLoading(true);
+  
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = article.content;
+    const contentText = tempDiv.textContent || tempDiv.innerText || '';
+    
+    window.electron.streamAiSummary(contentText);
+  };
+
+  const handleCopySummary = () => {
+    if (inlineSummaryContent) {
+      navigator.clipboard.writeText(inlineSummaryContent)
+        .then(() => message.success('摘要已复制到剪贴板'))
+        .catch(() => message.error('复制失败'));
+    }
+  };
+
+  const saveAiMindMap = async (markdown: string) => {
+    if (!db || !articleId) return;
+    try {
+      await db.articles.update(articleId, { aiMindMap: markdown });
+      const updatedArticle = { ...article!, aiMindMap: markdown };
+      setArticle(updatedArticle);
+      setMindMapMarkdown(markdown);
+    } catch (error) {
+      console.error('保存AI导图失败:', error);
+      message.error('保存导图失败');
+    }
+  };
+
+  const handleToggleMindmap = async () => {
+    if (!article || isMindmapLoading) return;
+
+    // 如果已有导图数据，直接显示
+    if (article.aiMindMap) {
+      setMindMapMarkdown(article.aiMindMap);
+      setIsMindmapModalVisible(true);
+      return;
+    }
+
+    // 如果没有，则开始生成
+    if (!article.content) return;
+    
+    setIsMindmapLoading(true);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = article.content;
+    const contentText = tempDiv.textContent || tempDiv.innerText || '';
+
+    try {
+      const result = await window.electron.invokeAI('mindmap', article.content, contentText);
+      if (result && result.success) {
+        await saveAiMindMap(result.data);
+        setIsMindmapModalVisible(true);
+      } else {
+        const errorMsg = result?.error || '调用AI服务失败。';
+        message.error({ content: errorMsg });
+      }
+    } catch (e: any) {
+      message.error({ content: `发生未知错误: ${e.message}`});
+    } finally {
+      setIsMindmapLoading(false);
+    }
+  };
+
+  const saveAiHighlightedContent = async (newContent: string) => {
+    if (!db || !articleId) return;
+    try {
+      await db.articles.update(articleId, { aiHighlightedContent: newContent });
+      const updatedArticle = { ...article!, aiHighlightedContent: newContent };
+      setArticle(updatedArticle);
+      
+      const contentWithAllHighlights = applyHighlights(newContent, annotations);
+      setProcessedContent(contentWithAllHighlights);
+
+    } catch (error) {
+      console.error('保存AI高亮失败:', error);
+      message.error('保存高亮失败');
+    }
+  };
+
+  const handleToggleAiHighlight = async () => {
+    if (!article || isHighlightLoading) return;
+
+    // 如果AI高亮内容已存在，直接切换可见性
+    if (article.aiHighlightedContent) {
+      setIsAiHighlightsVisible(!isAiHighlightsVisible);
+      return;
+    }
+    
+    // 否则，生成高亮
+    if (!article.content) return;
+
+    setIsHighlightLoading(true);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = article.content;
+    const contentText = tempDiv.textContent || tempDiv.innerText || '';
+
+    try {
+      const result = await window.electron.invokeAI('highlight', article.content, contentText);
+      if (result && result.success) {
+        const sentences = result.data as string[];
+        // 在原文基础上进行高亮
+        let newContent = article.content;
+        sentences.forEach(sentence => {
+          const trimmedSentence = sentence.trim();
+          if (trimmedSentence) {
+            const regex = new RegExp(
+              trimmedSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+              'gi'
+            );
+            newContent = newContent.replace(regex, (match) => `<mark class="aiHighlight">${match}</mark>`);
+          }
+        });
+        await saveAiHighlightedContent(newContent);
+        setIsAiHighlightsVisible(true); // 生成后自动显示
+      } else {
+        const errorMsg = result?.error || 'AI高亮失败';
+        message.error({ content: errorMsg });
+      }
+    } catch (e: any) {
+      message.error({ content: `发生未知错误: ${e.message}` });
+    } finally {
+      setIsHighlightLoading(false);
+    }
+  };
+
+  const handleAiAction = async (type: 'mindmap' | 'highlight') => {
+    if (!article || !article.content) return;
+
+    // 从文章内容中提取纯文本
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = article.content;
+    const contentText = tempDiv.textContent || tempDiv.innerText || '';
+
+    if (type === 'mindmap') setIsMindmapLoading(true);
+    if (type === 'highlight') setIsHighlightLoading(true);
+
+    try {
+      // 对于非摘要类，继续使用旧的 invokeAI
+      const result = await window.electron.invokeAI(type, article.content, contentText);
+      
+      if (result && result.success) {
+        if (type === 'highlight') {
+          const sentences = result.data as string[];
+          let highlightedContent = article.content;
+          sentences.forEach(sentence => {
+            const trimmedSentence = sentence.trim();
+            if (trimmedSentence) {
+              // 使用正则表达式进行不区分大小写和空格的替换
+              const regex = new RegExp(
+                trimmedSentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 
+                'gi'
+              );
+              highlightedContent = highlightedContent.replace(regex, (match) => `<mark class="aiHighlight">${match}</mark>`);
+            }
+          });
+          if (article.id) {
+            onArticleModified(article.id, { content: highlightedContent });
+            setProcessedContent(highlightedContent);
+            setHasHighlight(true);
+          }
+        } else if (type === 'mindmap') {
+          console.log('[ArticleDetail] AI-generated markdown for mind map:', result.data);
+          setMindMapMarkdown(result.data);
+          setIsMindmapModalVisible(true);
+        } 
+      } else {
+        // 如果 result 不存在或 success 为 false
+        const errorMsg = result?.error || '调用AI服务失败，请检查网络或API Key。';
+        console.error(`AI ${type} error:`, errorMsg);
+        message.error({ content: errorMsg, key: 'ai-action' });
+      }
+    } catch (e: any) {
+      console.error(`AI ${type} uncaught error:`, e.message);
+      message.error({ content: `发生未知错误: ${e.message}`, key: 'ai-action' });
+    } finally {
+      if (type === 'mindmap') setIsMindmapLoading(false);
+      if (type === 'highlight') setIsHighlightLoading(false);
+    }
+  };
+
+  const onAiMenuClick: MenuProps['onClick'] = (e) => {
+    if (e.key === 'summary') {
+      handleToggleSummary();
+    } else {
+      handleAiAction(e.key as 'mindmap' | 'highlight');
+    }
+  };
+
+  const aiMenuItems: MenuProps['items'] = [
+    { key: 'summary', label: '文章摘要' },
+    { key: 'mindmap', label: '生成导图' },
+    { key: 'highlight', label: '智能高亮' },
+  ];
 
   const readingSettings = settings.appearance.reading;
 
@@ -153,6 +439,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         setArticle(undefined);
         setSourceTitle(undefined);
         setProcessedContent('');
+        setInlineSummaryContent(''); // 清理旧摘要
+        setSummaryError(null);
+        setMindMapMarkdown('');
+        setIsMindmapLoading(false);
+        setIsHighlightLoading(false);
+        setIsSummaryVisible(false);
+        setIsAiHighlightsVisible(false);
   
         try {
           const currentArticleData = await db.articles.get(articleId);
@@ -167,7 +460,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             }
             
             const annos = await loadAnnotations();
-            const contentWithHighlights = applyHighlights(currentArticleData.content, annos);
+            
+            // 决定使用哪个内容版本
+            const contentToShow = 
+              currentArticleData.aiHighlightedContent && isAiHighlightsVisible
+                ? currentArticleData.aiHighlightedContent
+                : currentArticleData.content;
+
+            const contentWithHighlights = applyHighlights(contentToShow, annos);
             setProcessedContent(contentWithHighlights);
 
             setArticle(currentArticleData);
@@ -179,6 +479,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             if (currentArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
               await db.articles.update(articleId, { isRead: 'true' });
               console.log(`文章 ${articleId} 已自动标记为已读。`);
+            }
+
+            // 如果存在已保存的摘要，则加载它，但不立即显示
+            if (currentArticleData.aiSummary) {
+              setInlineSummaryContent(currentArticleData.aiSummary);
+            }
+            // 如果存在AI高亮内容，则将可见性设为true
+            if (currentArticleData.aiHighlightedContent) {
+              setIsAiHighlightsVisible(true);
             }
           } else {
             setArticle(null);
@@ -195,13 +504,20 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         contentRef.current.scrollTop = 0;
         setLoading(false);
       } else if (viewMode !== 'web' && article && article.id === articleId) {
+        // 当切换AI高亮可见性时，重新渲染内容
+        const contentToShow = 
+          article.aiHighlightedContent && isAiHighlightsVisible
+            ? article.aiHighlightedContent
+            : article.content;
+        const contentWithHighlights = applyHighlights(contentToShow, annotations);
+        setProcessedContent(contentWithHighlights);
         setLoading(false);
       }
     } else {
       setArticle(null);
       setLoading(false);
     }
-  }, [articleId, db, article, isMounted, performUpgrade, loadAnnotations, applyHighlights, setProcessedContent, readingSettings]);
+  }, [articleId, db, article, isMounted, performUpgrade, loadAnnotations, applyHighlights, setProcessedContent, readingSettings, isAiHighlightsVisible, annotations]);
   
   useEffect(() => {
     loadArticleRef.current = loadArticle;
@@ -518,6 +834,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     </div>;
   }
 
+  const isAnyAiLoading = isSummaryLoading || isMindmapLoading || isHighlightLoading;
+  const hasSummary = !!inlineSummaryContent;
+
   return (
     <div ref={articleDetailContainerRef} className={styles.articleDetailContainer} style={articleStyle}>
       <div className={`${styles.fixedControlsBar} ${isScrolled ? styles.scrolled : ''}`}>
@@ -563,8 +882,59 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
           <div className={styles.controlSeparator}></div>
 
-          <Tooltip title="笔记和高亮">
-            <Button type="text" shape="circle" icon={<HighlightOutlined />} onClick={handleToggleSidebar} className={styles.toolbarButton}/>
+          <Tooltip title="高亮笔记">
+            <Button type="text" shape="circle" icon={isSidebarVisible ? <HighlightFilled /> : <HighlightOutlined />} onClick={handleToggleSidebar} />
+          </Tooltip>
+
+          {article && !article.isFullText && (
+            <Tooltip title="阅读模式">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<ReadOutlined />}
+                onClick={() => handleFetchAndUpgradeArticle(article)}
+                loading={fetchingFullText}
+                className={styles.toolbarButton}
+              />
+            </Tooltip>
+          )}
+          
+          <div className={styles.controlSeparator}></div>
+          
+          <Tooltip title="AI 摘要">
+            <Button
+              type="text"
+              shape="circle"
+              icon={isSummaryVisible ? <FileTextFilled /> : <FileTextOutlined />}
+              onClick={handleToggleSummary}
+              loading={isSummaryLoading}
+              disabled={isAiDisabled}
+              className={isSummaryVisible ? styles.aiButtonActive : ''}
+            />
+          </Tooltip>
+          
+          <Tooltip title="AI 导图">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<ApartmentOutlined />}
+              onClick={handleToggleMindmap}
+              loading={isMindmapLoading}
+              disabled={isAiDisabled}
+              className={article?.aiMindMap ? styles.aiButtonActive : ''}
+            />
+          </Tooltip>
+
+          <Tooltip title="AI 高亮">
+            <Button
+              type="text"
+              shape="circle"
+              icon={<BgColorsOutlined />}
+              onClick={handleToggleAiHighlight}
+              loading={isHighlightLoading}
+              disabled={isAiDisabled}
+              className={isAiHighlightsVisible ? styles.aiButtonActive : ''}
+            />
           </Tooltip>
 
           {/* <Tooltip title="访问原址">
@@ -576,18 +946,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             />
           </Tooltip> */}
 
-          {article && !article.isFullText && (
-            <Tooltip title="获取全文">
-              <Button 
-                type="text"
-                shape="circle"
-                icon={<ReadOutlined />} 
-                onClick={() => handleFetchAndUpgradeArticle(article)}
-                loading={fetchingFullText}
-                className={styles.toolbarButton}
-              />
-            </Tooltip>
-          )}
           
           <div className={styles.controlSeparator}></div>
 
@@ -613,7 +971,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       </div>
 
       <div ref={mainContentAreaRef} className={styles.mainContentArea} onMouseUp={handleSelection}>
-        <div ref={scrollableContentRef} className={styles.scrollableContent}>
+        <div ref={scrollableContentRef} className={`${styles.scrollableContent} ${!isAiHighlightsVisible ? styles.hideAiHighlights : ''}`}>
           {loading ? (
             <div className={styles.loadingContainer}>
               <Spin size="large" />
@@ -646,14 +1004,53 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                 <header className={styles.header}>
                   {article.publishDate && (
                     <p className={styles.publishDate}>
-                      {format(new Date(article.publishDate), "EEEE, MMMM d, yyyy 'at' HH:mm", { locale: zhCN })}
+                      {format(new Date(article.publishDate), "EEEE, MMMM d, yyyy 'at' HH:mm", { locale: enUS })}
                     </p>
                   )}
                   <h1 className={styles.title}>{article.title}</h1>
-                  {sourceTitle && <p className={styles.sourceName}>{sourceTitle}</p>}
+                  <div className={styles.meta}>
+                    {article.author && <span className={styles.author}>{article.author}</span>}
+                    <span className={styles.sourceName}>{sourceTitle}</span>
+                  </div>
                 </header>
                 
-                {renderArticleContent()}
+                {/* 智能摘要区域 - 仅在有内容或在加载时显示 */}
+                {(isSummaryVisible || isSummaryLoading) && (
+                  <div className={styles.summaryContainer}>
+                    <div className={styles.summaryTitleWrapper}>
+                      <h3 className={styles.summaryTitle}>
+                        <ExperimentOutlined />
+                        <span style={{ marginLeft: 8 }}>AI 总结</span>
+                      </h3>
+                      {inlineSummaryContent && (
+                        <Tooltip title="复制摘要">
+                          <Button 
+                            icon={<CopyOutlined />} 
+                            type="text" 
+                            onClick={handleCopySummary}
+                            className={styles.copyButton}
+                          />
+                        </Tooltip>
+                      )}
+                    </div>
+                    {isSummaryLoading && (
+                      <div className={styles.summaryLoading}>
+                        <Spin size="small" />
+                        <span style={{ marginLeft: 8 }}>摘要生成中...</span>
+                      </div>
+                    )}
+                    {summaryError && <div className={styles.summaryError}>摘要生成失败: {summaryError}</div>}
+                    {inlineSummaryContent && !isSummaryLoading && (
+                      <div className={styles.summaryContent}>
+                        <p>{inlineSummaryContent}</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div ref={contentRef} className={styles.content}>
+                  {renderArticleContent()}
+                </div>
               </article>
             </>
           )}
@@ -676,97 +1073,26 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       </div>
 
       <Modal
-        open={imageModalVisible}
-        onCancel={handleCloseImageModal}
+        title="图片预览"
         footer={null}
-        width="90vw"
-        style={{ top: 20 }}
-        styles={{ body: { padding: 0, overflow: 'hidden' } }}
-        destroyOnHidden
-        closeIcon={
-          <div style={iconButtonStyle}>
-            <CloseOutlined style={iconStyle} />
-          </div>
-        }
+        onCancel={handleCloseImageModal}
+        open={imageModalVisible}
+        width="80vw"
+        centered
       >
-        <TransformWrapper
-          initialScale={1}
-          minScale={0.5}
-          maxScale={10}
-          doubleClick={{ mode: 'reset' }}
-          wheel={{ step: 0.2 }}
-          pinch={{ step: 1 }}
-        >
-          {({ zoomIn, zoomOut, resetTransform }) => (
-            <React.Fragment>
-              <div
-                style={{
-                  position: 'absolute',
-                  top: 15,
-                  right: 50,
-                  zIndex: 10,
-                  display: 'flex',
-                  gap: '12px',
-                }}
-              >
-                <Tooltip title="放大">
-                  <div 
-                    style={iconButtonStyle} 
-                    onClick={() => zoomIn()}
-                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
-                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
-                  >
-                    <ZoomInOutlined style={iconStyle} />
-                  </div>
-                </Tooltip>
-                <Tooltip title="缩小">
-                  <div 
-                    style={iconButtonStyle} 
-                    onClick={() => zoomOut()}
-                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
-                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
-                  >
-                    <ZoomOutOutlined style={iconStyle} />
-                  </div>
-                </Tooltip>
-                <Tooltip title="重置">
-                  <div 
-                    style={iconButtonStyle} 
-                    onClick={() => resetTransform()}
-                    onMouseOver={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.7)')}
-                    onMouseOut={e => (e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.5)')}
-                  >
-                    <ReloadOutlined style={iconStyle} />
-                  </div>
-                </Tooltip>
-              </div>
-              <TransformComponent
-                wrapperStyle={{ 
-                  width: '100%', 
-                  height: 'calc(100vh - 40px)',
-                }}
-                contentStyle={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                  height: '100%',
-                }}
-              >
-                <img 
-                  src={imageModalUrl} 
-                  alt="Enlarged" 
-                  style={{ 
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    objectFit: 'contain',
-                  }}
-                />
-              </TransformComponent>
-            </React.Fragment>
-          )}
+        <TransformWrapper>
+          <TransformComponent>
+            <img src={imageModalUrl} alt="Preview" style={{ width: '100%' }} />
+          </TransformComponent>
         </TransformWrapper>
       </Modal>
+
+      <MindMapModal
+        open={isMindmapModalVisible}
+        markdown={mindMapMarkdown}
+        onCancel={() => setIsMindmapModalVisible(false)}
+      />
+
     </div>
   );
 };

@@ -151,6 +151,18 @@
   border-bottom: 2px dotted #fa8c16; /* 添加底部虚线，更容易识别为带笔记 */
 }
 
+:global(.aiHighlight) {
+  background-color: #dbeafe; /* 一个更柔和的浅蓝色 */
+  border-radius: 3px;
+  padding: 2px 1px;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.hideAiHighlights :global(.aiHighlight) {
+  background-color: transparent;
+  color: inherit;
+}
+
 :global(.customHighlight:hover) {
   background-color: #faad14;
 }
@@ -171,17 +183,18 @@
 }
 
 .header {
-  background-color: #ffffff;
-  padding: 2rem;
+  padding: 0;
+  margin-top: 2rem;
   margin-bottom: 2rem;
-  border-radius: 8px;
+  background-color: transparent;
+  border-radius: 0;
 }
 
 .publishDate {
-  font-size: 0.75em;
-  color: var(--text-secondary);
+  font-size: 0.8em;
+  color: var(--color-text-tertiary);
   text-transform: uppercase;
-  margin: 0 0 1.5rem 0;
+  margin-bottom: 0.75rem;
   letter-spacing: 0.5px;
 }
 
@@ -191,13 +204,74 @@
   font-weight: 700;
   line-height: 1.2;
   color: var(--article-title-color);
-  margin: 0 0 0.5rem 0;
+  margin: 0 0 0.75rem 0;
   padding: 0;
+}
+
+.summaryContainer {
+  margin: 24px 0;
+  padding: 20px;
+  background: linear-gradient(135deg, rgba(243, 240, 255, 0.8) 0%, rgba(230, 235, 255, 0.8) 100%);
+  border-radius: 12px;
+  border: 1px solid rgba(140, 100, 255, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.summaryTitleWrapper {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.summaryTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #6236ff;
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+.copyButton {
+  color: rgba(107, 75, 255, 0.6);
+  transition: all 0.2s ease-in-out;
+}
+
+.copyButton:hover {
+  color: #6236ff;
+  background-color: rgba(107, 75, 255, 0.1) !important;
+}
+
+.summaryLoading {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.summaryError {
+  color: #ff4d4f;
+  background-color: #fff1f0;
+  border-color: #ffccc7;
+  padding: 8px 15px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+
+.summaryContent p {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  font-size: 14px;
 }
 
 .sourceName {
   font-size: 0.9em;
-  color: var(--text-primary);
+  color: var(--color-text-tertiary);
   margin: 0;
 }
 
@@ -208,10 +282,10 @@
 
 .meta {
   font-family: var(--font-family-article-meta, var(--font-family-sans));
-  font-size: var(--article-font-size-meta, 0.85em);
+  font-size: var(--article-font-size-meta, 0.9em);
   color: var(--text-secondary);
-  margin-top: 0.8em;
-  margin-bottom: 1.8em;
+  margin-top: 0;
+  margin-bottom: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -219,7 +293,8 @@
 }
 
 .author {
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--color-text-tertiary);
 }
 
 .tags {
@@ -280,29 +355,19 @@
 .articleContent img {
   max-width: 100%;
   height: auto;
-  margin: 1.2em auto;
-  display: block;
   border-radius: 4px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
-  object-fit: contain;
-  object-position: center;
-  /* 确保图片不会超过文章宽度 */
-  max-height: 80vh;
+  transition: transform 0.2s ease-in-out;
 }
 
 .articleContent img.broken-image {
-  display: none; /* 隐藏损坏的图片 */
-}
-
-.articleContent img:hover {
-  transform: scale(1.01);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  display: none; /* or some placeholder style */
 }
 
 .articleContent a {
-  color: var(--link-color, var(--highlight-color));
+  color: var(--link-color);
   text-decoration: none;
+  border-bottom: 1px solid var(--link-underline-color);
 }
 
 .articleContent a:hover {
@@ -536,4 +601,8 @@
   to {
     opacity: 1;
   }
+}
+
+.aiButtonActive .anticon {
+  color: var(--icon-active-color);
 } 

@@ -55,6 +55,27 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.removeListener(channel, handler);
     };
   },
+  
+  // AI 功能
+  invokeAI: (type: 'summary' | 'mindmap' | 'highlight', content: string, contentText: string) => ipcRenderer.invoke('invokeAI', type, content, contentText),
+  testDoubaoApi: (apiKey: string) => ipcRenderer.invoke('test-doubao-api', apiKey),
+  streamAiSummary: (contentText: string) => ipcRenderer.send('stream-ai-summary', contentText),
+  onAiSummaryUpdate: (callback: (type: 'chunk' | 'end' | 'error', data?: any) => void) => {
+    const chunkHandler = (_: any, data: any) => callback('chunk', data);
+    const endHandler = () => callback('end');
+    const errorHandler = (_: any, error: any) => callback('error', error);
+
+    ipcRenderer.on('ai-summary-stream-chunk', chunkHandler);
+    ipcRenderer.on('ai-summary-stream-end', endHandler);
+    ipcRenderer.on('ai-summary-stream-error', errorHandler);
+
+    // 返回一个清理函数，用于移除监听器
+    return () => {
+      ipcRenderer.removeListener('ai-summary-stream-chunk', chunkHandler);
+      ipcRenderer.removeListener('ai-summary-stream-end', endHandler);
+      ipcRenderer.removeListener('ai-summary-stream-error', errorHandler);
+    };
+  },
 });
 
 // 暴露窗口控制API
