@@ -37,7 +37,7 @@ const AppContent: React.FC = () => {
   }
   
   return (
-    <>
+    <FilterProvider>
       <TitleBar customControls={customControls} />
       <Layout className="main-content">
         <Routes>
@@ -54,22 +54,20 @@ const AppContent: React.FC = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
-    </>
+    </FilterProvider>
   );
 }
 
 const App: React.FC = () => {
   return (
     <Form.Provider>
-      <FilterProvider>
-        <TitleBarProvider>
-          <LayoutProvider>
-            <div className="app-container">
-              <AppContent />
-            </div>
-          </LayoutProvider>
-        </TitleBarProvider>
-      </FilterProvider>
+      <TitleBarProvider>
+        <LayoutProvider>
+          <div className="app-container">
+            <AppContent />
+          </div>
+        </LayoutProvider>
+      </TitleBarProvider>
     </Form.Provider>
   );
 };

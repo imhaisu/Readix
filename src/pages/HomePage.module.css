@@ -551,3 +551,26 @@
 .headerRefreshIndicator :global(.ant-spin-dot-item) {
   background-color: var(--text-secondary);
 } 
+
+.artisticTitle {
+  font-family: "Georgia", "Times New Roman", "KaiTi", "STKaiti", "华文楷体", serif;
+  font-size: 42px;
+  font-weight: 500;
+  color: #555;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+  margin-bottom: 0px;
+}
+
+.emptyDescription {
+  font-size: 15px;
+  color: #888;
+}
+
+:global(.dark-theme) .artisticTitle {
+  color: #ccc;
+  text-shadow: 1px 1px 2px rgba(255, 255, 255, 0.1);
+}
+
+:global(.dark-theme) .emptyDescription {
+  color: #888;
+} 

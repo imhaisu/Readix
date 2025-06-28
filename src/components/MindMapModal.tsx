@@ -39,12 +39,9 @@ const MindMapModal: React.FC<MindMapModalProps> = ({ open, markdown, onCancel })
       style: (id: string) => `${id} { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }`,
     };
 
-    mmRef.current = Markmap.create(svgRef.current, options);
-    
     try {
       const { root } = transformer.current.transform(markdown);
-      mmRef.current.setData(root);
-      mmRef.current.fit();
+      mmRef.current = Markmap.create(svgRef.current, options, root);
     } catch (e) {
       console.error('思维导图Markdown解析失败:', e);
     }
@@ -52,23 +49,39 @@ const MindMapModal: React.FC<MindMapModalProps> = ({ open, markdown, onCancel })
 
   useEffect(() => {
     return () => {
-      mmRef.current?.destroy();
+      // 在组件卸载时执行清理
+      if (mmRef.current) {
+        mmRef.current.destroy();
+        mmRef.current = undefined;
+      }
     };
   }, []);
+
+  const handleCancel = () => {
+    // 在 Modal 关闭前手动销毁 markmap 实例
+    if (mmRef.current) {
+      mmRef.current.destroy();
+      mmRef.current = undefined;
+    }
+    onCancel();
+  };
 
   return (
     <Modal
       open={open}
-      onCancel={onCancel}
+      onCancel={handleCancel}
       title="AI 导图"
       footer={null}
       width="90vw"
       centered
-      destroyOnClose
+      destroyOnHidden
+      zIndex={1002}
       afterOpenChange={(visible) => {
         if (visible) {
-          // 在Modal完全打开后再渲染
-          renderMindmap();
+          // 在Modal完全打开后再渲染，增加一个微小的延迟确保DOM尺寸可用
+          setTimeout(() => {
+            renderMindmap();
+          }, 50);
         }
       }}
     >
