@@ -56,6 +56,9 @@ export interface ArticleListHandle {
   scrollToArticle: (articleId: string) => void;
 }
 
+// 创建一个记录图标加载错误的Map
+const iconErrorCache = new Map<string, boolean>();
+
 // 优化ArticleList使用React.memo包装
 const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({ 
   filter, 
@@ -92,6 +95,9 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     onSelectArticle,
     onLastUpdatedArticleInfoChange,
   });
+
+  // 添加强制刷新状态
+  const [forceRefreshKey, setForceRefreshKey] = useState(0);
 
   const scrollToArticle = (articleId: string) => {
     if (!containerRef.current) return;
@@ -294,6 +300,19 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     const isArticleSelected = selectedArticleId === article.id;
     const isRead = article.isRead === 'true';
 
+    // 检查图标是否已知错误
+    const hasIconError = article.sourceId ? iconErrorCache.get(article.sourceId) : false;
+
+    // 图标加载错误处理函数
+    const handleIconError = () => {
+      if (article.sourceId) {
+        iconErrorCache.set(article.sourceId, true);
+        // 强制重新渲染
+        setForceRefreshKey(prev => prev + 1);
+      }
+      return false;
+    };
+
     const formattedDate = article.publishDate 
       ? formatDistanceToNowStrict(new Date(article.publishDate), { addSuffix: true, locale: zhCN })
       : '日期未知';
@@ -329,10 +348,10 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
       >
         <div className={styles.metaHeaderV5}>
           <div className={styles.sourceInfoV5}>
-            {articleSourceIconUrl ? (
-              <Avatar src={articleSourceIconUrl} shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
-            ) : (
+            {hasIconError || !articleSourceIconUrl ? (
               <Avatar shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
+            ) : (
+              <Avatar src={articleSourceIconUrl} shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} onError={handleIconError} />
             )}
             <span className={styles.sourceNameV5}>{articleSourceTitle}</span>
           </div>

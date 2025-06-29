@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Key as ReactKey, useCallback } from 'react';
+import React, { useState, useEffect, Key as ReactKey, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input } from 'antd';
 import type { MenuProps } from 'antd';
@@ -27,6 +27,9 @@ interface FeedListProps {
   onRefreshFeeds?: () => void;
 }
 
+// 创建一个记录图标加载错误的Map
+const iconErrorCache = new Map<string, boolean>();
+
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
   const { feedId, groupId: currentRouteGroupId } = useParams<{ feedId?: string; groupId?: string }>();
@@ -46,6 +49,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
   const [isEditFeedModalVisible, setIsEditFeedModalVisible] = useState(false);
   const [editingFeedData, setEditingFeedData] = useState<FeedSource | null>(null);
+
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const calculateCounts = async () => {
@@ -75,7 +80,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
 
     calculateCounts();
-  }, [db, filter, feedsFromProps, feedCountRefreshTrigger]);
+  }, [db, filter, feedsFromProps, feedCountRefreshTrigger, refreshKey]);
 
   useEffect(() => {
     if (groupsFromProps) {
@@ -397,6 +402,20 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       if (typeof feed.id === 'undefined') return null;
       const feedKey = `feed-${feed.id}`;
       const count = dynamicCounts.get(feed.id) ?? 0;
+      
+      // 使用缓存检查图标是否已知错误
+      const hasIconError = iconErrorCache.get(feed.id) || false;
+      
+      // 图标加载错误处理函数
+      const handleIconError = () => {
+        if (feed.id) {
+          iconErrorCache.set(feed.id, true);
+          // 强制重新渲染
+          setRefreshKey(prev => prev + 1);
+        }
+        return false;
+      };
+      
       return (
         <div 
           key={feedKey}
@@ -408,7 +427,11 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
               className={styles.feedItem}
               onContextMenu={(e) => e.stopPropagation()}
             >
-              <Avatar src={feed.iconUrl} size={16} icon={<LinkOutlined />} className={styles.feedIcon} />
+              {hasIconError ? (
+                <Avatar size={16} icon={<LinkOutlined />} className={styles.feedIcon} />
+              ) : (
+                <Avatar src={feed.iconUrl} size={16} icon={<LinkOutlined />} className={styles.feedIcon} onError={handleIconError} />
+              )}
               <span className={styles.title}>{feed.title}</span>
               {count > 0 && <span className={styles.count}>{count}</span>}
             </div>
