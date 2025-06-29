@@ -125,7 +125,7 @@
 
 /* Styles for react-resizable-panels handle */
 .siderResizeHandle_rH {
-  width: 1px;
+  width: 0px;
   background-color: transparent;
   cursor: col-resize;
   display: flex;

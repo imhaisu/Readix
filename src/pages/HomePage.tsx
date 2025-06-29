@@ -406,12 +406,45 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
   }, [isArticleListVisible]);
 
-  const handleArticleSelect = useCallback((articleId: string | null) => {
-    setSelectedArticleId(articleId);
-    if (articleId) {
-      setArticleDetailViewMode('full'); 
+  const handleArticleSelect = (articleId: string | null) => {
+    const selectedArticle = articleListRef.current?.getArticles().find(a => a.id === articleId);
+
+    if (selectedArticle) {
+      const mode = selectedArticle.isFullText ? 'full' : 'original';
+      setArticleDetailViewMode(mode);
     }
-  }, []);
+    
+    setSelectedArticleId(articleId);
+
+    if (articleId && listPanelRef.current?.getSize() === 0) {
+      listPanelRef.current?.expand();
+    }
+  };
+
+  const handleNavigate = (direction: 'next' | 'prev') => {
+    const articles = articleListRef.current?.getArticles() || [];
+    if (articles.length === 0 || !selectedArticleId) return;
+
+    const currentIndex = articles.findIndex(a => a.id === selectedArticleId);
+    if (currentIndex === -1) return;
+
+    let nextIndex;
+    if (direction === 'next') {
+      nextIndex = currentIndex + 1;
+    } else {
+      nextIndex = currentIndex - 1;
+    }
+
+    if (nextIndex >= 0 && nextIndex < articles.length) {
+      const nextArticleId = articles[nextIndex].id;
+      handleArticleSelect(nextArticleId);
+      // 可以在这里添加滚动到新选中文章的逻辑
+      articleListRef.current?.scrollToArticle(nextArticleId);
+    } else {
+      // 可以在这里给用户一些提示，比如 "已经是最后一篇了"
+      message.info(direction === 'next' ? '已经是最后一篇了' : '已经是第一篇了');
+    }
+  };
 
   const handleCloseArticle = () => {
     setSelectedArticleId(null);
@@ -722,6 +755,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                   onChangeViewMode={handleArticleDetailViewModeChange}
                   onClose={handleCloseArticle}
                   onArticleModified={handleArticleModified}
+                  onNavigate={handleNavigate}
                 />
               ) : (
                 <div className={styles.emptyDetailPane}>

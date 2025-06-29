@@ -486,15 +486,15 @@ ipcMain.handle('get-rss-feed-info', async (event, feedUrl) => {
 
 // 新增：处理获取设置 (异步)
 ipcMain.handle('get-settings', async () => {
-  console.log('[Main Process] 收到 get-settings 请求');
+  // console.log('[Main Process] 收到 get-settings 请求');
   const settings = store.get('settings');
-  console.log('[Main Process] 返回设置:', settings);
+  // console.log('[Main Process] 返回设置:', settings);
   return settings;
 });
 
 // 新增：处理保存设置
-ipcMain.on('save-settings', (_, settings) => {
-  console.log('[Main Process] 收到 save-settings 请求, 数据:', settings);
+ipcMain.on('save-settings', (event, settings) => {
+  // console.log('[Main Process] 收到 save-settings 请求, 数据:', settings);
   store.set('settings', settings);
 });
 

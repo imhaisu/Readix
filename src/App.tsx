@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Layout, Form } from 'antd';
 import SidebarLayout from './layouts/SidebarLayout';
 import TitleBar from './components/TitleBar';
@@ -21,38 +21,32 @@ const AppContent: React.FC = () => {
   // 同时检查两个上下文是否都已初始化
   const isInitialized = settingsInitialized && dbInitialized;
   
+  /*
   if (process.env.NODE_ENV === 'development') {
     console.log('[App] AppContent 渲染，isInitialized:', isInitialized);
   }
+  */
   
   if (!isInitialized) {
+    /*
     if (process.env.NODE_ENV === 'development') {
       console.log('[App] 上下文未初始化，显示加载中...');
     }
+    */
     return <PulsingLoader />;
   }
 
+  /*
   if (process.env.NODE_ENV === 'development') {
     console.log('[App] 上下文已初始化，渲染主要内容');
   }
+  */
   
   return (
     <FilterProvider>
       <TitleBar customControls={customControls} />
       <Layout className="main-content">
-        <Routes>
-          <Route path="/" element={<SidebarLayout />}>
-            <Route index element={<HomePage />} />
-            <Route path="feed/:feedId" element={<HomePage />} />
-            <Route path="group/:groupId" element={<HomePage />} />
-            <Route path="starred" element={<HomePage filter="starred" />} />
-            <Route path="unread" element={<HomePage filter="unread" />} />
-            <Route path="all" element={<HomePage filter="all" />} />
-            <Route path="readlater" element={<ReadLaterPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Outlet />
       </Layout>
     </FilterProvider>
   );

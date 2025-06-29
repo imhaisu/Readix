@@ -52,6 +52,8 @@ const formatDateTime = (date: number | Date): string => {
 export interface ArticleListHandle {
   scrollToTop: () => void;
   getScrollableElement: () => HTMLDivElement | null;
+  getArticles: () => Article[];
+  scrollToArticle: (articleId: string) => void;
 }
 
 // 优化ArticleList使用React.memo包装
@@ -69,11 +71,6 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   isPullingDown,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
-
-  // 仅在开发环境下记录日志
-  if (process.env.NODE_ENV === 'development') {
-    console.log(`[ArticleList Render] isPullingDown prop: ${isPullingDown}`);
-  }
 
   const {
     loading,
@@ -96,6 +93,17 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     onLastUpdatedArticleInfoChange,
   });
 
+  const scrollToArticle = (articleId: string) => {
+    if (!containerRef.current) return;
+    const articleElement = containerRef.current.querySelector(`[data-article-id="${articleId}"]`) as HTMLElement;
+    if (articleElement) {
+      articleElement.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  };
+
   useEffect(() => {
     if (selectedArticleId && !isPullingDown) {
       setTimeout(() => {
@@ -111,10 +119,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
           );
 
           if (!isFullyVisible) {
-            articleElement.scrollIntoView({
-              behavior: 'auto',
-              block: 'center',
-            });
+            scrollToArticle(selectedArticleId);
           }
         }
       }, 0);
@@ -148,13 +153,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
       onSelectArticle(nextArticle.id);
       
       // 自动滚动到选中的文章
-      const articleElement = containerRef.current?.querySelector(`[data-article-id="${nextArticle.id}"]`) as HTMLElement;
-      if (articleElement) {
-        articleElement.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center'
-        });
-      }
+      scrollToArticle(nextArticle.id);
     }
   }, [selectedArticleId, displayedArticles, onSelectArticle]);
 
@@ -393,6 +392,8 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
       }
     },
     getScrollableElement: () => containerRef.current,
+    getArticles: () => displayedArticles,
+    scrollToArticle: scrollToArticle,
   }));
 
   return renderContent();

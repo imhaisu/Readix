@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Button, Skeleton, Tooltip, Spin, Empty, message, Modal, Dropdown } from 'antd';
+import { Button, Skeleton, Tooltip, Spin, Empty, message, Modal, Dropdown, ConfigProvider } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   StarOutlined, 
@@ -11,6 +11,7 @@ import {
   CheckCircleOutlined,
   MinusCircleOutlined,
   ArrowLeftOutlined,
+  ArrowDownOutlined,
   ShareAltOutlined,
   HighlightOutlined,
   CloseOutlined,
@@ -45,10 +46,10 @@ interface ArticleDetailProps {
   viewMode: 'full' | 'web' | 'original';
   onChangeViewMode: (mode: 'full' | 'web' | 'original') => void;
   onArticleModified: (articleId: string, changes: Partial<Article>) => void;
-  onNavigate?: (nextOrPrevArticleId: string) => void;
+  onNavigate?: (direction: 'next' | 'prev') => void;
 }
 
-const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified }) => {
+const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified, onNavigate }) => {
   const { db } = useDatabase();
   const { settings } = useSettings();
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
@@ -119,6 +120,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     handleCancelPendingAnnotation,
     handleAutoEditApplied,
   } = useAnnotations({ articleId, scrollableContentRef });
+
+  const handleNextArticle = () => {
+    if (onNavigate) {
+      onNavigate('next');
+    }
+  };
 
   const handleCloseDetail = () => {
     if (isSidebarVisible) {
@@ -1102,6 +1109,27 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         onCancel={() => setIsMindmapModalVisible(false)}
       />
 
+      {onNavigate && !isSidebarVisible && (
+        <ConfigProvider
+          theme={{
+            components: {
+              Button: {
+                colorPrimaryHover: '#181717',
+                colorPrimaryActive: '#d9d9d9',
+              },
+            },
+          }}
+        >
+          <Tooltip title="下一篇" color="rgba(0, 0, 0, 0.85)">
+            <Button
+              className={styles.nextArticleButton}
+              shape="circle"
+              icon={<ArrowDownOutlined />}
+              onClick={handleNextArticle}
+            />
+          </Tooltip>
+        </ConfigProvider>
+      )}
     </div>
   );
 };

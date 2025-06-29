@@ -46,10 +46,8 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
   }, [initializationCompleted]);
 
   const triggerArticleListRefresh = useCallback(() => {
-    setArticleListRefreshTrigger(prev => {
-      console.log('[DatabaseContext] Article list refresh triggered. Old trigger:', prev, 'New trigger:', prev + 1);
-      return prev + 1;
-    });
+    // console.log(`[DatabaseContext] Article list refresh triggered. Old trigger: ${refreshTrigger} New trigger: ${refreshTrigger + 1}`);
+    setArticleListRefreshTrigger(prev => prev + 1);
   }, []);
 
   const triggerFeedCountRefresh = useCallback(() => {

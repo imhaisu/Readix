@@ -62,9 +62,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
     if (isInitialized) {
       // Persist settings whenever they change
       window.electron.saveSettings(settings);
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[SettingsContext] Settings saved:', settings);
-      }
+      // console.log('[SettingsContext] Settings saved:', settings);
     }
   }, [settings, isInitialized]);
 
