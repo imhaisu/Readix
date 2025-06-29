@@ -120,6 +120,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     handleAutoEditApplied,
   } = useAnnotations({ articleId, scrollableContentRef });
 
+  const handleCloseDetail = () => {
+    if (isSidebarVisible) {
+      handleToggleSidebar();
+    }
+    if (onClose) {
+      onClose();
+    }
+  };
+
   const isAiDisabled = !settings.advanced.doubaoApiKey;
 
   // 保存AI摘要到数据库
@@ -845,7 +854,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             type="text"
             shape="circle"
             icon={<CloseOutlined />}
-            onClick={onClose}
+            onClick={handleCloseDetail}
             className={styles.toolbarButton}
           />
         </Tooltip>

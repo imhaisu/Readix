@@ -294,4 +294,26 @@
   /* margin-left: auto; */
   display: flex;
   align-items: center;
+}
+
+.panelGroup {
+  height: 100%;
+  background-color: var(--background-color-primary);
+  display: flex;
+}
+
+.siderPanel {
+  min-width: 240px;
+  max-width: 50%;
+  transition: min-width 0.3s ease, max-width 0.3s ease;
+  overflow: hidden;
+}
+
+.focusMode .siderPanel {
+  min-width: 0;
+  max-width: 0;
+}
+
+.contentPanel {
+  flex: 1;
 } 

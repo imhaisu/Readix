@@ -59,6 +59,7 @@ const SidebarLayout: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const siderPanelRef = useRef<ImperativePanelHandle>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
   const startupTasksDone = useRef(false);
   const refreshIntervalId = useRef<NodeJS.Timeout | null>(null);
 
@@ -87,6 +88,7 @@ const SidebarLayout: React.FC = () => {
       if (!customEvent.detail) return;
       
       const { isVisible } = customEvent.detail;
+      setIsFocusMode(isVisible);
       
       if (siderPanelRef.current) {
         const isSiderCollapsed = siderPanelRef.current.isCollapsed();
@@ -485,7 +487,7 @@ const SidebarLayout: React.FC = () => {
     >
       <PanelGroup 
         direction="horizontal" 
-        className={styles.layoutContainer_rH}
+        className={`${styles.layoutContainer_rH} ${isFocusMode ? styles.focusMode : ''}`}
         onLayout={debouncedUpdateLayout}
       >
         <Panel
@@ -651,6 +653,7 @@ const SidebarLayout: React.FC = () => {
         <Panel 
           defaultSize={settings.layout.sidebarLayout[1]}
           minSize={30}
+          className={styles.contentPanel}
         >
           <Layout className={styles.contentLayout_rH}>
             <Content className={styles.content_rH}>

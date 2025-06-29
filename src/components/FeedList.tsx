@@ -385,15 +385,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     );
   }
 
-  if (processedFeeds.length === 0 && groupsFromProps.length === 0) {
-    return (
-      <div className={styles.emptyContainer}>
-        <Empty 
-          description={collapsed ? "" : "No feeds or groups"} 
-          image={Empty.PRESENTED_IMAGE_SIMPLE} 
-        />
-      </div>
-    );
+  if (feedsFromProps.length === 0) {
+    return null;
   }
   
   const sortedGroups = [...groupsFromProps].sort((a,b) => (a.order ?? 0) - (b.order ?? 0));

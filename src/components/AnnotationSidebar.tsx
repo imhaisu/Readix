@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button, Input, Tooltip } from 'antd';
-import { CloseOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { CloseOutlined, EditOutlined, DeleteOutlined, FileTextOutlined } from '@ant-design/icons';
 import styles from './AnnotationSidebar.module.css';
 import { Annotation } from '../db/database';
 
@@ -173,7 +173,7 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
   return (
     <div className={`${styles.sidebar} ${isVisible ? styles.visible : ''}`}>
       <header className={styles.header}>
-        <h3 className={styles.title}>笔记和高亮</h3>
+        <h3 className={styles.title}>笔记高亮</h3>
         <Button type="text" shape="circle" icon={<CloseOutlined />} onClick={onClose} />
       </header>
       <div className={styles.annotationList}>
@@ -181,8 +181,8 @@ const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({
           allAnnotations.map(renderAnnotationItem)
         ) : (
           <div className={styles.emptyState}>
-            <p>还没有笔记或高亮。</p>
-            <p>在文章中选择一段文本来开始。</p>
+            <FileTextOutlined className={styles.emptyIcon} />
+            <p>思考源自记录</p>
           </div>
         )}
       </div>

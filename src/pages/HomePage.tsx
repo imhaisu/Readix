@@ -20,7 +20,7 @@ import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
 import { FeedSource, Article } from '../db/database';
 import { getTodayRange, debounce, updateUnreadCountOptimized } from '../utils/helpers';
-import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
+import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
 import { useLayout } from '../contexts/LayoutContext';
 import { GeneralSettings } from '../types/settings';
@@ -51,6 +51,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [searchModeActive, setSearchModeActive] = useState(false);
   const [lastUpdatedArticleInfo, setLastUpdatedArticleInfo] = useState<{ id: string, changes: Partial<Article> } | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [isFocusMode, setIsFocusMode] = useState(false);
   
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [pullDownProgress, setPullDownProgress] = useState(0); 
@@ -70,11 +71,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
   const searchInputRef = useRef<InputRef>(null);
   const { isArticleListVisible } = useLayout();
-  const panelGroupRef = useRef<HTMLDivElement>(null); 
+  const panelGroupHandleRef = useRef<ImperativePanelGroupHandle>(null);
+  const panelGroupContainerRef = useRef<HTMLDivElement>(null);
   const [isResizing, setIsResizing] = useState(false);
 
   useEffect(() => {
-    const groupElement = panelGroupRef.current;
+    const groupElement = panelGroupContainerRef.current;
     if (!groupElement) return;
 
     const resizeObserver = new ResizeObserver(() => {
@@ -99,8 +101,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [settings.layout.articleListWidth]);
 
   const handleMainLayout = (sizes: number[]) => {
-    if (panelGroupRef.current) {
-      const containerWidth = panelGroupRef.current.getBoundingClientRect().width;
+    if (panelGroupContainerRef.current) {
+      const containerWidth = panelGroupContainerRef.current.getBoundingClientRect().width;
       const newPixelWidth = (containerWidth * sizes[0]) / 100;
       updateLayoutSettings({ 
         mainLayout: sizes,
@@ -193,15 +195,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       if (!customEvent.detail) return;
 
       const { isVisible } = customEvent.detail;
-      
-      if (settings.general.layoutMode === 'three-column' && listPanelRef.current) {
-        const isListCollapsed = listPanelRef.current.isCollapsed();
-        if (isVisible && !isListCollapsed) {
-          listPanelRef.current.collapse();
-        } else if (!isVisible && isListCollapsed) {
-          listPanelRef.current.expand();
-        }
-      }
+      setIsFocusMode(isVisible);
     };
 
     document.addEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
@@ -209,7 +203,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     return () => {
       document.removeEventListener('annotationSidebarToggled', handleAnnotationSidebarToggle);
     };
-  }, [settings.general.layoutMode]);
+  }, []);
 
   const initialRefreshDoneRef = useRef(false);
 
@@ -576,24 +570,27 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }
 
   return (
-    <div 
-      className={`${styles.homePage} ${isPulling ? styles.isResizing : ''}`}
-      ref={panelGroupRef}
-    >
+    <div className={styles.homeLayout}>
+      <div 
+        className={`${styles.contentLayout} ${isResizing ? styles.isResizing : ''}`}
+        ref={panelGroupContainerRef}
+      >
         <PanelGroup 
           direction="horizontal" 
-          className={styles.panelGroup}
+          ref={panelGroupHandleRef}
           onLayout={handleMainLayout}
+          className={`${styles.panelGroup} ${isFocusMode ? styles.focusMode : ''}`}
         >
           {isArticleListVisible && (
             <>
               <Panel
                 ref={listPanelRef}
-                defaultSize={settings.layout.mainLayout[0]}
+                defaultSize={settings.layout.mainLayout?.[0] ?? 33}
                 minSize={25}
                 maxSize={50}
                 collapsible
                 id="article-list-panel"
+                className={styles.articleListPanel}
               >
                 <div 
                   className={styles.articleListColumn}
@@ -737,6 +734,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             </div>
           </Panel>
         </PanelGroup>
+      </div>
     </div>
   );
 };

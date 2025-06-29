@@ -33,9 +33,9 @@
 }
 
 .annotationList {
-  padding: 8px 16px;
-  overflow-y: auto;
   flex-grow: 1;
+  overflow-y: auto;
+  padding: 12px;
 }
 
 .annotationItem {
@@ -113,7 +113,22 @@
   justify-content: center;
   align-items: center;
   height: 100%;
-  color: #8c8c8c;
-  padding: 20px;
   text-align: center;
+  padding: 20px;
+  color: #888;
+  font-size: 14px;
+  user-select: none; /* 禁止用户选择文本 */
+  -webkit-user-select: none; /* for Safari */
+  -moz-user-select: none; /* for Firefox */
+  -ms-user-select: none; /* for Internet Explorer/Edge */
+}
+
+.emptyState p {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.emptyIcon {
+  font-size: 48px;
+  color: #ccc;
 } 
