@@ -13,6 +13,7 @@ import SidebarLayout from './layouts/SidebarLayout';
 import HomePage from './pages/HomePage';
 import ReadLaterPage from './pages/ReadLaterPage';
 import SettingsPage from './pages/SettingsPage';
+import NotesPage from './pages/NotesPage';
 
 // 全局错误处理
 window.addEventListener('error', (event) => {
@@ -41,6 +42,7 @@ const router = createBrowserRouter(
             { path: 'unread', element: <HomePage filter="unread" /> },
             { path: 'all', element: <HomePage filter="all" /> },
             { path: 'readlater', element: <ReadLaterPage /> },
+            { path: 'notes', element: <NotesPage /> },
             { path: 'settings', element: <SettingsPage /> },
           ],
         },

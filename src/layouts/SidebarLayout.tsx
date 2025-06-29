@@ -14,6 +14,8 @@ import {
   ClockCircleOutlined,
   MenuOutlined,
   AppstoreOutlined,
+  FileTextOutlined,
+  HighlightOutlined,
 } from '@ant-design/icons';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import FeedList from '../components/FeedList';
@@ -69,6 +71,9 @@ const SidebarLayout: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [starredCount, setStarredCount] = useState(0);
   const [readLaterCount, setReadLaterCount] = useState(0);
+
+  // 新增 state 用于存储笔记数量
+  const [notesCount, setNotesCount] = useState(0);
 
   const { isFeedListVisible, setIsFeedListVisible, setIsArticleListVisible } = useLayout();
   const layoutRef = useRef<HTMLDivElement>(null);
@@ -265,7 +270,7 @@ const SidebarLayout: React.FC = () => {
 
     const fetchCounts = async () => {
       try {
-        // console.log('[SidebarLayout] Calculating counts based on filter:', filter);
+        console.log('[SidebarLayout] 开始计算各种数量...');
         
         // 根据 filter 状态构建查询条件
         const filterCondition = (article: DbArticle) => {
@@ -301,19 +306,26 @@ const SidebarLayout: React.FC = () => {
           .filter(filterCondition)
           .count();
 
-        const [today, all, readLater, unread, starred] = await Promise.all([
+        // 新增：获取笔记和高亮的数量
+        const notesPromise = db.annotations.count();
+
+        const [today, all, readLater, unread, starred, notes] = await Promise.all([
           todayPromise,
           allPromise,
           readLaterPromise,
           totalUnreadPromise,
-          starredPromise
+          starredPromise,
+          notesPromise
         ]);
+
+        console.log(`[SidebarLayout] 计数结果: 今日=${today}, 所有=${all}, 稍后读=${readLater}, 未读=${unread}, 星标=${starred}, 笔记=${notes}`);
 
         setTodayCount(today);
         setAllCount(all);
         setReadLaterCount(readLater);
         setUnreadCount(unread);
         setStarredCount(starred);
+        setNotesCount(notes); // 新增：设置笔记数量
       } catch (error) {
         console.error("[SidebarLayout] Error fetching article counts:", error);
       }
@@ -322,8 +334,53 @@ const SidebarLayout: React.FC = () => {
     if (dbInitialized) {
       fetchCounts();
     }
-    // 3. 将 filter 和 articleListRefreshTrigger 添加到依赖项
   }, [db, dbInitialized, filter, articleListRefreshTrigger, feedCountRefreshTrigger]);
+
+  // 添加一个监听器，当笔记数量变化时更新
+  useEffect(() => {
+    const handleAnnotationChange = () => {
+      console.log('[SidebarLayout] 检测到笔记变化，更新计数');
+      if (db && dbInitialized) {
+        db.annotations.count().then(count => {
+          console.log(`[SidebarLayout] 新的笔记数量: ${count}`);
+          setNotesCount(count);
+        });
+      }
+    };
+
+    // 监听笔记变化事件
+    document.addEventListener('annotation-changed', handleAnnotationChange);
+
+    return () => {
+      document.removeEventListener('annotation-changed', handleAnnotationChange);
+    };
+  }, [db, dbInitialized]);
+
+  // 监听从笔记页面返回的标记
+  useEffect(() => {
+    const returnToNotes = sessionStorage.getItem('returnToNotes') === 'true';
+    
+    if (returnToNotes) {
+      console.log('[SidebarLayout] 检测到returnToNotes标记，准备导航到笔记页面');
+      console.log('[SidebarLayout] 当前路径:', location.pathname);
+      
+      // 清除标记，防止重复导航
+      sessionStorage.removeItem('returnToNotes');
+      
+      // 确保FeedList可见，立即设置
+      if (!isFeedListVisible) {
+        console.log('[SidebarLayout] 设置FeedList可见');
+        setIsFeedListVisible(true);
+      }
+      
+      // 延迟导航到笔记页面，确保侧边栏已完全加载并且FeedList可见
+      setTimeout(() => {
+        console.log('[SidebarLayout] 延迟导航到笔记页面，保持侧边栏FeedList可见');
+        // 导航到笔记页面
+        navigate('/notes');
+      }, 500);
+    }
+  }, [navigate, location, isFeedListVisible, setIsFeedListVisible]);
 
   const getSelectedKey = () => {
     const path = location.pathname;
@@ -598,6 +655,21 @@ const SidebarLayout: React.FC = () => {
                     navigate('/all');
                   }
                 }
+              },
+              {
+                key: 'notes',
+                icon: <FileTextOutlined />,
+                label: (
+                  <div className={styles.menuItemContainer}>
+                    <span>笔记</span>
+                    {notesCount > 0 && (
+                      <span className={styles.menuItemBadge} data-testid="notes-count">
+                        {notesCount}
+                      </span>
+                    )}
+                  </div>
+                ),
+                onClick: () => navigate('/notes')
               },
               {
                 key: 'readlater',

@@ -39,6 +39,7 @@ import { useAnnotations } from '../hooks/useAnnotations';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import MindMapModal from './MindMapModal';
 import { useArticleListManager } from '../hooks/useArticleListManager';
+import { useNavigate } from 'react-router-dom';
 
 interface ArticleDetailProps {
   articleId: string | null;
@@ -81,6 +82,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   // 新增：控制AI内容可见性的状态
   const [isSummaryVisible, setIsSummaryVisible] = useState(false);
   const [isAiHighlightsVisible, setIsAiHighlightsVisible] = useState(false);
+
+  // 添加导航钩子
+  const navigate = useNavigate();
+  
+  // 记录是否是从笔记中心跳转过来的
+  const [isFromNotesPage, setIsFromNotesPage] = useState(false);
 
   const iconButtonStyle: React.CSSProperties = {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -128,11 +135,19 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   };
 
   const handleCloseDetail = () => {
-    if (isSidebarVisible) {
-      handleToggleSidebar();
-    }
     if (onClose) {
+      // 检查是否需要返回笔记中心
+      if (isFromNotesPage) {
+        console.log('[ArticleDetail] 从笔记中心跳转过来的，返回笔记中心');
+        // 清除标记，防止后续误用
+        sessionStorage.removeItem('fromNotesPage');
+        
+        // 直接导航到笔记页面，不经过首页
+        console.log('[ArticleDetail] 直接导航到笔记页面');
+        navigate('/notes');
+      } else {
       onClose();
+      }
     }
   };
 
@@ -790,6 +805,96 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return null;
   };
 
+  // 从会话存储中获取高亮和笔记的信息
+  useEffect(() => {
+    if (!articleId) return;
+    
+    // 检查是否有从笔记中心跳转过来的信息
+    const shouldOpenSidebar = sessionStorage.getItem('openAnnotationSidebar') === 'true';
+    const highlightAnnotationId = sessionStorage.getItem('highlightAnnotationId');
+    const shouldEditAnnotation = sessionStorage.getItem('editAnnotation') === 'true';
+    const annotationObjectStr = sessionStorage.getItem('annotationObject');
+    const fromNotesPage = sessionStorage.getItem('fromNotesPage') === 'true';
+
+    console.log(`[ArticleDetail] 检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
+
+    // 设置是否从笔记中心跳转过来的标志
+    if (fromNotesPage) {
+      setIsFromNotesPage(true);
+      // 不要在这里清除fromNotesPage标记，而是在组件卸载时清除
+    }
+
+    // 立即清除会话存储中的跳转标记，防止其他组件实例读取到
+    if (shouldOpenSidebar || highlightAnnotationId || shouldEditAnnotation || annotationObjectStr) {
+      console.log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
+      sessionStorage.removeItem('openAnnotationSidebar');
+      sessionStorage.removeItem('highlightAnnotationId');
+      sessionStorage.removeItem('editAnnotation');
+      sessionStorage.removeItem('annotationObject');
+      // 注意：不要在这里清除fromNotesPage，因为我们需要它来判断返回逻辑
+    }
+
+    // 只有当明确设置了这些值时才执行后续操作
+    if ((shouldOpenSidebar && highlightAnnotationId) || fromNotesPage) {
+      console.log(`[ArticleDetail] 检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
+      
+      // 立即打开侧边栏
+      if (!isSidebarVisible) {
+        console.log('[ArticleDetail] 正在立即打开侧边栏');
+        handleToggleSidebar();
+      } else {
+        console.log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
+      }
+
+      // 如果有高亮ID，则处理高亮和编辑
+      if (highlightAnnotationId) {
+        // 使用一个短延迟来确保高亮处理在侧边栏打开后进行
+        const timer = setTimeout(() => {
+          // 修复：确保使用正确的元素ID格式
+          const cleanAnnotationId = highlightAnnotationId.replace(/^annotation-/, '');
+          console.log(`[ArticleDetail] 处理后的注释ID: ${cleanAnnotationId}`);
+
+          // 滚动到对应的高亮
+          console.log(`[ArticleDetail] 正在滚动到高亮: ${cleanAnnotationId}`);
+          handleScrollToAnnotation(cleanAnnotationId);
+
+          // 如果需要编辑，通过设置自动编辑ID来触发编辑模式
+          if (shouldEditAnnotation) {
+            console.log(`[ArticleDetail] 正在触发编辑模式: ${cleanAnnotationId}`);
+            
+            // 增加延迟，确保笔记数据已经加载完成
+            setTimeout(() => {
+              // 触发编辑笔记事件
+              document.dispatchEvent(new CustomEvent('edit-annotation', {
+                detail: { annotationId: cleanAnnotationId }
+              }));
+            }, 500);
+          }
+        }, 300); // 使用更短的延迟，只是为了确保DOM已经更新
+
+        return () => {
+          console.log('[ArticleDetail] 清除定时器，防止内存泄漏');
+          clearTimeout(timer);
+        };
+      }
+    }
+  }, [articleId, isSidebarVisible, handleToggleSidebar, handleScrollToAnnotation]);
+
+  // 组件卸载时清除fromNotesPage标记
+  useEffect(() => {
+    return () => {
+      if (isFromNotesPage) {
+        console.log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
+        sessionStorage.removeItem('fromNotesPage');
+      }
+    };
+  }, [isFromNotesPage]);
+
+  // 处理更新笔记
+  const handleUpdateAnnotation = (annotationId: string, content: string) => {
+    handleSaveNote(annotationId, content);
+  };
+
   if (viewMode === 'web') {
     if (!articleId || !article || !article.url) {
         return (
@@ -856,15 +961,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   return (
     <div ref={articleDetailContainerRef} className={styles.articleDetailContainer} style={articleStyle}>
       <div className={`${styles.fixedControlsBar} ${isScrolled ? styles.scrolled : ''}`}>
-        <Tooltip title="关闭">
-          <Button
-            type="text"
-            shape="circle"
-            icon={<CloseOutlined />}
-            onClick={handleCloseDetail}
-            className={styles.toolbarButton}
-          />
-        </Tooltip>
+        <div className={styles.closeButtonContainer}>
+          {!isSidebarVisible && (
+            <Tooltip title="关闭">
+              <Button
+                type="text"
+                shape="circle"
+                icon={<CloseOutlined />}
+                onClick={handleCloseDetail}
+                className={styles.toolbarButton}
+              />
+            </Tooltip>
+          )}
+          {isSidebarVisible && (
+            <div className={styles.invisiblePlaceholder}></div>
+          )}
+        </div>
         
         <div className={styles.headerControls}>
           <Tooltip title={article.isRead === 'true' ? "标记为未读" : "标记为已读"}>
@@ -1084,6 +1196,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             autoEditNoteId={autoEditNoteId}
             onAutoEditApplied={handleAutoEditApplied}
             onCancelPendingAnnotation={handleCancelPendingAnnotation}
+            onScrollToAnnotation={handleScrollToAnnotation}
+            onUpdateAnnotation={handleUpdateAnnotation}
+            onDeleteAnnotation={handleDeleteAnnotation}
+            articleId={articleId || ''}
           />
         )}
       </div>

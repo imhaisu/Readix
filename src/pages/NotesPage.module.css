@@ -1,0 +1,125 @@
+.notesPage {
+  padding: 20px;
+  height: 100%;
+  overflow-y: auto;
+  background-color: white;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.controls {
+  display: flex;
+  gap: 12px;
+}
+
+.filterSelect, .sortSelect {
+  width: 120px;
+}
+
+.loadingContainer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+}
+
+.annotationsList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.annotationItem {
+  background-color: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s, box-shadow 0.2s;
+  border: 1px solid #f0f0f0;
+}
+
+.annotationItem:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.annotationHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.annotationType {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-color-secondary);
+}
+
+.highlightIcon {
+  color: #faad14;
+}
+
+.noteIcon {
+  color: #52c41a;
+}
+
+.annotationDate {
+  font-size: 12px;
+  color: var(--text-color-secondary);
+}
+
+.annotationContent {
+  margin-bottom: 12px;
+}
+
+.highlightedText {
+  margin: 0 0 12px 0;
+  padding-left: 12px;
+  border-left: 3px solid #faad14;
+  font-style: italic;
+}
+
+.noteContent {
+  margin-top: 8px;
+  padding: 12px;
+  background-color: #f9f9f9;
+  border-radius: 4px;
+}
+
+.annotationSource {
+  font-size: 13px;
+  color: var(--text-color-secondary);
+  margin-bottom: 12px;
+}
+
+.annotationActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.emptyState {
+  margin-top: 60px;
+}
+
+.notesCount {
+  font-size: 14px;
+  color: var(--text-color-secondary);
+  margin-left: 8px;
+} 

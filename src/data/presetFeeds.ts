@@ -11,27 +11,12 @@ export interface PresetFeedCategory {
 
 export const presetFeeds: PresetFeedCategory[] = [
   {
-    title: '科技资讯',
+    title: '产品与设计',
     feeds: [
       {
-        name: '虎嗅',
-        url: 'https://www.huxiu.com/rss/0.xml',
-        favicon: 'https://www.google.com/s2/favicons?domain=huxiu.com&sz=128',
-      },
-      {
-        name: '36氪',
-        url: 'https://36kr.com/feed',
-        favicon: 'https://www.google.com/s2/favicons?domain=36kr.com&sz=128',
-      },
-      {
-        name: 'IT之家',
-        url: 'https://www.ithome.com/rss/',
-        favicon: 'https://www.google.com/s2/favicons?domain=ithome.com&sz=128',
-      },
-      {
-        name: '极客公园',
-        url: 'https://www.geekpark.net/rss',
-        favicon: 'https://www.google.com/s2/favicons?domain=geekpark.net&sz=128',
+        name: '人人都是产品经理',
+        url: 'http://www.woshipm.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?domain=woshipm.com&sz=128',
       },
       {
         name: '少数派',
@@ -41,37 +26,47 @@ export const presetFeeds: PresetFeedCategory[] = [
     ],
   },
   {
-    title: '编程技术',
+    title: '科技资讯',
     feeds: [
       {
-        name: '阮一峰的网络日志',
-        url: 'https://www.ruanyifeng.com/blog/atom.xml',
-        favicon: 'https://www.google.com/s2/favicons?domain=ruanyifeng.com&sz=128',
+        name: '36氪',
+        url: 'https://36kr.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?domain=36kr.com&sz=128',
       },
       {
-        name: '美团技术团队',
-        url: 'https://tech.meituan.com/feed/',
-        favicon: 'https://www.google.com/s2/favicons?domain=meituan.com&sz=128',
+        name: '极客公园',
+        url: 'https://www.geekpark.net/rss',
+        favicon: 'https://www.google.com/s2/favicons?domain=geekpark.net&sz=128',
       },
       {
-        name: '酷壳',
-        url: 'https://coolshell.cn/feed',
-        favicon: 'https://www.google.com/s2/favicons?domain=coolshell.cn&sz=128',
+        name: '雷峰网',
+        url: 'https://www.leiphone.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?domain=leiphone.com&sz=128',
+      },
+      {
+        name: '钛媒体',
+        url: 'https://www.tmtpost.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?domain=tmtpost.com&sz=128',
       },
     ],
   },
   {
-    title: '设计与创意',
+    title: '人工智能',
     feeds: [
       {
-        name: '优设-UISDC',
-        url: 'https://www.uisdc.com/feed',
-        favicon: 'https://www.google.com/s2/favicons?domain=uisdc.com&sz=128',
+        name: '机器之心',
+        url: 'https://www.jiqizhixin.com/rss',
+        favicon: 'https://www.google.com/s2/favicons?domain=jiqizhixin.com&sz=128',
       },
+    ],
+  },
+  {
+    title: '教育',
+    feeds: [
       {
-        name: '人人都是产品经理',
-        url: 'http://www.woshipm.com/feed',
-        favicon: 'https://www.google.com/s2/favicons?domain=woshipm.com&sz=128',
+        name: '芥末堆',
+        url: 'https://jiemodui.com/rss.xml',
+        favicon: 'https://www.google.com/s2/favicons?domain=jemodui.com&sz=128',
       },
     ],
   },

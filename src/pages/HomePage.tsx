@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { Layout, Empty, Select, Button, Typography, Skeleton, Input, Space, Tooltip, Popover, message, Radio, Spin, notification, Modal } from 'antd';
 import type { InputRef } from 'antd';
 import { 
@@ -38,6 +38,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const { settings, isInitialized: settingsInitialized, updateLayoutSettings } = useSettings();
   const { filter: activeListFilter, setFilter } = useFilter();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { feedId, groupId } = useParams<{ feedId?: string; groupId?: string }>();
 
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
@@ -584,6 +586,15 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   // 仅当确认没有订阅源且没有文章时才显示欢迎页面
   const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !hasArticles && !searchTerm;
+
+  // 从URL查询参数中获取articleId
+  useEffect(() => {
+    const articleIdFromUrl = searchParams.get('articleId');
+    if (articleIdFromUrl) {
+      console.log(`[HomePage] 从URL查询参数中获取articleId: ${articleIdFromUrl}`);
+      setSelectedArticleId(articleIdFromUrl);
+    }
+  }, [searchParams, feedId, groupId]);
 
   if (showWelcomePage) {
     return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;
