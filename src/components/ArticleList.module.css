@@ -5,8 +5,19 @@
 .scrollableArticleListContainer {
   height: 100%; /* 确保它填满父容器的高度 */
   overflow-y: auto; /* 当内容超出时显示垂直滚动条 */
-  padding: 8px 0; /* 增加上下内边距，解决卡片遮挡问题 */
+  padding: 2px 0; /* 增加上下内边距，解决卡片遮挡问题 */
   box-sizing: border-box; /* padding 不会增加元素的总宽度/高度 */
+}
+
+/* 添加可拖拽区域 */
+.draggableHeader {
+  -webkit-app-region: drag;
+  height: 36px;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
 }
 
 /* =========================================== */
@@ -88,6 +99,11 @@
   /* 4. 减小订阅源图标和名称间距 */
   margin-right: 0; /* 修改：移除 margin，改用 gap 控制 */
   flex-shrink: 0; /* 关键修复：禁止图标收缩 */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 .sourceNameV5 {

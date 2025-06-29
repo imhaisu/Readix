@@ -17,11 +17,22 @@
 }
 
 .siderHeader {
-  padding: 8px 16px;
+  padding: 8px 16px 8px calc(var(--traffic-light-spacing) + 70px);
   display: flex;
   align-items: center;
   min-height: 36px;
   border-bottom: 0px solid var(--border-color);
+  -webkit-app-region: drag;
+  position: relative;
+}
+
+/* 添加按钮不可拖拽，确保可点击 */
+.siderHeader .headerActions,
+.siderHeader .addButton,
+.siderHeader .refreshButton,
+.siderHeader button {
+  -webkit-app-region: no-drag;
+  z-index: 10;
 }
 
 .siderTitle {
@@ -66,6 +77,15 @@
   justify-content: space-between;
   align-items: center;
   min-height: 28px;
+  -webkit-app-region: drag;
+}
+
+/* 确保feedsHeader中的按钮可点击 */
+.feedsHeader button,
+.feedsHeader .ant-btn,
+.feedsHeader .ant-dropdown-trigger {
+  -webkit-app-region: no-drag;
+  z-index: 10;
 }
 
 .feedsHeaderCollapsed {
@@ -315,5 +335,13 @@
 }
 
 .contentPanel {
-  flex: 1;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.contentPanelHeader {
+  -webkit-app-region: drag;
+  height: 36px;
 } 

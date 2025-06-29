@@ -64,10 +64,10 @@
 /* 底部控制栏 - 使用全局样式强制覆盖 */
 .listFooterControls {
   padding: 0;
-  border-top: 1px solid var(--border-color-light);
+  border-top: 0.5px solid var(--border-color-light);
+  margin: 0 4px; /* 左右各留出4px的间距 */
   flex-shrink: 0;
   background-color: #ffffff;
-  margin: 0;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -355,10 +355,23 @@
 .emptyDetailPane {
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   user-select: none;
   -webkit-user-select: none;
+  position: relative;
+}
+
+/* 添加可拖拽区域到emptyDetailPane */
+.emptyDetailPane::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  -webkit-app-region: drag;
 }
 
 .viewModePopoverContent {
@@ -416,6 +429,7 @@
   flex-shrink: 0;
   margin-top: 0;
   gap: 8px;
+  -webkit-app-region: drag; /* 添加可拖拽属性 */
 }
 
 .panelHeaderTitle {
@@ -429,11 +443,13 @@
   white-space: nowrap;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-app-region: drag; /* 确保标题可拖拽 */
 }
 
 .panelHeaderControls {
   margin-left: auto; /* Push controls to the right */
   gap: 0px !important; /* 减小 Space 组件的间距 */
+  -webkit-app-region: no-drag; /* 控制按钮不可拖拽 */
 }
 
 .panelHeaderControls .ant-btn {
@@ -526,7 +542,20 @@
 .listTitle .panelHeaderTitle {
   font-size: 16px !important; /* 缩小标题字体并确保生效 */
   font-weight: 600 !important;
-  /* 移除之前错误的 margin: 0 修改，让 baseline 对齐生效 */
+  display: flex !important;
+  align-items: center !important;
+  line-height: 1 !important; /* 移除行高，避免底部有额外空间 */
+  margin: 0 !important; /* 确保没有外边距 */
+  height: auto !important; /* 自动高度 */
+}
+
+/* 覆盖Ant Design Typography.Title的默认样式 */
+.listTitle :global(.ant-typography) {
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  display: flex !important;
+  align-items: center !important;
 }
 
 .articleDetailContainer {

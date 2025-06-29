@@ -10,11 +10,22 @@
 
 .fixedControlsBar {
   padding: 8px 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 0px solid var(--border-color);
   background-color: var(--article-bg-color);
   display: flex;
   justify-content: space-between;
   align-items: center;
+  -webkit-app-region: drag; /* 添加可拖拽属性 */
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* 控制区域内的按钮不可拖拽 */
+.fixedControlsBar .ant-btn,
+.fixedControlsBar .headerControls,
+.fixedControlsBar .toolbarButton {
+  -webkit-app-region: no-drag;
 }
 
 .headerControls {
@@ -30,6 +41,13 @@
 }
 
 .toolbarButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 确保图标居中对齐 */
+.toolbarButton .anticon {
   display: flex;
   align-items: center;
   justify-content: center;

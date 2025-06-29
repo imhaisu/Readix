@@ -23,6 +23,9 @@
   --scrollbar-thumb: #d9d9d9;
   --scrollbar-thumb-hover-color: rgba(0,0,0,0.4);
   --scrollbar-thumb-default-color: transparent;
+  /* 新增：macOS窗口控制按钮相关变量 */
+  --traffic-light-spacing: 20px; /* 窗口控制按钮左侧间距 */
+  --traffic-light-vertical-position: 16px; /* 窗口控制按钮垂直位置 */
 
   /* Reeder风格字体栈 - 优先SF Pro系统字体 */
   --font-family-system: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;

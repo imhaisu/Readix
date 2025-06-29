@@ -504,7 +504,7 @@ const SidebarLayout: React.FC = () => {
         >
           <div className={styles.siderHeader}>
             <div className={styles.siderTitle}>
-              {!isPanelCollapsed && <h3>Readix</h3>}
+              {/* 移除Readix文案 */}
             </div>
             <div className={styles.headerActions}>
               {!isPanelCollapsed && (

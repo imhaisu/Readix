@@ -759,6 +759,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                 />
               ) : (
                 <div className={styles.emptyDetailPane}>
+                  {/* 隐藏的可拖拽区域已通过CSS ::before伪元素添加 */}
                   <div style={{ textAlign: 'center' }}>
                     <div className={styles.artisticTitle}>Readix</div>
                     <div className={styles.emptyDescription}>阅读点亮心智</div>

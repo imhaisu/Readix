@@ -415,7 +415,17 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     scrollToArticle: scrollToArticle,
   }));
 
-  return renderContent();
+  return (
+    <div 
+      className={styles.scrollableArticleListContainer}
+      ref={containerRef}
+      onClick={() => document.activeElement instanceof HTMLElement && document.activeElement.blur()}
+    >
+      <div className={styles.draggableHeader}></div>
+      
+      {renderContent()}
+    </div>
+  );
 }));
 
 export default ArticleList; 

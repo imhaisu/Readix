@@ -72,6 +72,7 @@ const createWindow = () => {
     // 在 macOS 上，任务栏中的应用图标是系统默认提供的
     titleBarStyle: 'hidden', // 在 macOS 上使用自定义标题栏
     titleBarOverlay: true,
+    trafficLightPosition: { x: 20, y: 16 }, // 调整窗口控制按钮位置，向右移动并居中对齐
   });
 
   // 添加窗口加载状态监听器
