@@ -1,5 +1,40 @@
-import { Article, FeedSource } from '../contexts/DatabaseContext';
+import { Article, FeedSource } from '../db/database';
 import { generateUniqueId } from './helpers';
+
+// 通用的日期处理函数，处理异常日期
+function normalizePublishDate(rawDate: string | undefined, feedUrl: string): Date {
+  // 如果没有日期，返回当前时间
+  if (!rawDate) {
+    return new Date();
+  }
+  
+  // 尝试解析日期
+  const parsedDate = new Date(rawDate);
+  
+  // 检查日期是否有效
+  if (isNaN(parsedDate.getTime())) {
+    console.warn(`无效的日期格式: "${rawDate}" 来自 "${feedUrl}"，使用当前时间替代`);
+    return new Date();
+  }
+  
+  // 检查是否为未来日期（允许最多提前1小时，处理时区差异）
+  const now = new Date();
+  const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+  if (parsedDate > oneHourLater) {
+    console.warn(`检测到未来日期: "${rawDate}" 来自 "${feedUrl}"，调整为当前时间`);
+    return now;
+  }
+  
+  // 检查是否为过早的日期（如1970年）
+  const year2000 = new Date('2000-01-01');
+  if (parsedDate < year2000) {
+    console.warn(`检测到过早的日期: "${rawDate}" 来自 "${feedUrl}"，调整为当前时间`);
+    return now;
+  }
+  
+  // 日期正常，返回解析后的日期
+  return parsedDate;
+}
 
 // RSS解析器实例现在位于主进程
 
@@ -38,13 +73,9 @@ export const fetchRssFeed = async (feedSource: FeedSource): Promise<Article[]> =
       
       const author = item.creator || item.author || feedData.title;
       
-      // 确保 publishDate 有效
-      let rawPubDate = item.pubDate || item.isoDate;
-      let publishDateObj = rawPubDate ? new Date(rawPubDate) : new Date(); 
-      if (isNaN(publishDateObj.getTime())) {
-        console.warn(`Invalid date encountered for item "${item.title || 'Unknown title'}" from feed "${feedSource.url}". Defaulting to current time. Original date string: ${rawPubDate}`);
-        publishDateObj = new Date();
-      }
+      // 使用通用日期处理函数
+      const rawPubDate = item.pubDate || item.isoDate;
+      const publishDateObj = normalizePublishDate(rawPubDate, feedSource.url);
 
       const contentText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const summary = contentText.substring(0, 200) + (contentText.length > 200 ? '...' : '');
