@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Button, Typography, Card, message, Avatar } from 'antd';
 import { CheckOutlined, PlusOutlined } from '@ant-design/icons';
-import { useDatabase, FeedSource } from '../contexts/DatabaseContext';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { FeedSource, Group } from '../db/database';
 import styles from './WelcomePage.module.css';
 import { presetFeeds, PresetFeed } from '../data/presetFeeds';
 import AddFeedModal from './AddFeedModal';
+import { v4 as uuidv4 } from 'uuid';
 
 const { Title, Paragraph } = Typography;
 
@@ -12,10 +14,49 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
   const { db } = useDatabase();
   const [addingFeedUrl, setAddingFeedUrl] = useState<string | null>(null);
   const [showAddFeedModal, setShowAddFeedModal] = useState(false);
-  const [addedFeedUrls, setAddedFeedUrls] =useState<string[]>([]);
+  const [addedFeedUrls, setAddedFeedUrls] = useState<string[]>([]);
   const [firstAddedFeed, setFirstAddedFeed] = useState<FeedSource | null>(null);
+  const [existingGroups, setExistingGroups] = useState<Group[]>([]);
 
-  const handleAddPresetFeed = async (feed: PresetFeed) => {
+  // 获取或创建分组
+  const getOrCreateGroup = useCallback(async (groupName: string) => {
+    if (!db) return null;
+    
+    // 检查分组是否已存在
+    const existingGroup = existingGroups.find(g => g.name === groupName);
+    if (existingGroup) {
+      return existingGroup.id;
+    }
+    
+    // 如果不存在，创建新分组
+    try {
+      // 获取最大顺序值
+      const maxOrder = existingGroups.length > 0 
+        ? Math.max(...existingGroups.map(g => g.order))
+        : 0;
+        
+      // 创建新分组
+      const newGroup: Group = {
+        id: uuidv4(),
+        name: groupName,
+        order: maxOrder + 1,
+        collapsed: false
+      };
+      
+      // 添加到数据库
+      await db.groups.add(newGroup);
+      
+      // 更新本地状态
+      setExistingGroups(prev => [...prev, newGroup]);
+      
+      return newGroup.id;
+    } catch (error) {
+      console.error(`创建分组失败: ${groupName}`, error);
+      return null;
+    }
+  }, [db, existingGroups]);
+
+  const handleAddPresetFeed = async (feed: PresetFeed, categoryTitle: string) => {
     if (!db) {
       message.error('数据库未准备好，请稍后再试。');
       return;
@@ -33,6 +74,9 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
         return;
       }
       
+      // 获取或创建对应的分组
+      const groupId = await getOrCreateGroup(categoryTitle);
+      
       const newFeed: FeedSource = {
         id: crypto.randomUUID(),
         title: feed.name,
@@ -42,9 +86,9 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
         lastUpdated: new Date(0),
         unreadCount: 0,
         active: true,
-        defaultViewMode: 'summary',
+        viewMode: 'full', // 确保使用全文模式
         bionicReading: false,
-        viewMode: 'full',
+        groupId: groupId || undefined, // 如果创建分组失败，则不设置分组ID
       };
       
       await db.feeds.add(newFeed);
@@ -127,7 +171,7 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
                       icon={<PlusOutlined />}
                       className={styles.addButon}
                       loading={addingFeedUrl === feed.url}
-                      onClick={() => handleAddPresetFeed(feed)}
+                      onClick={() => handleAddPresetFeed(feed, category.title)}
                     >
                       添加
                     </Button>
@@ -148,7 +192,7 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
           setShowAddFeedModal(false);
           message.success(`已成功添加订阅源 "${newFeed.title}"!`);
         }}
-        groups={[]}
+        groups={existingGroups}
       />
     </div>
   );

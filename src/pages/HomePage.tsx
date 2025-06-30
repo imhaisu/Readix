@@ -65,13 +65,16 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const PULL_TO_REFRESH_THRESHOLD = 250;
 
   const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing });
+  
+  // 确保 refreshDependenciesRef 总是包含最新的值
   useEffect(() => {
     refreshDependenciesRef.current = { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing };
   }, [db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing]);
-
-  const listPanelRef = useRef<ImperativePanelHandle>(null);
-  const detailPanelRef = useRef<ImperativePanelHandle>(null);
+  
   const searchInputRef = useRef<InputRef>(null);
+  const detailPanelRef = useRef<ImperativePanelHandle>(null);
+  const listPanelRef = useRef<ImperativePanelHandle>(null);
+  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
   const { isArticleListVisible } = useLayout();
   const panelGroupHandleRef = useRef<ImperativePanelGroupHandle>(null);
   const panelGroupContainerRef = useRef<HTMLDivElement>(null);
@@ -352,8 +355,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [db, feeds, triggerArticleListRefresh]);
   
   const handleLocalListRefresh = useCallback(() => {
-    // console.log('[HomePage] Triggering local list refresh via key increment.');
-  }, []);
+    // 增加列表刷新键值，强制重新渲染列表
+    setListRefreshKey(prev => prev + 1);
+    // 如果是今天视图，也刷新数据
+    if (isTodayView) {
+      handleRefreshAll({ silent: true });
+    }
+  }, [isTodayView, handleRefreshAll]);
 
   useEffect(() => {
     document.addEventListener('request-list-refresh', handleLocalListRefresh);
@@ -363,10 +371,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [handleLocalListRefresh]);
 
   useEffect(() => {
-    if (dbInitialized && isTodayView && !initialLoadRefreshed) {
-      // console.log('[HomePage] Initial load on Today view, triggering silent auto-refresh.');
-      setInitialLoadRefreshed();
+    if (dbInitialized && isTodayView) {
+      // 无论是否是初始加载，都自动刷新"今天"页面的数据
       handleRefreshAll({ silent: true });
+      if (!initialLoadRefreshed) {
+        setInitialLoadRefreshed();
+      }
     }
   }, [dbInitialized, isTodayView, initialLoadRefreshed, setInitialLoadRefreshed, handleRefreshAll]);
 

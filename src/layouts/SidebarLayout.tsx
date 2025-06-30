@@ -633,6 +633,8 @@ const SidebarLayout: React.FC = () => {
                 ),
                 onClick: () => {
                   if (location.pathname === '/') {
+                    // 即使已经在"今天"页面，也触发刷新
+                    handleRefreshAll(false);
                     document.dispatchEvent(new CustomEvent('request-list-refresh'));
                   } else {
                     navigate('/');
@@ -754,6 +756,7 @@ const SidebarLayout: React.FC = () => {
           isOpen={isDiscoverModalOpen} 
           onClose={() => setIsDiscoverModalOpen(false)}
           existingFeeds={feeds} 
+          existingGroups={groups}
         />
       </PanelGroup>
     </Layout>
