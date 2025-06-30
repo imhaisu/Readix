@@ -129,7 +129,8 @@ export const updateUnreadCountOptimized = async (
     // 只有当计数真的发生变化时才更新数据库
     if (currentCount === undefined || currentCount !== actualCount) {
       await db.feeds.update(feedId, { unreadCount: actualCount });
-      console.log(`[Helpers] Feed ${feedId} unread count updated: ${currentCount} -> ${actualCount}`);
+      // 禁用日志输出
+      // console.log(`[Helpers] Feed ${feedId} unread count updated: ${currentCount} -> ${actualCount}`);
     }
     
     return actualCount;
@@ -291,4 +292,127 @@ export const extractFirstParagraphText = (htmlContent: string): string | null =>
     console.error("Error parsing HTML for summary extraction:", e);
   }
   return null;
+};
+
+/**
+ * 格式化日期为人类可读格式
+ * @param timestamp 时间戳（毫秒）
+ * @param includeTime 是否包含时间部分
+ * @returns 格式化后的日期字符串
+ */
+export const formatDate = (timestamp: number, includeTime: boolean = false): string => {
+  if (!timestamp) return '未知日期';
+  
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) return '无效日期';
+    
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    
+    let result = `${year}-${month}-${day}`;
+    
+    if (includeTime) {
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      result += ` ${hours}:${minutes}`;
+    }
+    
+    return result;
+  } catch (e) {
+    console.error('日期格式化错误:', e);
+    return '日期错误';
+  }
+};
+
+/**
+ * 验证日期的合理性
+ * @param date 日期对象或时间戳
+ * @returns 验证结果对象，包含是否有效及原因
+ */
+export const validateDate = (date: Date | number): { isValid: boolean, reason?: string } => {
+  try {
+    const dateObj = typeof date === 'number' ? new Date(date) : date;
+    
+    // 检查是否是有效日期
+    if (isNaN(dateObj.getTime())) {
+      return { isValid: false, reason: '无效日期格式' };
+    }
+    
+    // 检查年份是否合理（2000年以后，不超过当前年份+1）
+    const year = dateObj.getFullYear();
+    const currentYear = new Date().getFullYear();
+    if (year < 2000) {
+      return { isValid: false, reason: `年份过早 (${year})` };
+    }
+    if (year > currentYear + 1) {
+      return { isValid: false, reason: `年份在未来 (${year})` };
+    }
+    
+    // 检查日期是否在未来（允许1天的时区误差）
+    const now = new Date();
+    const oneDayMs = 24 * 60 * 60 * 1000;
+    if (dateObj.getTime() > now.getTime() + oneDayMs) {
+      return { isValid: false, reason: `日期在未来 (${formatDate(dateObj.getTime(), true)})` };
+    }
+    
+    return { isValid: true };
+  } catch (e) {
+    return { isValid: false, reason: `验证出错: ${e}` };
+  }
+};
+
+/**
+ * 记录日期解析问题
+ * @param context 上下文信息
+ * @param articleTitle 文章标题
+ * @param originalDate 原始日期字符串
+ * @param parsedDate 解析后的日期
+ * @param isFirstFetch 是否是首次获取时间
+ */
+export const logDateIssue = (
+  context: string,
+  articleTitle: string,
+  originalDate: string | undefined,
+  parsedDate: Date | number,
+  isFirstFetch: boolean
+): void => {
+  // 检查是否启用了日志
+  // 这里假设从rssParser.ts导入LOG_CONFIG可能会导致循环依赖
+  // 所以我们使用一个简单的检查来决定是否输出日志
+  const isLoggingEnabled = false; // 默认禁用日志
+  
+  if (!isLoggingEnabled) return; // 如果日志被禁用，直接返回
+  
+  const validation = validateDate(parsedDate);
+  
+  // 只记录真正有问题的日期或特殊处理的情况
+  const isJiemodui = context.includes('jiemodui.com');
+  const shouldLog = !validation.isValid || isJiemodui;
+  
+  if (shouldLog) {
+    // 对于芥末堆，使用更简洁的日志格式
+    if (isJiemodui) {
+      const dateStr = typeof parsedDate === 'number' 
+        ? new Date(parsedDate).toLocaleDateString() 
+        : parsedDate.toLocaleDateString();
+      
+      console.log(
+        `[日期] 芥末堆: "${articleTitle.substring(0, 30)}${articleTitle.length > 30 ? '...' : ''}" - ` + 
+        `${isFirstFetch ? '首次获取' : '提取日期'}: ${dateStr}`
+      );
+    }
+    // 对于其他有问题的日期，使用完整的错误日志
+    else if (!validation.isValid) {
+      console.warn(
+        `[日期问题] ${context}\n` +
+        `文章: "${articleTitle}"\n` +
+        `原始日期: ${originalDate || '无'}\n` +
+        `解析日期: ${typeof parsedDate === 'number' ? new Date(parsedDate).toISOString() : parsedDate.toISOString()}\n` +
+        `首次获取: ${isFirstFetch ? '是' : '否'}\n` +
+        `问题: ${validation.reason}`
+      );
+    }
+  }
 }; 

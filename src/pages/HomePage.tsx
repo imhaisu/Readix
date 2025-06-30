@@ -9,7 +9,8 @@ import {
   CheckSquareOutlined,
   AppstoreAddOutlined,
   ExclamationCircleOutlined,
-  SyncOutlined
+  SyncOutlined,
+  CloseOutlined
 } from '@ant-design/icons';
 import ArticleList, { ArticleListHandle } from '../components/ArticleList';
 import ArticleDetail from '../components/ArticleDetail';
@@ -19,15 +20,45 @@ import { useSettings } from '../contexts/SettingsContext';
 import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
 import { FeedSource, Article } from '../db/database';
-import { getTodayRange, debounce, updateUnreadCountOptimized } from '../utils/helpers';
+import { getTodayRange, debounce, updateUnreadCountOptimized, formatDate, logDateIssue } from '../utils/helpers';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
 import { useLayout } from '../contexts/LayoutContext';
 import { GeneralSettings } from '../types/settings';
+import { useLiveQuery } from 'dexie-react-hooks';
+
+import { useTitleBar } from '../contexts/TitleBarContext';
+import { useArticleListManager } from '../hooks/useArticleListManager';
+import { usePrevious } from '../hooks/usePrevious';
+import FeedList from '../components/FeedList';
+import SidebarLayout from '../layouts/SidebarLayout';
+import AddFeedModal from '../components/AddFeedModal';
+import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
+import MindMapModal from '../components/MindMapModal';
+import PulsingLoader from '../components/PulsingLoader';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
 const { Title, Text } = Typography;
+
+// 添加日志控制配置
+const LOG_CONFIG = {
+  ENABLE_FEED_LOGS: false,  // 订阅源日志
+  ENABLE_ERROR_LOGS: true   // 错误日志
+};
+
+// 封装日志函数
+const log = {
+  feed: (message: string) => {
+    if (LOG_CONFIG.ENABLE_FEED_LOGS) console.log(message);
+  },
+  error: (message: string, error?: any) => {
+    if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
+      if (error) console.error(message, error);
+      else console.error(message);
+    }
+  }
+};
 
 interface HomePageProps {
   filter?: 'all' | 'unread' | 'starred' | 'today';
@@ -332,7 +363,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             for (const result of results) {
               const { feed, articles: fetchedArticles } = result;
               if (fetchedArticles.length > 0) {
-                console.log(`[HomePage] 处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
+                log.feed(`[HomePage] 处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
                 
                 // 获取现有文章
                 const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
@@ -343,22 +374,77 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                 const articlesToAdd: Article[] = [];
                 
                 // 区分需要更新的文章和需要新增的文章
-                for (const fetchedArticle of fetchedArticles) {
-                  const existingArticle = existingArticlesMap.get(fetchedArticle.id);
-                  
-                  if (existingArticle) {
-                    // 已存在的文章 - 保留原始发布日期和阅读状态
-                    console.log(`[HomePage] 更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
-                    console.log(`[HomePage] 原始日期: ${new Date(existingArticle.publishDate).toISOString()}, 新日期: ${new Date(fetchedArticle.publishDate).toISOString()}`);
+for (const fetchedArticle of fetchedArticles) {
+  const existingArticle = existingArticlesMap.get(fetchedArticle.id);
+  
+  if (existingArticle) {
+    // 已存在的文章 - 保留原始发布日期和阅读状态
+    // 使用条件日志，默认不输出
+    if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+      console.log(`[HomePage] 更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
+      console.log(`[HomePage] 原始日期: ${formatDate(existingArticle.publishDate, true)}, 新日期: ${formatDate(fetchedArticle.publishDate, true)}`);
+    }
                     
                     // 决定使用哪个发布日期
                     let finalPublishDate = existingArticle.publishDate; // 默认保留原始日期
+                    let finalIsFirstFetchDate = existingArticle.isFirstFetchDate;
                     
-                    // 如果新获取的文章不是使用首次获取时间，并且原文章是使用首次获取时间，则使用新日期
-                    // 这表示我们现在找到了更准确的日期
-                    if (!fetchedArticle.isFirstFetchDate && existingArticle.isFirstFetchDate) {
-                      console.log(`[HomePage] 找到更准确的日期，从首次获取时间更新为实际发布时间`);
-                      finalPublishDate = fetchedArticle.publishDate;
+                    // 检查是否是芥末堆网站的文章
+                    const isJiemoduiArticle = fetchedArticle.id.startsWith('jiemodui_') || 
+                                              (existingArticle.sourceId && 
+                                               feeds.find(f => f.id === existingArticle.sourceId)?.url.includes('jiemodui.com'));
+                    
+                        // 芥末堆文章特殊处理：始终保留原始日期
+    if (isJiemoduiArticle) {
+      if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+        console.log(`[HomePage] 芥末堆文章，保留原始日期: ${formatDate(existingArticle.publishDate, true)}`);
+      }
+      finalPublishDate = existingArticle.publishDate;
+                    } else {
+                      // 日期更新逻辑:
+                      // 1. 如果新获取的文章有准确日期(非首次获取时间)，而原文章使用的是首次获取时间，则更新日期
+                      // 2. 如果两者都不是首次获取时间，保留较早的日期（避免文章日期不断变化）
+                      // 3. 如果两者都是首次获取时间，保留原始日期（保持稳定性）
+                      if (!fetchedArticle.isFirstFetchDate) {
+                        if (existingArticle.isFirstFetchDate) {
+                                    // 情况1: 找到了更准确的日期
+          if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+            console.log(`[HomePage] 找到更准确的日期，从首次获取时间更新为实际发布时间`);
+          }
+          finalPublishDate = fetchedArticle.publishDate;
+          finalIsFirstFetchDate = false;
+          
+          // 记录日期变更
+          if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+            logDateIssue(
+              `日期更新 (首次获取 → 实际日期)`,
+              existingArticle.title,
+              existingArticle.originalPubDate,
+              finalPublishDate,
+              false
+            );
+          }
+                        } else {
+                                      // 情况2: 两者都有准确日期，保留较早的那个
+            if (fetchedArticle.publishDate < existingArticle.publishDate) {
+              if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+                console.log(`[HomePage] 发现更早的准确日期，更新文章日期`);
+              }
+              finalPublishDate = fetchedArticle.publishDate;
+              
+              // 记录日期变更
+              if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+                logDateIssue(
+                  `日期更新 (发现更早日期)`,
+                  existingArticle.title,
+                  existingArticle.originalPubDate,
+                  finalPublishDate,
+                  false
+                );
+              }
+                          }
+                        }
+                      }
                     }
                     
                     articlesToUpdate.push({
@@ -375,12 +461,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       summary: fetchedArticle.summary || existingArticle.summary,
                       imageUrl: fetchedArticle.imageUrl || existingArticle.imageUrl,
                       fetchDate: fetchedArticle.fetchDate, // 更新获取时间
-                      // 如果新文章不是使用首次获取时间，更新标记
-                      isFirstFetchDate: fetchedArticle.isFirstFetchDate ? false : existingArticle.isFirstFetchDate,
+                      // 更新首次获取时间标记
+                      isFirstFetchDate: finalIsFirstFetchDate,
                     });
                   } else {
                     // 新文章 - 直接添加
-                    console.log(`[HomePage] 添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${new Date(fetchedArticle.publishDate).toISOString()}`);
+                    log.feed(`[HomePage] 添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${formatDate(fetchedArticle.publishDate, true)}`);
                     articlesToAdd.push(fetchedArticle);
                   }
                 }
@@ -388,12 +474,12 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                 // 批量更新和添加文章
                 if (articlesToUpdate.length > 0) {
                   await db.articles.bulkPut(articlesToUpdate);
-                  console.log(`[HomePage] 已更新 ${articlesToUpdate.length} 篇文章`);
+                  log.feed(`[HomePage] 已更新 ${articlesToUpdate.length} 篇文章`);
                 }
                 
                 if (articlesToAdd.length > 0) {
                   await db.articles.bulkAdd(articlesToAdd);
-                  console.log(`[HomePage] 已添加 ${articlesToAdd.length} 篇新文章`);
+                  log.feed(`[HomePage] 已添加 ${articlesToAdd.length} 篇新文章`);
                 }
                 
                 // 更新未读计数
@@ -406,7 +492,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
           }
         }
       } catch (error) {
-        console.error('[HomePage] 刷新订阅源失败:', error);
+        log.error('[HomePage] 刷新订阅源失败:', error);
       }
     } finally {
       if (!options?.silent) {

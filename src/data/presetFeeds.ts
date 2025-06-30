@@ -66,7 +66,7 @@ export const presetFeeds: PresetFeedCategory[] = [
       {
         name: '芥末堆',
         url: 'https://jiemodui.com/rss.xml',
-        favicon: 'https://www.google.com/s2/favicons?domain=jemodui.com&sz=128',
+        favicon: 'https://www.google.com/s2/favicons?domain=jiemodui.com&sz=128',
       },
     ],
   },

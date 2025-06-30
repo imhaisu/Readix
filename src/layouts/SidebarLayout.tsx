@@ -35,6 +35,25 @@ import { useLayout } from '../contexts/LayoutContext';
 
 const { Content } = Layout;
 
+// 添加日志控制配置
+const LOG_CONFIG = {
+  ENABLE_COUNT_LOGS: false, // 计数日志
+  ENABLE_ERROR_LOGS: true   // 错误日志
+};
+
+// 封装日志函数
+const log = {
+  count: (message: string) => {
+    if (LOG_CONFIG.ENABLE_COUNT_LOGS) console.log(message);
+  },
+  error: (message: string, error?: any) => {
+    if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
+      if (error) console.error(message, error);
+      else console.error(message);
+    }
+  }
+};
+
 // 防抖函数
 const debounce = <F extends (...args: any[]) => any>(func: F, waitFor: number) => {
   let timeout: NodeJS.Timeout;
@@ -270,7 +289,7 @@ const SidebarLayout: React.FC = () => {
 
     const fetchCounts = async () => {
       try {
-        console.log('[SidebarLayout] 开始计算各种数量...');
+        log.count('[SidebarLayout] 开始计算各种数量...');
         
         // 根据 filter 状态构建查询条件
         const filterCondition = (article: DbArticle) => {
@@ -318,7 +337,7 @@ const SidebarLayout: React.FC = () => {
           notesPromise
         ]);
 
-        console.log(`[SidebarLayout] 计数结果: 今日=${today}, 所有=${all}, 稍后读=${readLater}, 未读=${unread}, 星标=${starred}, 笔记=${notes}`);
+        log.count(`[SidebarLayout] 计数结果: 今日=${today}, 所有=${all}, 稍后读=${readLater}, 未读=${unread}, 星标=${starred}, 笔记=${notes}`);
 
         setTodayCount(today);
         setAllCount(all);
@@ -339,10 +358,10 @@ const SidebarLayout: React.FC = () => {
   // 添加一个监听器，当笔记数量变化时更新
   useEffect(() => {
     const handleAnnotationChange = () => {
-      console.log('[SidebarLayout] 检测到笔记变化，更新计数');
+      log.count('[SidebarLayout] 检测到笔记变化，更新计数');
       if (db && dbInitialized) {
         db.annotations.count().then(count => {
-          console.log(`[SidebarLayout] 新的笔记数量: ${count}`);
+          log.count(`[SidebarLayout] 新的笔记数量: ${count}`);
           setNotesCount(count);
         });
       }
@@ -361,21 +380,21 @@ const SidebarLayout: React.FC = () => {
     const returnToNotes = sessionStorage.getItem('returnToNotes') === 'true';
     
     if (returnToNotes) {
-      console.log('[SidebarLayout] 检测到returnToNotes标记，准备导航到笔记页面');
-      console.log('[SidebarLayout] 当前路径:', location.pathname);
+      log.count('[SidebarLayout] 检测到returnToNotes标记，准备导航到笔记页面');
+      log.count(`[SidebarLayout] 当前路径: ${location.pathname}`);
       
       // 清除标记，防止重复导航
       sessionStorage.removeItem('returnToNotes');
       
       // 确保FeedList可见，立即设置
       if (!isFeedListVisible) {
-        console.log('[SidebarLayout] 设置FeedList可见');
+        log.count('[SidebarLayout] 设置FeedList可见');
         setIsFeedListVisible(true);
       }
       
       // 延迟导航到笔记页面，确保侧边栏已完全加载并且FeedList可见
       setTimeout(() => {
-        console.log('[SidebarLayout] 延迟导航到笔记页面，保持侧边栏FeedList可见');
+        log.count('[SidebarLayout] 延迟导航到笔记页面，保持侧边栏FeedList可见');
         // 导航到笔记页面
         navigate('/notes');
       }, 500);
@@ -398,7 +417,7 @@ const SidebarLayout: React.FC = () => {
 
   const handleRefreshAll = useCallback(async (isSilent: boolean = false) => {
     if (!db || (refreshing && !isSilent) || feeds.length === 0) {
-        if (refreshing && !isSilent) console.log('[SidebarLayout] Refresh already in progress or no feeds.');
+        if (refreshing && !isSilent) log.count('[SidebarLayout] Refresh already in progress or no feeds.');
         return;
     }
     if (!isSilent) {
