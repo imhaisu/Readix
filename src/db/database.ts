@@ -88,6 +88,8 @@ export interface Article {
   author?: string;
   publishDate: number;
   fetchDate: number;
+  originalPubDate?: string;
+  isFirstFetchDate?: boolean;
   content: string;
   contentText?: string;
   summary?: string;

@@ -65,6 +65,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const PULL_TO_REFRESH_THRESHOLD = 250;
 
   const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing });
+  const lastRefreshTimeRef = useRef<number>(0);
   
   // 确保 refreshDependenciesRef 总是包含最新的值
   useEffect(() => {
@@ -244,13 +245,17 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const loadFeeds = async () => {
     if (!db) return;
+    
+    // 添加日志，帮助调试
+    console.log('[HomePage] 加载订阅源列表');
     const allFeeds = await db.feeds.toArray();
     setFeeds(allFeeds);
   };
 
   useEffect(() => {
     loadFeeds();
-  }, [db, articleListRefreshTrigger]);
+    // 移除triggerArticleListRefresh依赖，避免循环
+  }, [db]);
   
   useEffect(() => {
     const prevFeed = prevFeedIdRef.current;
@@ -282,66 +287,126 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
     const { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
     
-    if (isPullRefreshing) {
-      // console.log('Refresh is already in progress. Skipping.');
+    // 添加防抖机制，避免短时间内多次刷新
+    const now = Date.now();
+    const MIN_REFRESH_INTERVAL = 5000; // 5秒内不重复刷新
+    if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL) {
+      console.log('[HomePage] 刷新间隔太短，跳过');
       return;
     }
-    
-    if (!db) return;
+    lastRefreshTimeRef.current = now;
+
+    if (!db) {
+      console.error('[HomePage] 数据库未初始化');
+      return;
+    }
 
     if (!options?.silent) {
       setIsPullRefreshing(true);
     }
 
-    const feedsToRefresh = feedId ? [feeds.find(f => f.id === feedId)].filter(Boolean) as FeedSource[] : feeds;
-
     try {
-      if (feedsToRefresh.length > 0) {
-        // console.log(`[HomePage] Refreshing ${feedsToRefresh.length} feeds...`);
-        const results = await refreshAllFeeds(feedsToRefresh);
+      // 确定要刷新的订阅源
+      let feedsToRefresh: FeedSource[] = [];
+      
+      if (feedId) {
+        // 刷新单个订阅源
+        const feed = await db.feeds.get(feedId);
+        if (feed) {
+          feedsToRefresh = [feed];
+        }
+      } else if (groupId) {
+        // 刷新分组内的所有订阅源
+        feedsToRefresh = await db.feeds.where('groupId').equals(groupId).toArray();
+      } else {
+        // 刷新所有订阅源
+        feedsToRefresh = await db.feeds.toArray();
+      }
 
-        if (db) {
-          for (const result of results) {
-            const { feed, articles: fetchedArticles } = result;
-            if (fetchedArticles.length > 0) {
-              const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
-              const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
+      try {
+        if (feedsToRefresh.length > 0) {
+          // console.log(`[HomePage] Refreshing ${feedsToRefresh.length} feeds...`);
+          const results = await refreshAllFeeds(feedsToRefresh);
 
-              const articlesToPut = fetchedArticles.map(fetchedArticle => {
-                const existingArticle = existingArticlesMap.get(fetchedArticle.id);
-                if (existingArticle) {
-                  // Merge to preserve user-specific state
-                  return {
-                    ...fetchedArticle, // Fresh data from feed
-                    isRead: existingArticle.isRead,
-                    isStarred: existingArticle.isStarred,
-                    scrollPosition: existingArticle.scrollPosition,
-                    isReadLater: existingArticle.isReadLater,
-                  };
-                } else {
-                  return fetchedArticle; // New article
+          if (db) {
+            for (const result of results) {
+              const { feed, articles: fetchedArticles } = result;
+              if (fetchedArticles.length > 0) {
+                console.log(`[HomePage] 处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
+                
+                // 获取现有文章
+                const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
+                const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
+                
+                // 处理文章数据
+                const articlesToUpdate: Article[] = [];
+                const articlesToAdd: Article[] = [];
+                
+                // 区分需要更新的文章和需要新增的文章
+                for (const fetchedArticle of fetchedArticles) {
+                  const existingArticle = existingArticlesMap.get(fetchedArticle.id);
+                  
+                  if (existingArticle) {
+                    // 已存在的文章 - 保留原始发布日期和阅读状态
+                    console.log(`[HomePage] 更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
+                    console.log(`[HomePage] 原始日期: ${new Date(existingArticle.publishDate).toISOString()}, 新日期: ${new Date(fetchedArticle.publishDate).toISOString()}`);
+                    
+                    // 决定使用哪个发布日期
+                    let finalPublishDate = existingArticle.publishDate; // 默认保留原始日期
+                    
+                    // 如果新获取的文章不是使用首次获取时间，并且原文章是使用首次获取时间，则使用新日期
+                    // 这表示我们现在找到了更准确的日期
+                    if (!fetchedArticle.isFirstFetchDate && existingArticle.isFirstFetchDate) {
+                      console.log(`[HomePage] 找到更准确的日期，从首次获取时间更新为实际发布时间`);
+                      finalPublishDate = fetchedArticle.publishDate;
+                    }
+                    
+                    articlesToUpdate.push({
+                      ...fetchedArticle,
+                      // 保留这些字段不变
+                      publishDate: finalPublishDate, // 使用决定的发布日期
+                      isRead: existingArticle.isRead,
+                      isStarred: existingArticle.isStarred,
+                      isReadLater: existingArticle.isReadLater,
+                      scrollPosition: existingArticle.scrollPosition,
+                      annotations: existingArticle.annotations,
+                      // 可以更新的字段
+                      content: fetchedArticle.content || existingArticle.content,
+                      summary: fetchedArticle.summary || existingArticle.summary,
+                      imageUrl: fetchedArticle.imageUrl || existingArticle.imageUrl,
+                      fetchDate: fetchedArticle.fetchDate, // 更新获取时间
+                      // 如果新文章不是使用首次获取时间，更新标记
+                      isFirstFetchDate: fetchedArticle.isFirstFetchDate ? false : existingArticle.isFirstFetchDate,
+                    });
+                  } else {
+                    // 新文章 - 直接添加
+                    console.log(`[HomePage] 添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${new Date(fetchedArticle.publishDate).toISOString()}`);
+                    articlesToAdd.push(fetchedArticle);
+                  }
                 }
-              });
-
-              await db.articles.bulkPut(articlesToPut);
-              await updateUnreadCountOptimized(db, feed.id!);
+                
+                // 批量更新和添加文章
+                if (articlesToUpdate.length > 0) {
+                  await db.articles.bulkPut(articlesToUpdate);
+                  console.log(`[HomePage] 已更新 ${articlesToUpdate.length} 篇文章`);
+                }
+                
+                if (articlesToAdd.length > 0) {
+                  await db.articles.bulkAdd(articlesToAdd);
+                  console.log(`[HomePage] 已添加 ${articlesToAdd.length} 篇新文章`);
+                }
+                
+                // 更新未读计数
+                await updateUnreadCountOptimized(db, feed.id!);
+              }
             }
+            
+            // 触发文章列表刷新
+            triggerArticleListRefresh();
           }
         }
-        
-        triggerArticleListRefresh();
-
-      } else {
-        // console.log('No feeds to refresh.');
-      }
-    } catch (error) {
-      console.error('Error during refresh all:', error);
-      if (!options?.silent) {
-        notification.error({
-          message: '刷新失败',
-          description: '同步订阅源时发生错误，请稍后重试。',
-          placement: 'bottomRight',
-        });
+      } catch (error) {
+        console.error('[HomePage] 刷新订阅源失败:', error);
       }
     } finally {
       if (!options?.silent) {
@@ -351,14 +416,20 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       } else {
         setIsPullRefreshing(false);
       }
+      
+      // 手动更新订阅源列表，确保UI显示最新数据
+      loadFeeds();
     }
-  }, [db, feeds, triggerArticleListRefresh]);
+  }, [loadFeeds]);
   
   const handleLocalListRefresh = useCallback(() => {
     // 增加列表刷新键值，强制重新渲染列表
     setListRefreshKey(prev => prev + 1);
-    // 如果是今天视图，也刷新数据
+    
+    // 如果是今天视图，也刷新数据，但要避免循环刷新
+    // 使用已经添加的防抖机制来防止频繁刷新
     if (isTodayView) {
+      // 调用handleRefreshAll时会自动检查时间间隔
       handleRefreshAll({ silent: true });
     }
   }, [isTodayView, handleRefreshAll]);
@@ -372,9 +443,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   useEffect(() => {
     if (dbInitialized && isTodayView) {
-      // 无论是否是初始加载，都自动刷新"今天"页面的数据
-      handleRefreshAll({ silent: true });
+      // 只有在初始加载或明确要求刷新时才进行刷新
       if (!initialLoadRefreshed) {
+        handleRefreshAll({ silent: true });
         setInitialLoadRefreshed();
       }
     }
@@ -605,6 +676,65 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setSelectedArticleId(articleIdFromUrl);
     }
   }, [searchParams, feedId, groupId]);
+
+  // 添加一个函数，用于清理数据库中的重复文章
+  const cleanupDuplicateArticles = useCallback(async () => {
+    if (!db) return;
+    
+    try {
+      console.log('[HomePage] 开始清理重复文章...');
+      
+      // 获取所有文章
+      const allArticles = await db.articles.toArray();
+      
+      // 按源和标题分组，找出重复项
+      const articleGroups = new Map<string, Article[]>();
+      
+      allArticles.forEach(article => {
+        // 使用源ID和标题作为分组键
+        const key = `${article.sourceId}#${article.title}`;
+        if (!articleGroups.has(key)) {
+          articleGroups.set(key, []);
+        }
+        articleGroups.get(key)!.push(article);
+      });
+      
+      // 找出并删除重复项
+      const articlesToDelete: string[] = [];
+      
+      articleGroups.forEach(group => {
+        if (group.length > 1) {
+          // 按发布日期排序，保留最新的一篇（对于芥末堆文章，保留最新的）
+          group.sort((a, b) => b.publishDate - a.publishDate);
+          
+          // 保留第一篇（最新的），删除其余的
+          for (let i = 1; i < group.length; i++) {
+            articlesToDelete.push(group[i].id);
+          }
+        }
+      });
+      
+      // 批量删除重复文章
+      if (articlesToDelete.length > 0) {
+        await db.articles.bulkDelete(articlesToDelete);
+        console.log(`[HomePage] 已删除 ${articlesToDelete.length} 篇重复文章`);
+        
+        // 刷新文章列表
+        triggerArticleListRefresh();
+      } else {
+        console.log('[HomePage] 没有发现重复文章');
+      }
+    } catch (error) {
+      console.error('[HomePage] 清理重复文章失败:', error);
+    }
+  }, [db, triggerArticleListRefresh]);
+  
+  // 在应用初始化时清理重复文章
+  useEffect(() => {
+    if (dbInitialized) {
+      cleanupDuplicateArticles();
+    }
+  }, [dbInitialized, cleanupDuplicateArticles]);
 
   if (showWelcomePage) {
     return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;
