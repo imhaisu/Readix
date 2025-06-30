@@ -122,6 +122,9 @@ export const useArticleListManager = ({
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
 
+        // 首先过滤掉被隐藏的文章
+        collection = collection.filter(article => article.isHidden !== true);
+
         // Filter by Feed or Group
         if (currentFeedId) {
           collection = collection.filter(article => article.sourceId === currentFeedId);

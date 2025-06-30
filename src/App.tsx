@@ -9,6 +9,7 @@ import { useSettings } from './contexts/SettingsContext';
 import { useDatabase } from './contexts/DatabaseContext';
 import { TitleBarProvider, useTitleBar } from './contexts/TitleBarContext';
 import { FilterProvider } from './contexts/FilterContext';
+import { FilterRulesProvider } from './contexts/FilterRulesContext';
 import PulsingLoader from './components/PulsingLoader';
 import { LayoutProvider } from './contexts/LayoutContext';
 
@@ -24,11 +25,13 @@ const AppContent: React.FC = () => {
   }
   
   return (
-    <FilterProvider>
-      <Layout className="main-content">
-        <Outlet />
-      </Layout>
-    </FilterProvider>
+    <FilterRulesProvider>
+      <FilterProvider>
+        <Layout className="main-content">
+          <Outlet />
+        </Layout>
+      </FilterProvider>
+    </FilterRulesProvider>
   );
 }
 

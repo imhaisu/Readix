@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Tabs, Form, InputNumber, Switch, Button, Space, Typography, message, Select, Slider, ColorPicker, Input, Divider, Modal } from 'antd';
-import { SaveOutlined, ReloadOutlined, CloseOutlined, ExportOutlined, ImportOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, CloseOutlined, ExportOutlined, ImportOutlined, FilterOutlined } from '@ant-design/icons';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import styles from './SettingsPage.module.css';
 import { Settings, defaultSettings } from '../types/settings';
 import { FeedSource } from '../db/database';
+import FilterRulesManager from '../components/FilterRulesManager';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -281,6 +282,17 @@ const SettingsPage: React.FC = () => {
                       <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                       <Text style={{ marginLeft: 8 }}>滚动到底部自动标记为已读</Text>
                   </Form.Item>
+              </div>
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={<span><FilterOutlined /> 过滤规则</span>} key="filter">
+              <div className={styles.formSection}>
+                <Title level={5}>全局过滤规则</Title>
+                <Text type="secondary">
+                  设置全局过滤规则，对所有订阅源的文章进行过滤。被过滤的文章不会在列表中显示，但仍保存在数据库中。
+                </Text>
+                <div style={{ marginTop: 16 }}>
+                  <FilterRulesManager />
+                </div>
               </div>
             </Tabs.TabPane>
           </Tabs>

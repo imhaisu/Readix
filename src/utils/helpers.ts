@@ -124,7 +124,11 @@ export const updateUnreadCountOptimized = async (
   currentCount?: number
 ): Promise<number> => {
   try {
-    const actualCount = await db.articles.where({ sourceId: feedId, isRead: 'false' }).count();
+    // 修改查询，排除被隐藏的文章
+    const actualCount = await db.articles
+      .where({ sourceId: feedId, isRead: 'false' })
+      .filter((article: any) => article.isHidden !== true)
+      .count();
     
     // 只有当计数真的发生变化时才更新数据库
     if (currentCount === undefined || currentCount !== actualCount) {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid, Radio } from 'antd';
-import { InfoCircleOutlined, UploadOutlined, PictureOutlined } from '@ant-design/icons';
-import { useDatabase, FeedSource, Group } from '../contexts/DatabaseContext';
+import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid, Radio, Tabs } from 'antd';
+import { InfoCircleOutlined, UploadOutlined, PictureOutlined, FilterOutlined } from '@ant-design/icons';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { FeedSource, Group } from '../db/database';
 import type { RcFile, UploadProps } from 'antd/es/upload/interface';
 
 import DefaultIcon from './icons/DefaultIcon';
@@ -10,9 +11,11 @@ import NewsIcon from './icons/NewsIcon';
 import BlogIcon from './icons/BlogIcon';
 import CodeIcon from './icons/CodeIcon';
 import PodcastIcon from './icons/PodcastIcon';
+import FilterRulesManager from './FilterRulesManager';
 
 const { Option } = Select;
 const { useBreakpoint } = Grid;
+const { TabPane } = Tabs;
 
 interface EditFeedModalProps {
   feed: FeedSource | null;
@@ -44,6 +47,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [currentIconUrl, setCurrentIconUrl] = useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<string>('basic');
   const screens = useBreakpoint();
 
   useEffect(() => {
@@ -59,6 +63,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
     } else if (!open) {
       form.resetFields();
       setCurrentIconUrl(undefined);
+      setActiveTab('basic');
     }
   }, [feed, open, form]);
 
@@ -164,6 +169,91 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
     return <Avatar shape="square" size={64} icon={<PictureOutlined />} style={{ backgroundColor: '#f0f0f0' }} />;
   };
 
+  const renderBasicInfoTab = () => (
+    <Form form={form} layout="vertical" name="editFeedForm">
+      <Form.Item name="title" label="标题" rules={[{ required: true, message: '请输入订阅源标题!' }]}>
+        <Input />
+      </Form.Item>
+
+      <Form.Item label={<span>订阅源URL&nbsp;<Tooltip title="修改URL可能导致订阅源无法正确解析或获取内容。请谨慎操作。"><InfoCircleOutlined /></Tooltip></span>} name="url">
+        <Input readOnly />
+      </Form.Item>
+      
+      <Form.Item name="groupId" label="分组">
+        <Select placeholder="选择分组（可选）" allowClear>
+          <Option value={null}>(无分组)</Option>
+          {groups.map(group => (group.id && <Option key={group.id} value={group.id}>{group.name}</Option>))}
+        </Select>
+      </Form.Item>
+
+      <Form.Item label="当前图标预览" style={{ marginBottom: 10 }}>
+        {renderIconPreview()}
+      </Form.Item>
+      
+      <Form.Item
+        name="iconUrlInput"
+        label="图标设置"
+        tooltip="可粘贴URL、上传图片或选择预设图标。"
+      >
+        <Input.Group compact>
+          <Input 
+            style={{ width: 'calc(100% - 92px)' }}
+            placeholder="粘贴图标URL或选择下方预设" 
+            value={form.getFieldValue('iconUrlInput')}
+            onChange={handleIconUrlInputChange} 
+          />
+          <Upload {...uploadProps}>
+              <Button icon={<UploadOutlined />}>上传</Button>
+          </Upload>
+        </Input.Group>
+      </Form.Item>
+
+      <Form.Item label="选择预设图标">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+          {presetIcons.map(pIcon => (
+            <div key={pIcon.name} style={{ textAlign: 'center' }}>
+              <Button 
+                onClick={() => handlePresetIconSelect(pIcon.path)}
+                style={{ 
+                  padding: '8px',
+                  width: '80px',
+                  height: '80px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: currentIconUrl === pIcon.path ? '2px solid #1890ff' : '1px solid #d9d9d9'
+                }}
+              >
+                <pIcon.component 
+                  width={32} 
+                  height={32} 
+                  style={{ marginBottom: '8px' }}
+                />
+                <span style={{ fontSize: '12px' }}>{pIcon.name}</span>
+              </Button>
+            </div>
+          ))}
+        </div>
+      </Form.Item>
+
+      <Form.Item name="defaultViewMode" label="默认阅读模式">
+        <Radio.Group>
+          <Radio.Button value="summary">摘要</Radio.Button>
+          <Radio.Button value="fulltext">全文</Radio.Button>
+        </Radio.Group>
+      </Form.Item>
+    </Form>
+  );
+
+  const renderFilterRulesTab = () => (
+    feed && feed.id ? (
+      <FilterRulesManager feedId={feed.id} feedTitle={feed.title} />
+    ) : (
+      <div>请先保存订阅源信息后再设置过滤规则。</div>
+    )
+  );
+
   return (
     <Modal
       title="修改订阅源信息"
@@ -173,83 +263,16 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
       onOk={handleSubmit}
       okText="保存"
       cancelText="取消"
-      width={screens.md ? 600 : '90%'}
+      width={screens.md ? 700 : '90%'}
     >
-      <Form form={form} layout="vertical" name="editFeedForm">
-        <Form.Item name="title" label="标题" rules={[{ required: true, message: '请输入订阅源标题!' }]}>
-          <Input />
-        </Form.Item>
-
-        <Form.Item label={<span>订阅源URL&nbsp;<Tooltip title="修改URL可能导致订阅源无法正确解析或获取内容。请谨慎操作。"><InfoCircleOutlined /></Tooltip></span>} name="url">
-          <Input readOnly />
-        </Form.Item>
-        
-        <Form.Item name="groupId" label="分组">
-          <Select placeholder="选择分组（可选）" allowClear>
-            <Option value={null}>(无分组)</Option>
-            {groups.map(group => (group.id && <Option key={group.id} value={group.id}>{group.name}</Option>))}
-          </Select>
-        </Form.Item>
-
-        <Form.Item label="当前图标预览" style={{ marginBottom: 10 }}>
-          {renderIconPreview()}
-        </Form.Item>
-        
-        <Form.Item
-          name="iconUrlInput"
-          label="图标设置"
-          tooltip="可粘贴URL、上传图片或选择预设图标。"
-        >
-          <Input.Group compact>
-            <Input 
-              style={{ width: 'calc(100% - 92px)' }}
-              placeholder="粘贴图标URL或选择下方预设" 
-              value={form.getFieldValue('iconUrlInput')}
-              onChange={handleIconUrlInputChange} 
-            />
-            <Upload {...uploadProps}>
-                <Button icon={<UploadOutlined />}>上传</Button>
-            </Upload>
-          </Input.Group>
-        </Form.Item>
-
-        <Form.Item label="选择预设图标">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-            {presetIcons.map(pIcon => (
-              <div key={pIcon.name} style={{ textAlign: 'center' }}>
-                <Button 
-                  onClick={() => handlePresetIconSelect(pIcon.path)}
-                  style={{ 
-                    padding: '8px',
-                    width: '80px',
-                    height: '80px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: currentIconUrl === pIcon.path ? '2px solid #1890ff' : '1px solid #d9d9d9'
-                  }}
-                >
-                  <pIcon.component 
-                    width={32} 
-                    height={32} 
-                    style={{ marginBottom: '8px' }}
-                  />
-                  <span style={{ fontSize: '12px' }}>{pIcon.name}</span>
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Form.Item>
-
-        <Form.Item name="defaultViewMode" label="默认阅读模式">
-          <Radio.Group>
-            <Radio.Button value="summary">摘要</Radio.Button>
-            <Radio.Button value="fulltext">全文</Radio.Button>
-          </Radio.Group>
-        </Form.Item>
-
-      </Form>
+      <Tabs activeKey={activeTab} onChange={setActiveTab}>
+        <TabPane tab="基本信息" key="basic">
+          {renderBasicInfoTab()}
+        </TabPane>
+        <TabPane tab={<span><FilterOutlined /> 过滤规则</span>} key="filter">
+          {renderFilterRulesTab()}
+        </TabPane>
+      </Tabs>
     </Modal>
   );
 };

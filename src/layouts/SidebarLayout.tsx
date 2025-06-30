@@ -293,6 +293,11 @@ const SidebarLayout: React.FC = () => {
         
         // 根据 filter 状态构建查询条件
         const filterCondition = (article: DbArticle) => {
+          // 首先排除被隐藏的文章
+          if (article.isHidden === true) {
+            return false;
+          }
+          
           if (filter === 'unread') {
             return article.isRead === 'false';
           }
@@ -308,21 +313,26 @@ const SidebarLayout: React.FC = () => {
         const todayRange = getTodayRange();
         const todayPromise = db.articles
           .where('publishDate').between(todayRange.start, todayRange.end, true, true)
-          .filter(filterCondition)
+          .filter(article => !article.isHidden && filterCondition(article))
           .count();
 
-        const allPromise = db.articles.filter(filterCondition).count();
+        const allPromise = db.articles
+          .filter(article => !article.isHidden && filterCondition(article))
+          .count();
          
         const readLaterPromise = db.articles
           .where({ isReadLater: 'true' })
-          .filter(filterCondition)
+          .filter(article => !article.isHidden && filterCondition(article))
           .count();
 
-        const totalUnreadPromise = db.articles.where('isRead').equals('false').count();
+        const totalUnreadPromise = db.articles
+          .where('isRead').equals('false')
+          .filter(article => !article.isHidden)
+          .count();
          
         const starredPromise = db.articles
           .where({ isStarred: 'true' })
-          .filter(filterCondition)
+          .filter(article => !article.isHidden && filterCondition(article))
           .count();
 
         // 新增：获取笔记和高亮的数量

@@ -73,7 +73,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           // Default to unread
           query = db.articles.where({ sourceId: feed.id, isRead: 'false' });
         }
-        const count = await query.count();
+        // 添加过滤条件，排除被隐藏的文章
+        const count = await query.filter(article => article.isHidden !== true).count();
         counts.set(feed.id, count);
       }
       setDynamicCounts(counts);

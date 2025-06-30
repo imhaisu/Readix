@@ -48,6 +48,26 @@ export class RssDatabase extends Dexie {
       // New fields aiMindMap and aiHighlightedContent are added.
       // No data migration needed, they will be undefined by default for existing articles.
     });
+
+    // 添加版本13，支持文章过滤功能
+    this.version(13).stores({
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, aiMindMap, aiHighlightedContent, isHidden, [sourceId+isRead], [sourceId+isStarred]'
+    }).upgrade(async (tx) => {
+      console.log("数据库从版本12升级到版本13，添加文章过滤功能");
+      // 为所有现有文章添加isHidden字段，默认为false
+      await tx.table('articles').toCollection().modify(article => {
+        if (article.isHidden === undefined) {
+          article.isHidden = false;
+        }
+      });
+      
+      // 为所有订阅源添加filterRules字段，默认为空数组
+      await tx.table('feeds').toCollection().modify(feed => {
+        if (feed.filterRules === undefined) {
+          feed.filterRules = [];
+        }
+      });
+    });
     
     // 定义类型
     this.feeds = this.table('feeds');
@@ -78,6 +98,16 @@ export interface FeedSource {
   bionicReading: boolean;
   order?: number;
   defaultViewMode?: 'summary' | 'fulltext';
+  filterRules?: FilterRule[]; // 新增：过滤规则
+}
+
+// 新增：过滤规则接口定义
+export interface FilterRule {
+  id: string;
+  scope: 'title' | 'content' | 'author'; // 过滤范围
+  type: 'contains' | 'not_contains';     // 过滤类型
+  keywords: string;                      // 关键词，多个关键词以空格分隔
+  isActive: boolean;                     // 规则是否启用
 }
 
 export interface Article {
@@ -97,7 +127,7 @@ export interface Article {
   isRead: string;
   isStarred: string;
   isReadLater?: string;
-  isHidden?: boolean;
+  isHidden?: boolean; // 新增：是否被过滤隐藏
   tags?: string[];
   guid?: string;
   scrollPosition?: number;
