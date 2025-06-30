@@ -107,11 +107,50 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
     }
   };
 
-  const handleFinish = () => {
-    if (firstAddedFeed) {
-      onAddFirstFeed(firstAddedFeed);
-    } else {
+  const handleFinish = async () => {
+    if (addedFeedUrls.length === 0) {
       message.info('请至少添加一个订阅源来开始使用。');
+      return;
+    }
+    
+    try {
+      // 显示加载提示
+      message.loading('正在刷新订阅源...', 0);
+      
+      // 刷新所有订阅源
+      if (db) {
+        const allFeeds = await db.feeds.toArray();
+        if (allFeeds.length > 0) {
+          try {
+            // 使用refreshAllFeeds函数刷新所有订阅源
+            // 导入并使用rssParser中的函数
+            const { refreshAllFeeds } = await import('../utils/rssParser');
+            await refreshAllFeeds(allFeeds);
+            
+            // 触发全局刷新事件
+            document.dispatchEvent(new Event('request-list-refresh'));
+          } catch (err) {
+            console.error('刷新订阅源时出错:', err);
+          }
+        }
+      }
+      
+      // 关闭加载提示
+      message.destroy();
+      
+      // 导航到今日视图
+      window.location.href = '/';
+      
+      // 延迟一点时间后显示成功提示
+      setTimeout(() => {
+        message.success('订阅源已添加，开始您的阅读之旅！');
+      }, 500);
+    } catch (error) {
+      console.error('刷新订阅源失败:', error);
+      message.error('刷新订阅源时出错，请稍后再试');
+      
+      // 即使出错也导航到主页
+      window.location.href = '/';
     }
   };
 

@@ -53,6 +53,9 @@ declare global {
       testDoubaoApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
       streamAiSummary: (contentText: string) => void;
       onAiSummaryUpdate: (callback: (type: 'chunk' | 'end' | 'error', data?: any) => void) => () => void;
+
+      // 新增方法
+      refreshAllFeeds: (feeds: FeedSource[]) => Promise<{ feed: FeedSource, articles: any[] }[]>;
     };
   }
 }

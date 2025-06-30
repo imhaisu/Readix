@@ -863,8 +863,8 @@ ipcMain.on('stream-ai-summary', async (event, contentText) => {
       {
         model: model,
         messages: [
-          { role: 'system', content: '你是一个专业的文章摘要助手。请根据用户提供的文章内容，生成一段简洁、流畅、准确的摘要，字数在300字以内。' },
-          { role: 'user', content: `请为以下文章生成摘要：\n\n${contentText}` },
+          { role: 'system', content: '你是一个专业的文章价值分析助手。请从产品经理的视角，分析用户提供的文章内容，重点说明这篇文章对产品经理工作的实际价值和可应用的洞见。回答要简洁、实用、有针对性，字数在300字以内。' },
+          { role: 'user', content: `我是一个产品经理，请帮我从我的视角分析这篇文章读了有啥用：\n\n${contentText}` },
         ],
         stream: true,
       },

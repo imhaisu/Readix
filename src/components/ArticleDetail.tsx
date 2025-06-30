@@ -227,9 +227,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const handleCopySummary = () => {
     if (inlineSummaryContent) {
       navigator.clipboard.writeText(inlineSummaryContent)
-        .then(() => message.success('摘要已复制到剪贴板'))
+        .then(() => message.success('价值分析已复制到剪贴板'))
         .catch(() => message.error('复制失败'));
     }
+  };
+
+  // 添加处理Markdown风格加粗文本的函数
+  const convertMarkdownBoldToHtml = (text: string) => {
+    // 将 **text** 格式转换为 <strong>text</strong>
+    return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   };
 
   const saveAiMindMap = async (markdown: string) => {
@@ -1029,7 +1035,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           
           <div className={styles.controlSeparator}></div>
           
-          <Tooltip title="AI 摘要">
+          <Tooltip title="读了有啥用">
             <Button
               type="text"
               shape="circle"
@@ -1148,10 +1154,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                     <div className={styles.summaryTitleWrapper}>
                       <h3 className={styles.summaryTitle}>
                         <ExperimentOutlined />
-                        <span style={{ marginLeft: 8 }}>AI 总结</span>
+                        <span style={{ marginLeft: 8 }}>读了有啥用</span>
                       </h3>
                       {inlineSummaryContent && (
-                        <Tooltip title="复制摘要">
+                        <Tooltip title="复制价值分析">
                           <Button 
                             icon={<CopyOutlined />} 
                             type="text" 
@@ -1164,13 +1170,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                     {isSummaryLoading && (
                       <div className={styles.summaryLoading}>
                         <Spin size="small" />
-                        <span style={{ marginLeft: 8 }}>摘要生成中...</span>
+                        <span style={{ marginLeft: 8 }}>价值分析中...</span>
                       </div>
                     )}
-                    {summaryError && <div className={styles.summaryError}>摘要生成失败: {summaryError}</div>}
+                    {summaryError && <div className={styles.summaryError}>价值分析失败: {summaryError}</div>}
                     {inlineSummaryContent && !isSummaryLoading && (
                       <div className={styles.summaryContent}>
-                        <p>{inlineSummaryContent}</p>
+                        <p dangerouslySetInnerHTML={{ __html: convertMarkdownBoldToHtml(inlineSummaryContent) }}></p>
                       </div>
                     )}
                   </div>
