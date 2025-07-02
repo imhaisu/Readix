@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, message, Tabs, Spin } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons';
+import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, message, Tabs, Spin, Space, Tooltip } from 'antd';
+import { PlusOutlined, DeleteOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons';
 import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { FilterRule, FeedSource } from '../db/database';
-import { createFilterRule, applyFilterRulesToFeed } from '../utils/filterUtils';
+import { createFilterRule, applyFilterRulesToFeed, forceApplyAllFeedRules } from '../utils/filterUtils';
+import { v4 as uuidv4 } from 'uuid';
 import styles from './FilterRulesManager.module.css';
 
 const { TabPane } = Tabs;
@@ -30,16 +31,21 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   useEffect(() => {
     const loadFeedRules = async () => {
       if (!db || !isInitialized || !feedId) {
+        console.log('[FilterRulesManager] 数据库未初始化或没有feedId，无法加载订阅源过滤规则');
         setFeedRules([]);
         return;
       }
 
+      console.log(`[FilterRulesManager] 开始加载订阅源 ${feedId} 的过滤规则`);
       setIsLoading(true);
       try {
         const feed = await db.feeds.get(feedId);
+        console.log(`[FilterRulesManager] 获取到订阅源:`, feed);
         if (feed && feed.filterRules) {
+          console.log(`[FilterRulesManager] 订阅源 ${feedId} 的过滤规则:`, JSON.stringify(feed.filterRules));
           setFeedRules(feed.filterRules);
         } else {
+          console.log(`[FilterRulesManager] 订阅源 ${feedId} 没有过滤规则或规则为空`);
           setFeedRules([]);
         }
       } catch (error) {
@@ -56,16 +62,50 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   // 保存订阅源的过滤规则
   const saveFeedRules = async (rules: FilterRule[]) => {
     if (!db || !isInitialized || !feedId) {
+      console.log('[FilterRulesManager] 数据库未初始化或没有feedId，无法保存订阅源过滤规则');
       return;
     }
 
+    console.log(`[FilterRulesManager] 保存订阅源 ${feedId} 的过滤规则:`, JSON.stringify(rules));
     setIsLoading(true);
     try {
-      await db.feeds.update(feedId, { filterRules: rules });
-      setFeedRules(rules);
+      // 确保rules是数组且每个元素都有所需的字段
+      const validatedRules = Array.isArray(rules) ? rules.map(rule => {
+        // 确保每个规则都有必要的字段
+        if (!rule.id) {
+          console.warn('[FilterRulesManager] 发现规则缺少ID，生成新ID');
+          rule.id = uuidv4();
+        }
+        return {
+          id: rule.id,
+          scope: rule.scope || 'title',
+          type: rule.type || 'contains',
+          keywords: rule.keywords || '',
+          isActive: rule.isActive !== false  // 默认为true
+        };
+      }) : [];
+      
+      console.log(`[FilterRulesManager] 验证后的规则:`, JSON.stringify(validatedRules));
+      
+      // 保存到数据库
+      await db.feeds.update(feedId, { filterRules: validatedRules });
+      
+      // 验证是否保存成功
+      const updatedFeed = await db.feeds.get(feedId);
+      console.log(`[FilterRulesManager] 保存后从数据库重新读取:`, updatedFeed?.filterRules);
+      
+      // 如果数据库中的规则数量与要保存的不一致，则记录警告
+      if (updatedFeed?.filterRules?.length !== validatedRules.length) {
+        console.warn(`[FilterRulesManager] 警告: 保存的规则数量(${validatedRules.length})与数据库中的(${updatedFeed?.filterRules?.length})不一致!`);
+      }
+      
+      console.log(`[FilterRulesManager] 已更新数据库中订阅源 ${feedId} 的过滤规则`);
+      setFeedRules(validatedRules);
       
       // 应用规则到文章
-      await applyFilterRulesToFeed(db, feedId, rules);
+      console.log(`[FilterRulesManager] 开始应用过滤规则到订阅源 ${feedId} 的文章`);
+      const updatedCount = await applyFilterRulesToFeed(db, feedId, validatedRules);
+      console.log(`[FilterRulesManager] 应用过滤规则完成，更新了 ${updatedCount} 篇文章`);
       
       // 触发刷新
       triggerFeedCountRefresh();
@@ -80,22 +120,55 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   // 添加订阅源过滤规则
   const addFeedRule = (rule: Omit<FilterRule, 'id'>) => {
     const newRule = createFilterRule(rule.scope, rule.type, rule.keywords, rule.isActive);
+    console.log(`[FilterRulesManager] 添加新的订阅源过滤规则:`, newRule);
     const updatedRules = [...feedRules, newRule];
     saveFeedRules(updatedRules);
+    
+    // 重新应用所有订阅源规则
+    setTimeout(() => {
+      if (db && isInitialized && feedId) {
+        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
+        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
+          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
+        });
+      }
+    }, 500);
   };
 
   // 更新订阅源过滤规则
   const updateFeedRule = (id: string, changes: Partial<Omit<FilterRule, 'id'>>) => {
+    console.log(`[FilterRulesManager] 更新订阅源过滤规则 ${id}:`, changes);
     const updatedRules = feedRules.map(rule => 
       rule.id === id ? { ...rule, ...changes } : rule
     );
     saveFeedRules(updatedRules);
+    
+    // 重新应用所有订阅源规则
+    setTimeout(() => {
+      if (db && isInitialized && feedId) {
+        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
+        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
+          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
+        });
+      }
+    }, 500);
   };
 
   // 删除订阅源过滤规则
   const deleteFeedRule = (id: string) => {
+    console.log(`[FilterRulesManager] 删除订阅源过滤规则 ${id}`);
     const updatedRules = feedRules.filter(rule => rule.id !== id);
     saveFeedRules(updatedRules);
+    
+    // 重新应用所有订阅源规则
+    setTimeout(() => {
+      if (db && isInitialized && feedId) {
+        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
+        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
+          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
+        });
+      }
+    }, 500);
   };
 
   // 处理表单提交
@@ -221,8 +294,57 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         {feedId && (
           <TabPane tab={`订阅源规则 (${feedTitle || '未命名'})`} key="feed">
-            <div className={styles.header}>
-              <h3>订阅源过滤规则</h3>
+                      <div className={styles.header}>
+            <h3>订阅源过滤规则</h3>
+            <Space>
+              <Tooltip title="立即应用规则">
+                <Button 
+                  type="default" 
+                  icon={<ReloadOutlined />} 
+                  onClick={async () => {
+                    if (!db || !isInitialized || !feedId) {
+                      message.error('无法应用规则：数据库未初始化或没有选择订阅源');
+                      return;
+                    }
+                    
+                    setIsLoading(true);
+                    try {
+                      message.loading('正在应用过滤规则...');
+                      
+                      // 仅应用当前订阅源的规则
+                      const updatedCount = await applyFilterRulesToFeed(db, feedId, feedRules);
+                      
+                      message.success(`成功应用规则，更新了 ${updatedCount} 篇文章`);
+                      
+                      // 强制刷新文章列表
+                      triggerArticleListRefresh();
+                      
+                      // 如果没有文章被更新，可能是UI问题，尝试强制刷新
+                      if (updatedCount === 0) {
+                        // 延迟500ms后再次触发刷新
+                        setTimeout(() => {
+                          console.log('[FilterRulesManager] 执行二次刷新...');
+                          triggerArticleListRefresh();
+                          
+                          // 使用随机数触发数据库更新，强制UI刷新
+                          db.feeds.update(feedId, { 
+                            lastForceRefresh: `${new Date().toISOString()}_${Math.random()}` 
+                          }).then(() => {
+                            console.log('[FilterRulesManager] 强制刷新完成');
+                          });
+                        }, 500);
+                      }
+                    } catch (error) {
+                      console.error('[FilterRulesManager] 应用规则时出错:', error);
+                      message.error('应用规则失败');
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                >
+                  应用规则
+                </Button>
+              </Tooltip>
               <Button 
                 type="primary" 
                 icon={<PlusOutlined />} 
@@ -240,7 +362,8 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
               >
                 添加规则
               </Button>
-            </div>
+            </Space>
+          </div>
             <Spin spinning={isLoading}>
               <Table 
                 dataSource={feedRules} 
@@ -255,23 +378,60 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
         <TabPane tab="全局规则" key="global">
           <div className={styles.header}>
             <h3>全局过滤规则</h3>
-            <Button 
-              type="primary" 
-              icon={<PlusOutlined />} 
-              onClick={() => {
-                setEditingRuleId(null);
-                form.resetFields();
-                form.setFieldsValue({
-                  scope: 'title',
-                  type: 'contains',
-                  keywords: '',
-                  isActive: true
-                });
-                setIsModalVisible(true);
-              }}
-            >
-              添加规则
-            </Button>
+            <Space>
+              <Tooltip title="立即应用所有规则">
+                <Button 
+                  type="default" 
+                  icon={<ReloadOutlined />} 
+                  onClick={async () => {
+                    if (!db || !isInitialized) {
+                      message.error('无法应用规则：数据库未初始化');
+                      return;
+                    }
+                    
+                    try {
+                      message.loading('正在应用所有过滤规则...');
+                      
+                      // 强制应用所有订阅源规则，优先级高于全局规则
+                      const feedRulesCount = await forceApplyAllFeedRules(db);
+                      console.log(`[FilterRulesManager] 完成订阅源规则应用，更新了 ${feedRulesCount} 篇文章`);
+                      
+                      // 延迟一会儿再应用全局规则，确保订阅源规则先被处理
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      
+                      // 然后应用全局规则
+                      const globalRulesCount = await applyGlobalRules();
+                      console.log(`[FilterRulesManager] 完成全局规则应用，更新了 ${globalRulesCount} 篇文章`);
+                      
+                      message.success(`成功应用所有规则，更新了 ${feedRulesCount + globalRulesCount} 篇文章`);
+                      triggerArticleListRefresh();
+                    } catch (error) {
+                      console.error('[FilterRulesManager] 应用所有规则时出错:', error);
+                      message.error('应用规则失败');
+                    }
+                  }}
+                >
+                  应用所有规则
+                </Button>
+              </Tooltip>
+              <Button 
+                type="primary" 
+                icon={<PlusOutlined />} 
+                onClick={() => {
+                  setEditingRuleId(null);
+                  form.resetFields();
+                  form.setFieldsValue({
+                    scope: 'title',
+                    type: 'contains',
+                    keywords: '',
+                    isActive: true
+                  });
+                  setIsModalVisible(true);
+                }}
+              >
+                添加规则
+              </Button>
+            </Space>
           </div>
           <Spin spinning={isGlobalRulesLoading}>
             <Table 

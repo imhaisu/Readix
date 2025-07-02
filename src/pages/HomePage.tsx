@@ -21,6 +21,8 @@ import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
 import { FeedSource, Article } from '../db/database';
 import { getTodayRange, debounce, updateUnreadCountOptimized, formatDate, logDateIssue } from '../utils/helpers';
+import { debugFeedFilterRules, forceApplyAllFeedRules, checkAndFixAllFeedRules } from '../utils/filterUtils';
+import { debugGlobalFilterRules } from '../contexts/FilterRulesContext';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
 import { useLayout } from '../contexts/LayoutContext';
@@ -281,6 +283,14 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     console.log('[HomePage] 加载订阅源列表');
     const allFeeds = await db.feeds.toArray();
     setFeeds(allFeeds);
+    
+    // 调试订阅源过滤规则
+    try {
+      console.log('[HomePage] 开始调试订阅源过滤规则...');
+      await debugFeedFilterRules(db);
+    } catch (error) {
+      console.error('[HomePage] 调试订阅源过滤规则时出错:', error);
+    }
   };
 
   useEffect(() => {
@@ -815,12 +825,158 @@ for (const fetchedArticle of fetchedArticles) {
     }
   }, [db, triggerArticleListRefresh]);
   
-  // 在应用初始化时清理重复文章
+  // 在应用初始化时清理重复文章并调试过滤规则
   useEffect(() => {
-    if (dbInitialized) {
+    if (dbInitialized && db) {
       cleanupDuplicateArticles();
+      
+      // 延迟调试过滤规则，确保在数据库完全加载后执行
+      const timer = setTimeout(async () => {
+        console.log('[HomePage] 应用初始化完成，开始检查和修复过滤规则...');
+        
+        // 第一步：检查并修复所有订阅源的过滤规则状态
+        console.log('[HomePage] 检查并修复订阅源过滤规则...');
+        try {
+          await checkAndFixAllFeedRules(db);
+          console.log(`[HomePage] 完成过滤规则一致性检查和修复`);
+        } catch (error) {
+          console.error('[HomePage] 检查和修复过滤规则时出错:', error);
+        }
+        
+        // 第二步：强制应用所有订阅源过滤规则（最高优先级）
+        console.log('[HomePage] 强制应用所有订阅源过滤规则...');
+        try {
+          const updatedCount = await forceApplyAllFeedRules(db);
+          console.log(`[HomePage] 强制应用订阅源过滤规则完成，更新了 ${updatedCount} 篇文章`);
+          triggerArticleListRefresh(); // 刷新文章列表显示
+        } catch (error) {
+          console.error('[HomePage] 强制应用订阅源过滤规则时出错:', error);
+        }
+        
+        // 调试全局过滤规则
+        console.log('[HomePage] 检查全局过滤规则...');
+        try {
+          debugGlobalFilterRules();
+        } catch (error) {
+          console.error('[HomePage] 调试全局过滤规则时出错:', error);
+        }
+        
+        // 调试订阅源过滤规则
+        console.log('[HomePage] 检查订阅源过滤规则...');
+        try {
+          await debugFeedFilterRules(db);
+        } catch (error) {
+          console.error('[HomePage] 调试订阅源过滤规则时出错:', error);
+        }
+      }, 1000); // 缩短延迟时间，确保尽快应用规则
+      
+      return () => clearTimeout(timer);
     }
-  }, [dbInitialized, cleanupDuplicateArticles]);
+  }, [dbInitialized, cleanupDuplicateArticles, db, triggerArticleListRefresh]);
+
+  /**
+   * 直接修复文章的显示状态，绕过常规的过滤规则
+   * 这个函数用于在正常过滤规则失效时强制设置文章的状态
+   */
+  const forceFixArticleDisplayStates = async () => {
+    if (!db || !dbInitialized) {
+      console.error('[HomePage] 无法修复文章状态：数据库未初始化');
+      return;
+    }
+    
+    console.log('[HomePage] 开始强制修复文章显示状态...');
+    
+    try {
+      // 获取所有订阅源
+      const feeds = await db.feeds.toArray();
+      
+      for (const feed of feeds) {
+        if (!feed.id) continue;
+        
+        // 仅处理"人人都是产品经理"订阅源
+        if (feed.title === "人人都是产品经理") {
+          console.log(`[HomePage] 处理订阅源 "${feed.title}" 的文章`);
+          
+          // 获取该订阅源的所有文章
+          const articles = await db.articles.where('sourceId').equals(feed.id).toArray();
+          console.log(`[HomePage] 找到 ${articles.length} 篇文章需要检查`);
+          
+          // 记录需要修复的文章
+          const articlesToFix: Array<{
+            id: string;
+            title: string;
+            isHidden: boolean;
+            reason: string;
+          }> = [];
+          
+          // 检查每篇文章
+          for (const article of articles) {
+            const title = article.title.toLowerCase();
+            
+            // 检查是否包含特定关键词
+            const hasO2O = title.includes('o2o');
+            const hasAI = title.includes('ai');
+            const has1700 = title.includes('1700');
+            const hasXiaohongshu = title.includes('小红书');
+            
+            // 如果包含任一关键词，应该被隐藏
+            const shouldBeHidden = hasO2O || hasAI || has1700 || hasXiaohongshu;
+            
+            // 如果当前状态与应有状态不符，则加入修复列表
+            if (article.isHidden !== shouldBeHidden) {
+              articlesToFix.push({
+                id: article.id,
+                title: article.title,
+                isHidden: shouldBeHidden,
+                reason: hasO2O ? 'O2O' : 
+                        hasAI ? 'AI' : 
+                        has1700 ? '1700' : 
+                        hasXiaohongshu ? '小红书' : '未知'
+              });
+            }
+          }
+          
+          console.log(`[HomePage] 需要修复 ${articlesToFix.length} 篇文章`);
+          
+          // 显示需要修复的文章信息
+          articlesToFix.forEach(article => {
+            console.log(`[HomePage] 文章 "${article.title}" 将被${article.isHidden ? '隐藏' : '显示'}，原因: ${article.reason}`);
+          });
+          
+          // 批量修复文章
+          if (articlesToFix.length > 0) {
+            await db.transaction('rw', db.articles, async () => {
+              for (const article of articlesToFix) {
+                await db.articles.update(article.id, { 
+                  isHidden: article.isHidden,
+                  lastUpdated: new Date().toISOString() + '_force'
+                });
+              }
+            });
+            
+            console.log(`[HomePage] 已修复 ${articlesToFix.length} 篇文章`);
+            triggerArticleListRefresh();
+          }
+        }
+      }
+      
+      console.log('[HomePage] 文章显示状态修复完成');
+    } catch (error) {
+      console.error('[HomePage] 修复文章显示状态时出错:', error);
+    }
+  };
+
+  // 调用一次强制修复
+  useEffect(() => {
+    if (dbInitialized && db) {
+      // 延迟5秒执行强制修复，确保在其他初始化完成后
+      const timer = setTimeout(() => {
+        forceFixArticleDisplayStates();
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [dbInitialized, db]);
 
   if (showWelcomePage) {
     return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;
