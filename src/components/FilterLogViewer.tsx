@@ -4,6 +4,7 @@ import { ClearOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined } from
 import { getLogs, clearLogs, setConsoleLogging } from '../utils/filterLogger';
 import { LogConfig, LogLevel, LogModule } from '../utils/logConfig';
 import type { ColumnsType } from 'antd/es/table';
+import type { TabsProps } from 'antd';
 
 const { Text } = Typography;
 const { Panel } = Collapse;
@@ -214,6 +215,83 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
     },
   ];
   
+  // 定义Tabs的items
+  const tabItems: TabsProps['items'] = [
+    {
+      key: 'logs',
+      label: '过滤规则日志',
+      children: (
+        <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+          <Space>
+            <Text>控制台日志:</Text>
+            <Switch 
+              checked={consoleLoggingEnabled} 
+              onChange={handleToggleConsoleLogging}
+              size="small"
+            />
+            <Button icon={<ReloadOutlined />} onClick={loadLogs} size="small">
+              刷新
+            </Button>
+            <Button icon={<DownloadOutlined />} onClick={handleExportLogs} size="small" type="primary">
+              导出日志
+            </Button>
+            <Button danger icon={<ClearOutlined />} onClick={handleClearLogs} size="small">
+              清除日志
+            </Button>
+          </Space>
+          <Text>共有 {logs.length} 条日志记录</Text>
+          <Table
+            dataSource={logs}
+            columns={columns}
+            rowKey={(record) => `${record.timestamp}-${Math.random()}`}
+            pagination={{ pageSize: 10 }}
+            size="small"
+            scroll={{ x: 'max-content' }}
+          />
+        </Space>
+      )
+    },
+    {
+      key: 'settings',
+      label: '日志设置',
+      icon: <SettingOutlined />,
+      children: (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Divider orientation="left">全局日志级别</Divider>
+          <Select 
+            value={logLevel} 
+            onChange={handleSetLogLevel}
+            style={{ width: 200 }}
+          >
+            <Option value={LogLevel.DEBUG}>DEBUG - 调试信息</Option>
+            <Option value={LogLevel.INFO}>INFO - 一般信息</Option>
+            <Option value={LogLevel.WARN}>WARN - 警告信息</Option>
+            <Option value={LogLevel.ERROR}>ERROR - 错误信息</Option>
+            <Option value={LogLevel.NONE}>NONE - 禁用所有日志</Option>
+          </Select>
+          
+          <Divider orientation="left">模块日志开关</Divider>
+          <Space>
+            <Button size="small" onClick={handleEnableAllModules}>启用全部</Button>
+            <Button size="small" onClick={handleDisableAllModules}>禁用全部</Button>
+          </Space>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '8px' }}>
+            {(Object.keys(moduleStates) as LogModule[]).map(module => (
+              <div key={module} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
+                <Text>{module}</Text>
+                <Switch 
+                  size="small" 
+                  checked={moduleStates[module]} 
+                  onChange={(checked) => handleToggleModule(module, checked)}
+                />
+              </div>
+            ))}
+          </div>
+        </Space>
+      )
+    }
+  ];
+  
   return (
     <Modal
       title="日志管理"
@@ -226,72 +304,7 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
         </Button>,
       ]}
     >
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        <TabPane tab="过滤规则日志" key="logs">
-          <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
-            <Space>
-              <Text>控制台日志:</Text>
-              <Switch 
-                checked={consoleLoggingEnabled} 
-                onChange={handleToggleConsoleLogging}
-                size="small"
-              />
-              <Button icon={<ReloadOutlined />} onClick={loadLogs} size="small">
-                刷新
-              </Button>
-              <Button icon={<DownloadOutlined />} onClick={handleExportLogs} size="small" type="primary">
-                导出日志
-              </Button>
-              <Button danger icon={<ClearOutlined />} onClick={handleClearLogs} size="small">
-                清除日志
-              </Button>
-            </Space>
-            <Text>共有 {logs.length} 条日志记录</Text>
-            <Table
-              dataSource={logs}
-              columns={columns}
-              rowKey={(record) => `${record.timestamp}-${Math.random()}`}
-              pagination={{ pageSize: 10 }}
-              size="small"
-              scroll={{ x: 'max-content' }}
-            />
-          </Space>
-        </TabPane>
-        <TabPane tab="日志设置" key="settings" icon={<SettingOutlined />}>
-          <Space direction="vertical" style={{ width: '100%' }}>
-            <Divider orientation="left">全局日志级别</Divider>
-            <Select 
-              value={logLevel} 
-              onChange={handleSetLogLevel}
-              style={{ width: 200 }}
-            >
-              <Option value={LogLevel.DEBUG}>DEBUG - 调试信息</Option>
-              <Option value={LogLevel.INFO}>INFO - 一般信息</Option>
-              <Option value={LogLevel.WARN}>WARN - 警告信息</Option>
-              <Option value={LogLevel.ERROR}>ERROR - 错误信息</Option>
-              <Option value={LogLevel.NONE}>NONE - 禁用所有日志</Option>
-            </Select>
-            
-            <Divider orientation="left">模块日志开关</Divider>
-            <Space>
-              <Button size="small" onClick={handleEnableAllModules}>启用全部</Button>
-              <Button size="small" onClick={handleDisableAllModules}>禁用全部</Button>
-            </Space>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '8px' }}>
-              {(Object.keys(moduleStates) as LogModule[]).map(module => (
-                <div key={module} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 8px', border: '1px solid #f0f0f0', borderRadius: '4px' }}>
-                  <Text>{module}</Text>
-                  <Switch 
-                    size="small" 
-                    checked={moduleStates[module]} 
-                    onChange={(checked) => handleToggleModule(module, checked)}
-                  />
-                </div>
-              ))}
-            </div>
-          </Space>
-        </TabPane>
-      </Tabs>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
     </Modal>
   );
 };

@@ -8,6 +8,7 @@ import styles from './SettingsPage.module.css';
 import { Settings, defaultSettings } from '../types/settings';
 import { FeedSource } from '../db/database';
 import FilterRulesManager from '../components/FilterRulesManager';
+import type { TabsProps } from 'antd';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -165,6 +166,133 @@ const SettingsPage: React.FC = () => {
     return <div>加载设置中...</div>;
   }
 
+  // 定义Tabs的items
+  const tabItems: TabsProps['items'] = [
+    {
+      key: 'app',
+      label: '应用',
+      children: (
+        <>
+          <div className={styles.formSection}>
+            <Title level={5}>行为</Title>
+            <Form.Item name="syncOnStartup" valuePropName="checked" tooltip="启动应用时自动同步所有订阅源。">
+              <div>
+                <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                <Text style={{ marginLeft: 8 }}>启动时同步订阅源</Text>
+              </div>
+            </Form.Item>
+          </div>
+
+          <div className={styles.formSection}>
+            <Title level={5}>性能</Title>
+            <Form.Item name="maxArticlesPerFeed" label="每个订阅源最大文章数" tooltip="设置为0表示无限制。当订阅源的文章数超过此限制时，最旧的文章将被自动删除。">
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          </div>
+
+          <div className={styles.formSection}>
+            <Title level={5}>数据管理</Title>
+            <Form.Item
+              label="订阅数据"
+              help="将您的所有订阅源导出为 OPML 文件，以便在其他阅读器或本应用中进行备份和恢复。"
+            >
+              <Space>
+                <Button icon={<ExportOutlined />} onClick={handleExportOpml} loading={importing}>
+                  导出为 OPML
+                </Button>
+                <Button icon={<ImportOutlined />} onClick={handleImportOpml} loading={importing}>
+                  从 OPML 导入
+                </Button>
+              </Space>
+            </Form.Item>
+          </div>
+
+          <Divider />
+
+          <div className={styles.formSection}>
+            <Title level={5}>AI 功能 (实验性)</Title>
+            <Form.Item
+              label="豆包 API Key"
+              name="doubaoApiKey"
+              tooltip="前往豆包开放平台申请你的 API Key，以启用 AI 强读功能"
+              extra={
+                <Button onClick={handleTestApiKey} style={{ marginTop: 8 }} loading={testingApiKey}>
+                  测试连接
+                </Button>
+              }
+            >
+              <Input.Password placeholder="请在这里输入你的 API Key" />
+            </Form.Item>
+          </div>
+        </>
+      )
+    },
+    {
+      key: 'reading',
+      label: '阅读',
+      children: (
+        <>
+          <div className={styles.formSection}>
+            <Title level={5}>字体</Title>
+            <Form.Item name="fontFamily" label="正文字体">
+              <Select>
+                <Option value='system-ui, sans-serif'>系统默认</Option>
+                <Option value='Georgia, serif'>Georgia</Option>
+                <Option value='Times New Roman, serif'>Times New Roman</Option>
+                <Option value='Arial, sans-serif'>Arial</Option>
+                <Option value='Verdana, sans-serif'>Verdana</Option>
+              </Select>
+            </Form.Item>
+            <Form.Item name="fontSize" label="字号">
+              <Slider min={12} max={24} />
+            </Form.Item>
+            <Form.Item name="lineHeight" label="行高">
+              <Slider min={1.2} max={2.0} step={0.1} />
+            </Form.Item>
+          </div>
+          <div className={styles.formSection}>
+            <Title level={5}>颜色</Title>
+            <Space>
+              <Form.Item name="backgroundColor" label="背景色">
+                <ColorPicker />
+              </Form.Item>
+              <Form.Item name="textColor" label="正文色">
+                <ColorPicker />
+              </Form.Item>
+              <Form.Item name="titleColor" label="标题色">
+                <ColorPicker />
+              </Form.Item>
+            </Space>
+          </div>
+          <div className={styles.formSection}>
+            <Title level={5}>其他</Title>
+            <Form.Item name="autoMarkAsRead" valuePropName="checked" tooltip="文章滚动到底部时自动标记为已读。">
+              <div>
+                <Switch checkedChildren="开启" unCheckedChildren="关闭" />
+                <Text style={{ marginLeft: 8 }}>滚动到底部自动标记为已读</Text>
+              </div>
+            </Form.Item>
+          </div>
+        </>
+      )
+    },
+    {
+      key: 'filter',
+      label: <span><FilterOutlined /> 过滤规则</span>,
+      children: (
+        <div className={styles.formSection}>
+          <Title level={5}>全局过滤规则</Title>
+          <Text type="secondary">
+            设置全局过滤规则，对所有订阅源的文章进行过滤。被过滤的文章不会在列表中显示，但仍保存在数据库中。
+          </Text>
+          <div style={{ marginTop: 16 }}>
+            <FilterRulesManager />
+          </div>
+        </div>
+      )
+    }
+  ];
+
   return (
     <Layout className={styles.settingsLayout}>
       <Header className={styles.header}>
@@ -192,111 +320,12 @@ const SettingsPage: React.FC = () => {
           }}
           className={styles.form}
         >
-          <Tabs defaultActiveKey="app" className={styles.tabs} activeKey={activeTab} onChange={setActiveTab}>
-            <Tabs.TabPane tab="应用" key="app">
-              <div className={styles.formSection}>
-                <Title level={5}>行为</Title>
-                <Form.Item name="syncOnStartup" valuePropName="checked" tooltip="启动应用时自动同步所有订阅源。">
-                  <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                  <Text style={{ marginLeft: 8 }}>启动时同步订阅源</Text>
-                </Form.Item>
-              </div>
-
-              <div className={styles.formSection}>
-                <Title level={5}>性能</Title>
-                <Form.Item name="maxArticlesPerFeed" label="每个订阅源最大文章数" tooltip="设置为0表示无限制。当订阅源的文章数超过此限制时，最旧的文章将被自动删除。">
-                  <InputNumber min={0} style={{ width: '100%' }} />
-                </Form.Item>
-              </div>
-
-              <div className={styles.formSection}>
-                <Title level={5}>数据管理</Title>
-                <Form.Item
-                  label="订阅数据"
-                  help="将您的所有订阅源导出为 OPML 文件，以便在其他阅读器或本应用中进行备份和恢复。"
-                >
-                  <Space>
-                    <Button icon={<ExportOutlined />} onClick={handleExportOpml} loading={importing}>
-                      导出为 OPML
-                    </Button>
-                    <Button icon={<ImportOutlined />} onClick={handleImportOpml} loading={importing}>
-                      从 OPML 导入
-                    </Button>
-                  </Space>
-                </Form.Item>
-              </div>
-
-              <Divider />
-
-              <div className={styles.formSection}>
-                <Title level={5}>AI 功能 (实验性)</Title>
-                <Form.Item
-                  label="豆包 API Key"
-                  name="doubaoApiKey"
-                  tooltip="前往豆包开放平台申请你的 API Key，以启用 AI 强读功能"
-                  extra={
-                    <Button onClick={handleTestApiKey} style={{ marginTop: 8 }} loading={testingApiKey}>
-                      测试连接
-                    </Button>
-                  }
-                >
-                  <Input.Password placeholder="请在这里输入你的 API Key" />
-                </Form.Item>
-              </div>
-            </Tabs.TabPane>
-            <Tabs.TabPane tab="阅读" key="reading">
-              <div className={styles.formSection}>
-                <Title level={5}>字体</Title>
-                <Form.Item name="fontFamily" label="正文字体">
-                  <Select>
-                    <Option value='system-ui, sans-serif'>系统默认</Option>
-                    <Option value='Georgia, serif'>Georgia</Option>
-                    <Option value='Times New Roman, serif'>Times New Roman</Option>
-                    <Option value='Arial, sans-serif'>Arial</Option>
-                    <Option value='Verdana, sans-serif'>Verdana</Option>
-                  </Select>
-                </Form.Item>
-                <Form.Item name="fontSize" label="字号">
-                  <Slider min={12} max={24} />
-                </Form.Item>
-                <Form.Item name="lineHeight" label="行高">
-                  <Slider min={1.2} max={2.0} step={0.1} />
-                </Form.Item>
-              </div>
-              <div className={styles.formSection}>
-                <Title level={5}>颜色</Title>
-                <Space>
-                    <Form.Item name="backgroundColor" label="背景色">
-                        <ColorPicker />
-                    </Form.Item>
-                    <Form.Item name="textColor" label="正文色">
-                        <ColorPicker />
-                    </Form.Item>
-                    <Form.Item name="titleColor" label="标题色">
-                        <ColorPicker />
-                    </Form.Item>
-                </Space>
-              </div>
-              <div className={styles.formSection}>
-                  <Title level={5}>其他</Title>
-                  <Form.Item name="autoMarkAsRead" valuePropName="checked" tooltip="文章滚动到底部时自动标记为已读。">
-                      <Switch checkedChildren="开启" unCheckedChildren="关闭" />
-                      <Text style={{ marginLeft: 8 }}>滚动到底部自动标记为已读</Text>
-                  </Form.Item>
-              </div>
-            </Tabs.TabPane>
-            <Tabs.TabPane tab={<span><FilterOutlined /> 过滤规则</span>} key="filter">
-              <div className={styles.formSection}>
-                <Title level={5}>全局过滤规则</Title>
-                <Text type="secondary">
-                  设置全局过滤规则，对所有订阅源的文章进行过滤。被过滤的文章不会在列表中显示，但仍保存在数据库中。
-                </Text>
-                <div style={{ marginTop: 16 }}>
-                  <FilterRulesManager />
-                </div>
-              </div>
-            </Tabs.TabPane>
-          </Tabs>
+          <Tabs 
+            activeKey={activeTab} 
+            onChange={setActiveTab} 
+            className={styles.tabs}
+            items={tabItems}
+          />
           
           <Divider />
 
