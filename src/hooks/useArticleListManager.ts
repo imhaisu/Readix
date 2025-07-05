@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Article, FeedSource, FilterRule } from '../db/database';
@@ -45,11 +45,56 @@ export const useArticleListManager = ({
   const [error, setError] = useState<string | null>(null);
   const [exemptedArticleIds, setExemptedArticleIds] = useState<Set<string>>(new Set());
   const [persistentlyExemptedIds, setPersistentlyExemptedIds] = useState<Set<string>>(new Set());
+  
+  // 保存当前选中的文章ID，即使在刷新后也能保留
+  const selectedArticleIdRef = useRef<string | null>(null);
+  
+  // 当选中的文章ID变化时更新引用
+  useEffect(() => {
+    if (selectedArticleId) {
+      selectedArticleIdRef.current = selectedArticleId;
+    }
+  }, [selectedArticleId]);
 
   const articlesRef = useRef(allArticles);
   articlesRef.current = allArticles;
 
   const prevFilter = usePrevious(filter);
+  const prevSelectedArticleId = usePrevious(selectedArticleId);
+
+  // 当选中的文章改变时，将之前选中的文章ID添加到豁免列表中
+  useEffect(() => {
+    if (prevSelectedArticleId && prevSelectedArticleId !== selectedArticleId) {
+      // 当用户选择了一个新的文章，将之前选中的文章添加到持久豁免列表中
+      // 这样即使文章被标记为已读，它也会保留在列表中，直到用户刷新列表
+      setPersistentlyExemptedIds(prev => new Set([...prev, prevSelectedArticleId]));
+    }
+    
+    // 如果有新选中的文章，确保它被豁免
+    if (selectedArticleId) {
+      setExemptedArticleIds(prev => new Set([...prev, selectedArticleId]));
+    }
+  }, [selectedArticleId, prevSelectedArticleId]);
+
+  // 当过滤条件或上下文变化时，清除持久豁免列表，但保留当前选中的文章
+  useEffect(() => {
+    setPersistentlyExemptedIds(prev => {
+      const newSet = new Set<string>();
+      // 如果有当前选中的文章，保留它
+      if (selectedArticleIdRef.current) {
+        newSet.add(selectedArticleIdRef.current);
+      }
+      return newSet;
+    });
+  }, [filter, currentFeedId, currentGroupId, listRefreshKey]);
+
+  // 当文章列表刷新时，确保当前选中的文章仍然在豁免列表中
+  useEffect(() => {
+    if (selectedArticleIdRef.current) {
+      setExemptedArticleIds(prev => new Set([...prev, selectedArticleIdRef.current!]));
+      setPersistentlyExemptedIds(prev => new Set([...prev, selectedArticleIdRef.current!]));
+    }
+  }, [articleListRefreshTrigger]);
 
   const toggleArticleReadStatus = useCallback(async (articleId: string, currentStatus: 'true' | 'false', sourceId: string | undefined) => {
     if (!db) return;
@@ -59,7 +104,10 @@ export const useArticleListManager = ({
       setAllArticles((prevAll) =>
         prevAll.map((a) => (a.id === articleId ? { ...a, isRead: newStatus } : a))
       );
-      setExemptedArticleIds(prev => new Set(prev).add(articleId));
+      
+      // 将文章添加到豁免列表，确保它不会因为状态变化而从列表中消失
+      setExemptedArticleIds(prev => new Set([...prev, articleId]));
+      
       if (lastUpdatedArticleInfo?.id === articleId) {
         onLastUpdatedArticleInfoChange(null);
       }
@@ -120,8 +168,15 @@ export const useArticleListManager = ({
         setIsRefreshing(true); // Spinner on subsequent loads
       }
       setError(null);
-      setExemptedArticleIds(new Set());
-      setPersistentlyExemptedIds(new Set());
+      
+      // 不要清除豁免列表，只保留当前选中的文章
+      setExemptedArticleIds(prev => {
+        const newSet = new Set<string>();
+        if (selectedArticleIdRef.current) {
+          newSet.add(selectedArticleIdRef.current);
+        }
+        return newSet;
+      });
 
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
@@ -164,6 +219,23 @@ export const useArticleListManager = ({
         fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
         setAllArticles(fetchedArticles);
 
+        // 如果当前有选中的文章，确保它在列表中
+        if (selectedArticleIdRef.current) {
+          const selectedArticle = fetchedArticles.find(a => a.id === selectedArticleIdRef.current);
+          if (!selectedArticle) {
+            // 如果选中的文章不在获取的文章列表中，尝试单独获取它
+            try {
+              const article = await db.articles.get(selectedArticleIdRef.current);
+              if (article) {
+                // 将选中的文章添加到文章列表中
+                setAllArticles(prev => [article, ...prev]);
+              }
+            } catch (err) {
+              console.error("Failed to fetch selected article:", err);
+            }
+          }
+        }
+
         // Fetch associated feed info for the loaded articles
         if (fetchedArticles.length > 0) {
           const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
@@ -200,12 +272,6 @@ export const useArticleListManager = ({
     
   }, [db, isInitialized, currentFeedId, currentGroupId, listRefreshKey, articleListRefreshTrigger]);
 
-  // Effect to clear exemptions when the main context (feed or group) changes
-  useEffect(() => {
-    setExemptedArticleIds(new Set());
-    setPersistentlyExemptedIds(new Set());
-  }, [currentFeedId, currentGroupId]);
-
   // Effect 2: Filter and sort articles for display when data or filters change
   const displayedArticlesResult = useMemo(() => {
     let filtered = [...allArticles];
@@ -214,7 +280,7 @@ export const useArticleListManager = ({
     // 应用过滤规则（动态过滤，不依赖于数据库中的isHidden字段）
     filtered = filtered.filter(article => {
       // 如果文章ID在豁免列表中，则始终显示
-      if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) {
+      if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id) || article.id === selectedArticleIdRef.current) {
         return true;
       }
 
@@ -240,17 +306,32 @@ export const useArticleListManager = ({
     // Client-side search term filter
     if (searchTerm && searchTerm.trim() !== '') {
       const lowerSearchTerm = searchTerm.toLowerCase();
-      filtered = filtered.filter((article: Article) =>
-        article.title.toLowerCase().includes(lowerSearchTerm) ||
-        (article.author && article.author.toLowerCase().includes(lowerSearchTerm)) ||
-        (article.summary && article.summary.toLowerCase().includes(lowerSearchTerm)) ||
-        (article.contentText && article.contentText.toLowerCase().includes(lowerSearchTerm))
-      );
+      filtered = filtered.filter((article: Article) => {
+        // 如果是当前选中的文章，始终显示
+        if (article.id === selectedArticleIdRef.current) {
+          return true;
+        }
+        
+        return article.title.toLowerCase().includes(lowerSearchTerm) ||
+          (article.author && article.author.toLowerCase().includes(lowerSearchTerm)) ||
+          (article.summary && article.summary.toLowerCase().includes(lowerSearchTerm)) ||
+          (article.contentText && article.contentText.toLowerCase().includes(lowerSearchTerm));
+      });
     }
 
     // Apply main filters from the 'filter' prop
     if (filter) {
       filtered = filtered.filter(article => {
+        // 如果是当前选中的文章，始终显示
+        if (article.id === selectedArticleIdRef.current) {
+          return true;
+        }
+        
+        // 如果文章在豁免列表中，即使它不符合过滤条件，也应该显示
+        if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) {
+          return true;
+        }
+        
         let passes = true;
         if (typeof filter.isRead === 'string' && article.isRead !== filter.isRead) {
           passes = false;
@@ -290,7 +371,7 @@ export const useArticleListManager = ({
       setAllArticles((prev) =>
         prev.map((a) => (a.id === articleId ? { ...a, isStarred: newIsStarred } : a))
       );
-      setExemptedArticleIds(prev => new Set(prev).add(articleId));
+      setExemptedArticleIds(prev => new Set([...prev, articleId]));
     } catch (error) {
       console.error('Failed to toggle star status:', error);
     }

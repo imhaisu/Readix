@@ -1,5 +1,6 @@
 import Dexie from 'dexie';
-import { RssDatabase, Article } from '../contexts/DatabaseContext'; // Adjust path if necessary
+import { Article, FeedSource } from '../db/database';
+import { RssDatabase } from '../db/database';
 
 export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number): Promise<void> => {
   if (!db || !db.isOpen()) {
@@ -17,7 +18,7 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
   try {
     let articlesToDeleteQuery = db.articles
       .where('publishDate').below(cutoffTimestamp)
-      .and(article => article.isStarred !== 'true');
+      .and((article: Article) => article.isStarred !== 'true');
 
     const articlesToDelete = await articlesToDeleteQuery.toArray();
 
@@ -28,7 +29,7 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
       
       // 更新相关 feed 的未读计数
       const feedIdsAffected = new Set<string>();
-      articlesToDelete.forEach(article => {
+      articlesToDelete.forEach((article: Article) => {
         if (article.sourceId && article.isRead !== 'true') { // 只考虑被删除的是未读文章的情况
           feedIdsAffected.add(article.sourceId);
         }
@@ -45,11 +46,56 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
     } else {
       console.log('[Cleanup] No old (non-starred) articles found to delete.');
     }
-  } catch (error) {
-    if (error instanceof Dexie.ModifyError) {
-        console.error('[Cleanup] Failed to delete some articles during cleanup:', error.failures.length, 'failures.');
+  }
+  catch (error) {
+    console.error('[Cleanup] Error cleaning up old articles:', error);
+  }
+};
+
+/**
+ * 清理没有对应订阅源的"孤儿"文章
+ * @param db 数据库实例
+ * @returns 清理的文章数量
+ */
+export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> => {
+  if (!db || !db.isOpen()) {
+    console.log('[Cleanup] 清理孤儿文章跳过: 数据库不可用或未打开。');
+    return 0;
+  }
+
+  try {
+    console.log('[Cleanup] 开始清理没有对应订阅源的文章...');
+    
+    // 获取所有订阅源ID
+    const feeds = await db.feeds.toArray();
+    const feedIds = new Set(feeds.map((feed: FeedSource) => feed.id).filter((id): id is string => id !== undefined));
+    
+    // 获取所有文章
+    const articles = await db.articles.toArray();
+    
+    // 找出没有对应订阅源的文章
+    const orphanedArticles = articles.filter((article: Article) => {
+      // 如果文章没有sourceId或者sourceId对应的订阅源不存在，则认为是孤儿文章
+      return !article.sourceId || !feedIds.has(article.sourceId);
+    });
+    
+    if (orphanedArticles.length > 0) {
+      console.log(`[Cleanup] 找到 ${orphanedArticles.length} 篇没有对应订阅源的文章，准备清理...`);
+      
+      // 获取要删除的文章ID
+      const idsToDelete = orphanedArticles.map(article => article.id);
+      
+      // 批量删除这些文章
+      await db.articles.bulkDelete(idsToDelete);
+      
+      console.log(`[Cleanup] 成功清理 ${orphanedArticles.length} 篇孤儿文章。`);
+      return orphanedArticles.length;
     } else {
-        console.error('[Cleanup] Error during article cleanup:', error);
+      console.log('[Cleanup] 没有找到孤儿文章，无需清理。');
+      return 0;
     }
+  } catch (error) {
+    console.error('[Cleanup] 清理孤儿文章时出错:', error);
+    return 0;
   }
 }; 

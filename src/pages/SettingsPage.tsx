@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Layout, Tabs, Form, InputNumber, Switch, Button, Space, Typography, message, Select, Slider, ColorPicker, Input, Divider, Modal } from 'antd';
-import { SaveOutlined, ReloadOutlined, CloseOutlined, ExportOutlined, ImportOutlined, FilterOutlined } from '@ant-design/icons';
+import { SaveOutlined, ReloadOutlined, CloseOutlined, ExportOutlined, ImportOutlined, FilterOutlined, ClearOutlined } from '@ant-design/icons';
 import { useSettings } from '../contexts/SettingsContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import styles from './SettingsPage.module.css';
@@ -9,6 +9,7 @@ import { Settings, defaultSettings } from '../types/settings';
 import { FeedSource } from '../db/database';
 import FilterRulesManager from '../components/FilterRulesManager';
 import type { TabsProps } from 'antd';
+import { cleanupOrphanedArticles } from '../utils/cleanupHelper';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -32,6 +33,7 @@ const SettingsPage: React.FC = () => {
   const [testingApiKey, setTestingApiKey] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [activeTab, setActiveTab] = useState('app');
+  const [cleaningOrphans, setCleaningOrphans] = useState(false);
 
   useEffect(() => {
     if (isInitialized) {
@@ -145,6 +147,40 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const handleCleanupOrphanedArticles = async () => {
+    if (!db) {
+      message.error('数据库未初始化，无法清理。');
+      return;
+    }
+
+    Modal.confirm({
+      title: '清理孤儿文章',
+      content: '此操作将删除所有没有对应订阅源的文章。这些文章可能是由于删除订阅源时未正确清理导致的。确定要继续吗？',
+      okText: '确认清理',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          setCleaningOrphans(true);
+          message.loading({ content: '正在清理...', key: 'cleanup' });
+          
+          const count = await cleanupOrphanedArticles(db);
+          
+          if (count > 0) {
+            message.success({ content: `成功清理了 ${count} 篇孤儿文章！`, key: 'cleanup' });
+            triggerArticleListRefresh();
+          } else {
+            message.info({ content: '没有找到需要清理的孤儿文章。', key: 'cleanup' });
+          }
+        } catch (error: any) {
+          message.error({ content: `清理失败: ${error.message}`, key: 'cleanup' });
+        } finally {
+          setCleaningOrphans(false);
+        }
+      }
+    });
+  };
+
   const handleTestApiKey = async () => {
     const apiKey = form.getFieldValue('doubaoApiKey');
     if (!apiKey) {
@@ -204,6 +240,20 @@ const SettingsPage: React.FC = () => {
                   从 OPML 导入
                 </Button>
               </Space>
+            </Form.Item>
+
+            <Form.Item
+              label="数据清理"
+              help="清理没有对应订阅源的'孤儿'文章，这些文章可能是由于删除订阅源时未正确清理导致的。"
+            >
+              <Button 
+                icon={<ClearOutlined />} 
+                onClick={handleCleanupOrphanedArticles} 
+                loading={cleaningOrphans}
+                danger
+              >
+                清理孤儿文章
+              </Button>
             </Form.Item>
           </div>
 

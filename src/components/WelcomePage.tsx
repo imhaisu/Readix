@@ -141,10 +141,7 @@ const WelcomePage: React.FC<{ onAddFirstFeed: (feed: FeedSource) => void }> = ({
       // 导航到今日视图
       window.location.href = '/';
       
-      // 延迟一点时间后显示成功提示
-      setTimeout(() => {
-        message.success('订阅源已添加，开始您的阅读之旅！');
-      }, 500);
+      // 不需要额外的成功提示，直接进入主页即可
     } catch (error) {
       console.error('刷新订阅源失败:', error);
       message.error('刷新订阅源时出错，请稍后再试');

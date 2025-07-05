@@ -204,7 +204,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     
     try {
       await handleToggleStar(article.id);
-      message.success(newIsStarred === 'true' ? '已添加到收藏' : '已取消收藏');
+      // 移除收藏状态变化的提示，用户可以直接从界面上看到变化
     } catch (error) {
       console.error('Failed to toggle star status:', error);
       message.error('收藏操作失败');
@@ -217,13 +217,12 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
 
     const articlesToMark = displayedArticles.slice(0, currentIndex).filter(a => a.isRead === 'false');
     if (articlesToMark.length === 0) {
-      message.info('上方没有未读文章');
-      return;
+      return; // 移除没有未读文章的提示
     }
 
     try {
       const count = await handleMarkArticlesAsRead(articlesToMark);
-      message.success(`已标记上方 ${count} 篇文章为已读`);
+      message.success(`已标记 ${count} 篇文章为已读`); // 简化提示
     } catch (error) {
       message.error('操作失败');
     }
@@ -235,13 +234,12 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
 
     const articlesToMark = displayedArticles.slice(currentIndex + 1).filter(a => a.isRead === 'false');
     if (articlesToMark.length === 0) {
-      message.info('下方没有未读文章');
-      return;
+      return; // 移除没有未读文章的提示
     }
 
     try {
       const count = await handleMarkArticlesAsRead(articlesToMark);
-      message.success(`已标记下方 ${count} 篇文章为已读`);
+      message.success(`已标记 ${count} 篇文章为已读`); // 简化提示
     } catch (error) {
       message.error('操作失败');
     }
@@ -250,7 +248,8 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   const handleCopyLink = async (articleUrl: string) => {
     try {
       await navigator.clipboard.writeText(articleUrl);
-      message.success('链接已复制到剪贴板');
+      // 简化提示
+      message.success('已复制链接');
     } catch (error) {
       console.error('复制链接失败:', error);
       message.error('复制失败');

@@ -324,9 +324,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     // 防抖：避免短时间内多次刷新
     const now = Date.now();
     if (now - lastRefreshTimeRef.current < 5000) { // 5秒内不重复刷新
-      if (!options?.silent) {
-        message.info('刚刚已经刷新过了，请稍后再试');
-      }
+      // 完全移除这个提示，下拉刷新时不需要告诉用户刚刚已经刷新过了
       return;
     }
     lastRefreshTimeRef.current = now;
@@ -348,9 +346,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         if (feed) {
           LogConfig.info('HOMEPAGE', `刷新订阅源: ${feed.title}`);
           const result = await window.electron.parseRssFeed(feed.url);
-          if (result.success) {
-            message.success(`已更新: ${feed.title}`);
-          } else {
+          // 只在失败时显示提示，成功时不需要提示
+          if (!result.success && !options?.silent) {
             message.error(`更新失败: ${feed.title}`);
           }
         }
@@ -360,16 +357,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         LogConfig.info('HOMEPAGE', `刷新分组内的 ${feeds.length} 个订阅源`);
         
         if (feeds.length > 0) {
+          let failCount = 0;
           for (const feed of feeds) {
             try {
               await window.electron.parseRssFeed(feed.url);
             } catch (error) {
               LogConfig.error('HOMEPAGE', `刷新订阅源 ${feed.title} 失败:`, error);
+              failCount++;
             }
           }
-          message.success(`已更新 ${feeds.length} 个订阅源`);
-        } else {
-          message.info('该分组下没有订阅源');
+          // 只在有失败且非静默模式时显示提示
+          if (failCount > 0 && !options?.silent) {
+            message.warning(`${feeds.length - failCount}/${feeds.length} 个订阅源更新成功`);
+          }
         }
       } else {
         // 刷新所有订阅源
@@ -383,16 +383,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             const successCount = results.filter(result => result.articles.length > 0).length;
             const failCount = allFeeds.length - successCount;
             
-            if (!options?.silent) {
-              if (failCount === 0) {
-                message.success(`已成功更新 ${successCount} 个订阅源`);
-              } else {
-                message.warning(`已更新 ${successCount} 个订阅源，${failCount} 个更新失败`);
-              }
-              
-              // 触发文章列表刷新
-              triggerArticleListRefresh();
+            // 只在有失败且非静默模式时显示提示
+            if (failCount > 0 && !options?.silent) {
+              message.warning(`${successCount}/${allFeeds.length} 个订阅源更新成功`);
             }
+            
+            // 触发文章列表刷新
+            triggerArticleListRefresh();
           } catch (error) {
             LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
           }
@@ -528,10 +525,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       handleArticleSelect(nextArticleId);
       // 可以在这里添加滚动到新选中文章的逻辑
       articleListRef.current?.scrollToArticle(nextArticleId);
-    } else {
-      // 可以在这里给用户一些提示，比如 "已经是最后一篇了"
-      message.info(direction === 'next' ? '已经是最后一篇了' : '已经是第一篇了');
     }
+    // 移除到达边界的提示，用户可以从界面上看出来
   };
 
   const handleCloseArticle = () => {
@@ -595,8 +590,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       const feedsInGroup = await db.feeds.where('groupId').equals(currentFilter.groupId).toArray();
       const feedIdsInGroup = feedsInGroup.map((f: FeedSource) => f.id);
       if (feedIdsInGroup.length === 0) {
-        message.info('该分组下没有订阅源。');
-        return;
+        return; // 移除提示
       }
       articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => feedIdsInGroup.includes(a.sourceId));
       delete currentFilter.groupId; // Remove so it's not processed below
@@ -619,8 +613,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     const unreadArticles = await articlesToUpdateQuery.toArray();
     
     if (unreadArticles.length === 0) {
-      message.info('没有需要标记的未读文章。');
-      return;
+      return; // 移除提示
     }
 
     Modal.confirm({
@@ -643,7 +636,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
         } catch (error) {
           LogConfig.error('HOMEPAGE', 'Failed to mark all as read:', error);
-          message.error('操作失败，请重试。');
+          message.error('操作失败');
         }
       },
     });
