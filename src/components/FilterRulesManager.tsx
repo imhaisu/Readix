@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, message, Tabs, Spin, Space, Tooltip } from 'antd';
-import { PlusOutlined, DeleteOutlined, EditOutlined, ReloadOutlined } from '@ant-design/icons';
+import { PlusOutlined, DeleteOutlined, EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { FilterRule, FeedSource } from '../db/database';
-import { createFilterRule, applyFilterRulesToFeed, forceApplyAllFeedRules } from '../utils/filterUtils';
+import { createFilterRule, applyFilterRulesToFeed } from '../utils/filterUtils';
 import { v4 as uuidv4 } from 'uuid';
 import styles from './FilterRulesManager.module.css';
+import FilterLogViewer from './FilterLogViewer';
 
 const { TabPane } = Tabs;
 const { Option } = Select;
@@ -18,7 +19,7 @@ interface FilterRulesManagerProps {
 
 const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTitle }) => {
   const { db, isInitialized, triggerFeedCountRefresh, triggerArticleListRefresh } = useDatabase();
-  const { globalFilterRules, addGlobalFilterRule, updateGlobalFilterRule, deleteGlobalFilterRule, applyGlobalRules, isLoading: isGlobalRulesLoading } = useFilterRules();
+  const { globalFilterRules, addGlobalFilterRule, updateGlobalFilterRule, deleteGlobalFilterRule, isLoading: isGlobalRulesLoading } = useFilterRules();
   
   const [form] = Form.useForm();
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -26,6 +27,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   const [activeTab, setActiveTab] = useState<string>(feedId ? 'feed' : 'global');
   const [feedRules, setFeedRules] = useState<FilterRule[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLogViewerOpen, setIsLogViewerOpen] = useState(false);
 
   // 加载订阅源的过滤规则
   useEffect(() => {
@@ -110,8 +112,12 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       // 触发刷新
       triggerFeedCountRefresh();
       triggerArticleListRefresh();
+      
+      // 显示成功消息
+      message.success(`规则已保存并应用，更新了 ${updatedCount} 篇文章`);
     } catch (error) {
       console.error('[FilterRulesManager] 保存订阅源过滤规则失败:', error);
+      message.error('保存规则失败');
     } finally {
       setIsLoading(false);
     }
@@ -123,16 +129,6 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
     console.log(`[FilterRulesManager] 添加新的订阅源过滤规则:`, newRule);
     const updatedRules = [...feedRules, newRule];
     saveFeedRules(updatedRules);
-    
-    // 重新应用所有订阅源规则
-    setTimeout(() => {
-      if (db && isInitialized && feedId) {
-        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
-        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
-          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
-        });
-      }
-    }, 500);
   };
 
   // 更新订阅源过滤规则
@@ -142,16 +138,6 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       rule.id === id ? { ...rule, ...changes } : rule
     );
     saveFeedRules(updatedRules);
-    
-    // 重新应用所有订阅源规则
-    setTimeout(() => {
-      if (db && isInitialized && feedId) {
-        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
-        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
-          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
-        });
-      }
-    }, 500);
   };
 
   // 删除订阅源过滤规则
@@ -159,16 +145,6 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
     console.log(`[FilterRulesManager] 删除订阅源过滤规则 ${id}`);
     const updatedRules = feedRules.filter(rule => rule.id !== id);
     saveFeedRules(updatedRules);
-    
-    // 重新应用所有订阅源规则
-    setTimeout(() => {
-      if (db && isInitialized && feedId) {
-        console.log(`[FilterRulesManager] 重新检查订阅源过滤规则的应用状态`);
-        applyFilterRulesToFeed(db, feedId, updatedRules).then(count => {
-          console.log(`[FilterRulesManager] 重新应用过滤规则完成，更新了 ${count} 篇文章`);
-        });
-      }
-    }, 500);
   };
 
   // 处理表单提交
@@ -291,79 +267,42 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
 
   return (
     <div className={styles.container}>
+      <div className={styles.header}>
+        <h3>过滤规则管理</h3>
+        <Button 
+          type="default" 
+          icon={<FileTextOutlined />} 
+          onClick={() => setIsLogViewerOpen(true)}
+        >
+          查看日志
+        </Button>
+      </div>
+
       <Tabs activeKey={activeTab} onChange={setActiveTab}>
         {feedId && (
           <TabPane tab={`订阅源规则 (${feedTitle || '未命名'})`} key="feed">
-                      <div className={styles.header}>
-            <h3>订阅源过滤规则</h3>
-            <Space>
-              <Tooltip title="立即应用规则">
+            <div className={styles.header}>
+              <h3>订阅源过滤规则</h3>
+              <Space>
                 <Button 
-                  type="default" 
-                  icon={<ReloadOutlined />} 
-                  onClick={async () => {
-                    if (!db || !isInitialized || !feedId) {
-                      message.error('无法应用规则：数据库未初始化或没有选择订阅源');
-                      return;
-                    }
-                    
-                    setIsLoading(true);
-                    try {
-                      message.loading('正在应用过滤规则...');
-                      
-                      // 仅应用当前订阅源的规则
-                      const updatedCount = await applyFilterRulesToFeed(db, feedId, feedRules);
-                      
-                      message.success(`成功应用规则，更新了 ${updatedCount} 篇文章`);
-                      
-                      // 强制刷新文章列表
-                      triggerArticleListRefresh();
-                      
-                      // 如果没有文章被更新，可能是UI问题，尝试强制刷新
-                      if (updatedCount === 0) {
-                        // 延迟500ms后再次触发刷新
-                        setTimeout(() => {
-                          console.log('[FilterRulesManager] 执行二次刷新...');
-                          triggerArticleListRefresh();
-                          
-                          // 使用随机数触发数据库更新，强制UI刷新
-                          db.feeds.update(feedId, { 
-                            lastForceRefresh: `${new Date().toISOString()}_${Math.random()}` 
-                          }).then(() => {
-                            console.log('[FilterRulesManager] 强制刷新完成');
-                          });
-                        }, 500);
-                      }
-                    } catch (error) {
-                      console.error('[FilterRulesManager] 应用规则时出错:', error);
-                      message.error('应用规则失败');
-                    } finally {
-                      setIsLoading(false);
-                    }
+                  type="primary" 
+                  icon={<PlusOutlined />} 
+                  onClick={() => {
+                    setEditingRuleId(null);
+                    form.resetFields();
+                    form.setFieldsValue({
+                      scope: 'title',
+                      type: 'contains',
+                      keywords: '',
+                      isActive: true
+                    });
+                    setIsModalVisible(true);
                   }}
                 >
-                  应用规则
+                  添加规则
                 </Button>
-              </Tooltip>
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />} 
-                onClick={() => {
-                  setEditingRuleId(null);
-                  form.resetFields();
-                  form.setFieldsValue({
-                    scope: 'title',
-                    type: 'contains',
-                    keywords: '',
-                    isActive: true
-                  });
-                  setIsModalVisible(true);
-                }}
-              >
-                添加规则
-              </Button>
-            </Space>
-          </div>
+              </Space>
+            </div>
             <Spin spinning={isLoading}>
               <Table 
                 dataSource={feedRules} 
@@ -379,41 +318,6 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           <div className={styles.header}>
             <h3>全局过滤规则</h3>
             <Space>
-              <Tooltip title="立即应用所有规则">
-                <Button 
-                  type="default" 
-                  icon={<ReloadOutlined />} 
-                  onClick={async () => {
-                    if (!db || !isInitialized) {
-                      message.error('无法应用规则：数据库未初始化');
-                      return;
-                    }
-                    
-                    try {
-                      message.loading('正在应用所有过滤规则...');
-                      
-                      // 强制应用所有订阅源规则，优先级高于全局规则
-                      const feedRulesCount = await forceApplyAllFeedRules(db);
-                      console.log(`[FilterRulesManager] 完成订阅源规则应用，更新了 ${feedRulesCount} 篇文章`);
-                      
-                      // 延迟一会儿再应用全局规则，确保订阅源规则先被处理
-                      await new Promise(resolve => setTimeout(resolve, 500));
-                      
-                      // 然后应用全局规则
-                      const globalRulesCount = await applyGlobalRules();
-                      console.log(`[FilterRulesManager] 完成全局规则应用，更新了 ${globalRulesCount} 篇文章`);
-                      
-                      message.success(`成功应用所有规则，更新了 ${feedRulesCount + globalRulesCount} 篇文章`);
-                      triggerArticleListRefresh();
-                    } catch (error) {
-                      console.error('[FilterRulesManager] 应用所有规则时出错:', error);
-                      message.error('应用规则失败');
-                    }
-                  }}
-                >
-                  应用所有规则
-                </Button>
-              </Tooltip>
               <Button 
                 type="primary" 
                 icon={<PlusOutlined />} 
@@ -497,6 +401,11 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           </Form.Item>
         </Form>
       </Modal>
+
+      <FilterLogViewer 
+        isOpen={isLogViewerOpen}
+        onClose={() => setIsLogViewerOpen(false)}
+      />
     </div>
   );
 };

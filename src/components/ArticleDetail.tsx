@@ -1092,6 +1092,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             />
           </Tooltip>
 
+          {/* 隐藏分享按钮
           <Tooltip title="分享">
             <Button
               type="text"
@@ -1100,7 +1101,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
               onClick={handleShare}
               className={styles.toolbarButton}
             />
-          </Tooltip>
+          </Tooltip> */}
         </div>
       </div>
 

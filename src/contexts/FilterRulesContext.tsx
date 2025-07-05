@@ -3,6 +3,8 @@ import { useDatabase } from './DatabaseContext';
 import { FilterRule } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { applyGlobalFilterRules } from '../utils/filterUtils';
+import { message } from 'antd';
+import { LogConfig } from '../utils/logConfig';
 
 // 全局过滤规则的本地存储键
 const GLOBAL_FILTER_RULES_KEY = 'global_filter_rules';
@@ -29,35 +31,35 @@ interface FilterRulesProviderProps {
 export const debugGlobalFilterRules = () => {
   try {
     const savedRules = localStorage.getItem(GLOBAL_FILTER_RULES_KEY);
-    console.log('[DEBUG] 检查本地存储中的全局过滤规则:');
-    console.log(`[DEBUG] 原始字符串: ${savedRules}`);
+    LogConfig.debug('FILTER', '检查本地存储中的全局过滤规则:');
+    LogConfig.debug('FILTER', `原始字符串: ${savedRules}`);
     
     if (savedRules) {
       try {
         const parsedRules = JSON.parse(savedRules);
-        console.log(`[DEBUG] 解析后的规则: `, parsedRules);
-        console.log(`[DEBUG] 规则数量: ${parsedRules.length}`);
-        console.log(`[DEBUG] 规则类型: ${typeof parsedRules}`);
-        console.log(`[DEBUG] 是否为数组: ${Array.isArray(parsedRules)}`);
+        LogConfig.debug('FILTER', '解析后的规则: ', parsedRules);
+        LogConfig.debug('FILTER', `规则数量: ${parsedRules.length}`);
+        LogConfig.debug('FILTER', `规则类型: ${typeof parsedRules}`);
+        LogConfig.debug('FILTER', `是否为数组: ${Array.isArray(parsedRules)}`);
         
         if (Array.isArray(parsedRules)) {
           parsedRules.forEach((rule, index) => {
-            console.log(`[DEBUG] 规则 #${index + 1}:`);
-            console.log(`[DEBUG]   ID: ${rule.id}`);
-            console.log(`[DEBUG]   范围: ${rule.scope}`);
-            console.log(`[DEBUG]   类型: ${rule.type}`);
-            console.log(`[DEBUG]   关键词: ${rule.keywords}`);
-            console.log(`[DEBUG]   状态: ${rule.isActive ? '激活' : '未激活'}`);
+            LogConfig.debug('FILTER', `规则 #${index + 1}:`);
+            LogConfig.debug('FILTER', `  ID: ${rule.id}`);
+            LogConfig.debug('FILTER', `  范围: ${rule.scope}`);
+            LogConfig.debug('FILTER', `  类型: ${rule.type}`);
+            LogConfig.debug('FILTER', `  关键词: ${rule.keywords}`);
+            LogConfig.debug('FILTER', `  状态: ${rule.isActive ? '激活' : '未激活'}`);
           });
         }
       } catch (parseError) {
-        console.error('[DEBUG] 解析JSON失败:', parseError);
+        LogConfig.error('FILTER', '解析JSON失败:', parseError);
       }
     } else {
-      console.log('[DEBUG] 本地存储中没有找到全局过滤规则');
+      LogConfig.debug('FILTER', '本地存储中没有找到全局过滤规则');
     }
   } catch (error) {
-    console.error('[DEBUG] 调试全局过滤规则时出错:', error);
+    LogConfig.error('FILTER', '调试全局过滤规则时出错:', error);
   }
 };
 
@@ -72,16 +74,16 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     const loadGlobalRules = () => {
       try {
         const savedRules = localStorage.getItem(GLOBAL_FILTER_RULES_KEY);
-        console.log('[FilterRulesContext] 从本地存储加载全局过滤规则:', savedRules);
+        LogConfig.info('FILTER', '从本地存储加载全局过滤规则:', savedRules);
         if (savedRules) {
           const parsedRules = JSON.parse(savedRules) as FilterRule[];
-          console.log('[FilterRulesContext] 解析后的全局过滤规则:', JSON.stringify(parsedRules));
+          LogConfig.info('FILTER', '解析后的全局过滤规则:', JSON.stringify(parsedRules));
           setGlobalFilterRules(parsedRules);
         } else {
-          console.log('[FilterRulesContext] 本地存储中没有找到全局过滤规则');
+          LogConfig.info('FILTER', '本地存储中没有找到全局过滤规则');
         }
       } catch (error) {
-        console.error('[FilterRulesContext] 加载全局过滤规则失败:', error);
+        LogConfig.error('FILTER', '加载全局过滤规则失败:', error);
         // 如果加载失败，重置为空数组
         setGlobalFilterRules([]);
       }
@@ -93,10 +95,10 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
   // 保存全局过滤规则到本地存储
   const saveGlobalRules = (rules: FilterRule[]) => {
     try {
-      console.log('[FilterRulesContext] 保存全局过滤规则到本地存储:', JSON.stringify(rules));
+      LogConfig.info('FILTER', '保存全局过滤规则到本地存储:', JSON.stringify(rules));
       localStorage.setItem(GLOBAL_FILTER_RULES_KEY, JSON.stringify(rules));
     } catch (error) {
-      console.error('[FilterRulesContext] 保存全局过滤规则失败:', error);
+      LogConfig.error('FILTER', '保存全局过滤规则失败:', error);
     }
   };
 
@@ -109,6 +111,8 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     const updatedRules = [...globalFilterRules, newRule];
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
+    
+    message.success('全局规则已添加，正在应用...');
   };
 
   // 更新全局过滤规则
@@ -118,6 +122,8 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     );
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
+    
+    message.success('全局规则已更新，正在应用...');
   };
 
   // 删除全局过滤规则
@@ -125,20 +131,22 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     const updatedRules = globalFilterRules.filter(rule => rule.id !== id);
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
+    
+    message.success('全局规则已删除，正在应用...');
   };
 
   // 应用全局过滤规则
   const applyGlobalRules = async (): Promise<number> => {
     if (!db || !isInitialized) {
-      console.log('[FilterRulesContext] 数据库未初始化，无法应用全局过滤规则');
+      LogConfig.warn('FILTER', '数据库未初始化，无法应用全局过滤规则');
       return 0;
     }
 
-    console.log('[FilterRulesContext] 开始应用全局过滤规则:', JSON.stringify(globalFilterRules));
+    LogConfig.info('FILTER', '开始应用全局过滤规则:', JSON.stringify(globalFilterRules));
     setIsLoading(true);
     try {
       const updatedCount = await applyGlobalFilterRules(db, globalFilterRules);
-      console.log(`[FilterRulesContext] 应用全局过滤规则完成，更新了 ${updatedCount} 篇文章`);
+      LogConfig.info('FILTER', `应用全局过滤规则完成，更新了 ${updatedCount} 篇文章`);
       
       // 触发文章列表和计数刷新
       triggerArticleListRefresh();
@@ -146,7 +154,8 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
       
       return updatedCount;
     } catch (error) {
-      console.error('[FilterRulesContext] 应用全局过滤规则失败:', error);
+      LogConfig.error('FILTER', '应用全局过滤规则失败:', error);
+      message.error('应用全局规则失败');
       return 0;
     } finally {
       setIsLoading(false);
@@ -156,15 +165,15 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
   // 当全局规则变化时自动应用
   useEffect(() => {
     if (db && isInitialized && globalFilterRules.length > 0) {
-      console.log('[FilterRulesContext] 全局过滤规则变化，准备应用:', JSON.stringify(globalFilterRules));
+      LogConfig.info('FILTER', '全局过滤规则变化，立即应用');
       
-      // 延迟应用全局规则，确保订阅源规则已经加载
-      const timer = setTimeout(() => {
-        console.log('[FilterRulesContext] 开始应用延迟的全局过滤规则');
-        applyGlobalRules();
-      }, 1000);
-      
-      return () => clearTimeout(timer);
+      // 立即应用全局规则
+      applyGlobalRules().then(count => {
+        // 移除这里的toast提示，仅在手动操作时显示
+        // if (count > 0) {
+        //   message.success(`全局规则已应用，更新了 ${count} 篇文章`);
+        // }
+      });
     }
   }, [db, isInitialized, globalFilterRules]);
 

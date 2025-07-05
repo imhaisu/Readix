@@ -38,27 +38,20 @@ import AddFeedModal from '../components/AddFeedModal';
 import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
 import MindMapModal from '../components/MindMapModal';
 import PulsingLoader from '../components/PulsingLoader';
+import { LogConfig } from '../utils/logConfig';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
 const { Title, Text } = Typography;
 
-// 添加日志控制配置
-const LOG_CONFIG = {
-  ENABLE_FEED_LOGS: false,  // 订阅源日志
-  ENABLE_ERROR_LOGS: true   // 错误日志
-};
-
-// 封装日志函数
+// 使用新的日志函数
 const log = {
   feed: (message: string) => {
-    if (LOG_CONFIG.ENABLE_FEED_LOGS) console.log(message);
+    LogConfig.info('FEED', message);
   },
   error: (message: string, error?: any) => {
-    if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
-      if (error) console.error(message, error);
-      else console.error(message);
-    }
+    if (error) LogConfig.error('HOMEPAGE', message, error);
+    else LogConfig.error('HOMEPAGE', message);
   }
 };
 
@@ -280,16 +273,16 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (!db) return;
     
     // 添加日志，帮助调试
-    console.log('[HomePage] 加载订阅源列表');
+    LogConfig.info('HOMEPAGE', '加载订阅源列表');
     const allFeeds = await db.feeds.toArray();
     setFeeds(allFeeds);
     
     // 调试订阅源过滤规则
     try {
-      console.log('[HomePage] 开始调试订阅源过滤规则...');
+      LogConfig.debug('HOMEPAGE', '开始调试订阅源过滤规则...');
       await debugFeedFilterRules(db);
     } catch (error) {
-      console.error('[HomePage] 调试订阅源过滤规则时出错:', error);
+      LogConfig.error('HOMEPAGE', '调试订阅源过滤规则时出错:', error);
     }
   };
 
@@ -332,13 +325,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     const now = Date.now();
     const MIN_REFRESH_INTERVAL = 5000; // 5秒内不重复刷新
     if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL) {
-      console.log('[HomePage] 刷新间隔太短，跳过');
+      LogConfig.info('HOMEPAGE', '刷新间隔太短，跳过');
       return;
     }
     lastRefreshTimeRef.current = now;
 
     if (!db) {
-      console.error('[HomePage] 数据库未初始化');
+      LogConfig.error('HOMEPAGE', '数据库未初始化');
       return;
     }
 
@@ -373,7 +366,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
             for (const result of results) {
               const { feed, articles: fetchedArticles } = result;
               if (fetchedArticles.length > 0) {
-                log.feed(`[HomePage] 处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
+                LogConfig.info('FEED', `处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
                 
                 // 获取现有文章
                 const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
@@ -390,9 +383,9 @@ for (const fetchedArticle of fetchedArticles) {
   if (existingArticle) {
     // 已存在的文章 - 保留原始发布日期和阅读状态
     // 使用条件日志，默认不输出
-    if (LOG_CONFIG.ENABLE_FEED_LOGS) {
-      console.log(`[HomePage] 更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
-      console.log(`[HomePage] 原始日期: ${formatDate(existingArticle.publishDate, true)}, 新日期: ${formatDate(fetchedArticle.publishDate, true)}`);
+    if (LogConfig.isModuleEnabled('FEED')) {
+      LogConfig.info('FEED', `更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
+      LogConfig.info('FEED', `原始日期: ${formatDate(existingArticle.publishDate, true)}, 新日期: ${formatDate(fetchedArticle.publishDate, true)}`);
     }
                     
                     // 决定使用哪个发布日期
@@ -406,8 +399,8 @@ for (const fetchedArticle of fetchedArticles) {
                     
                         // 芥末堆文章特殊处理：始终保留原始日期
     if (isJiemoduiArticle) {
-      if (LOG_CONFIG.ENABLE_FEED_LOGS) {
-        console.log(`[HomePage] 芥末堆文章，保留原始日期: ${formatDate(existingArticle.publishDate, true)}`);
+      if (LogConfig.isModuleEnabled('FEED')) {
+        LogConfig.info('FEED', `芥末堆文章，保留原始日期: ${formatDate(existingArticle.publishDate, true)}`);
       }
       finalPublishDate = existingArticle.publishDate;
                     } else {
@@ -418,14 +411,14 @@ for (const fetchedArticle of fetchedArticles) {
                       if (!fetchedArticle.isFirstFetchDate) {
                         if (existingArticle.isFirstFetchDate) {
                                     // 情况1: 找到了更准确的日期
-          if (LOG_CONFIG.ENABLE_FEED_LOGS) {
-            console.log(`[HomePage] 找到更准确的日期，从首次获取时间更新为实际发布时间`);
+          if (LogConfig.isModuleEnabled('FEED')) {
+            LogConfig.info('FEED', `找到更准确的日期，从首次获取时间更新为实际发布时间`);
           }
           finalPublishDate = fetchedArticle.publishDate;
           finalIsFirstFetchDate = false;
           
           // 记录日期变更
-          if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+          if (LogConfig.isModuleEnabled('FEED')) {
             logDateIssue(
               `日期更新 (首次获取 → 实际日期)`,
               existingArticle.title,
@@ -437,13 +430,13 @@ for (const fetchedArticle of fetchedArticles) {
                         } else {
                                       // 情况2: 两者都有准确日期，保留较早的那个
             if (fetchedArticle.publishDate < existingArticle.publishDate) {
-              if (LOG_CONFIG.ENABLE_FEED_LOGS) {
-                console.log(`[HomePage] 发现更早的准确日期，更新文章日期`);
+              if (LogConfig.isModuleEnabled('FEED')) {
+                LogConfig.info('FEED', `发现更早的准确日期，更新文章日期`);
               }
               finalPublishDate = fetchedArticle.publishDate;
               
               // 记录日期变更
-              if (LOG_CONFIG.ENABLE_FEED_LOGS) {
+              if (LogConfig.isModuleEnabled('FEED')) {
                 logDateIssue(
                   `日期更新 (发现更早日期)`,
                   existingArticle.title,
@@ -476,7 +469,7 @@ for (const fetchedArticle of fetchedArticles) {
                     });
                   } else {
                     // 新文章 - 直接添加
-                    log.feed(`[HomePage] 添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${formatDate(fetchedArticle.publishDate, true)}`);
+                    LogConfig.info('FEED', `添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${formatDate(fetchedArticle.publishDate, true)}`);
                     articlesToAdd.push(fetchedArticle);
                   }
                 }
@@ -484,12 +477,12 @@ for (const fetchedArticle of fetchedArticles) {
                 // 批量更新和添加文章
                 if (articlesToUpdate.length > 0) {
                   await db.articles.bulkPut(articlesToUpdate);
-                  log.feed(`[HomePage] 已更新 ${articlesToUpdate.length} 篇文章`);
+                  LogConfig.info('FEED', `已更新 ${articlesToUpdate.length} 篇文章`);
                 }
                 
                 if (articlesToAdd.length > 0) {
                   await db.articles.bulkAdd(articlesToAdd);
-                  log.feed(`[HomePage] 已添加 ${articlesToAdd.length} 篇新文章`);
+                  LogConfig.info('FEED', `已添加 ${articlesToAdd.length} 篇新文章`);
                 }
                 
                 // 更新未读计数
@@ -502,7 +495,7 @@ for (const fetchedArticle of fetchedArticles) {
           }
         }
       } catch (error) {
-        log.error('[HomePage] 刷新订阅源失败:', error);
+        LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
       }
     } finally {
       if (!options?.silent) {
@@ -733,7 +726,7 @@ for (const fetchedArticle of fetchedArticles) {
           triggerArticleListRefresh();
 
         } catch (error) {
-          console.error('Failed to mark all as read:', error);
+          LogConfig.error('HOMEPAGE', 'Failed to mark all as read:', error);
           message.error('操作失败，请重试。');
         }
       },
@@ -753,7 +746,7 @@ for (const fetchedArticle of fetchedArticles) {
         const count = await db.articles.count();
         setHasArticles(count > 0);
       } catch (error) {
-        console.error('检查文章失败:', error);
+        LogConfig.error('HOMEPAGE', '检查文章失败:', error);
         setHasArticles(true); // 出错时假设有文章，避免不必要地显示欢迎页面
       }
     };
@@ -768,7 +761,7 @@ for (const fetchedArticle of fetchedArticles) {
   useEffect(() => {
     const articleIdFromUrl = searchParams.get('articleId');
     if (articleIdFromUrl) {
-      console.log(`[HomePage] 从URL查询参数中获取articleId: ${articleIdFromUrl}`);
+      LogConfig.info('HOMEPAGE', `从URL查询参数中获取articleId: ${articleIdFromUrl}`);
       setSelectedArticleId(articleIdFromUrl);
     }
   }, [searchParams, feedId, groupId]);
@@ -778,7 +771,7 @@ for (const fetchedArticle of fetchedArticles) {
     if (!db) return;
     
     try {
-      console.log('[HomePage] 开始清理重复文章...');
+      LogConfig.info('HOMEPAGE', '开始清理重复文章...');
       
       // 获取所有文章
       const allArticles = await db.articles.toArray();
@@ -813,15 +806,15 @@ for (const fetchedArticle of fetchedArticles) {
       // 批量删除重复文章
       if (articlesToDelete.length > 0) {
         await db.articles.bulkDelete(articlesToDelete);
-        console.log(`[HomePage] 已删除 ${articlesToDelete.length} 篇重复文章`);
+        LogConfig.info('HOMEPAGE', `已删除 ${articlesToDelete.length} 篇重复文章`);
         
         // 刷新文章列表
         triggerArticleListRefresh();
       } else {
-        console.log('[HomePage] 没有发现重复文章');
+        LogConfig.info('HOMEPAGE', '没有发现重复文章');
       }
     } catch (error) {
-      console.error('[HomePage] 清理重复文章失败:', error);
+      LogConfig.error('HOMEPAGE', '清理重复文章失败:', error);
     }
   }, [db, triggerArticleListRefresh]);
   
@@ -832,41 +825,41 @@ for (const fetchedArticle of fetchedArticles) {
       
       // 延迟调试过滤规则，确保在数据库完全加载后执行
       const timer = setTimeout(async () => {
-        console.log('[HomePage] 应用初始化完成，开始检查和修复过滤规则...');
+        LogConfig.info('HOMEPAGE', '应用初始化完成，开始检查和修复过滤规则...');
         
         // 第一步：检查并修复所有订阅源的过滤规则状态
-        console.log('[HomePage] 检查并修复订阅源过滤规则...');
+        LogConfig.info('HOMEPAGE', '检查并修复订阅源过滤规则...');
         try {
           await checkAndFixAllFeedRules(db);
-          console.log(`[HomePage] 完成过滤规则一致性检查和修复`);
+          LogConfig.info('HOMEPAGE', '完成过滤规则一致性检查和修复');
         } catch (error) {
-          console.error('[HomePage] 检查和修复过滤规则时出错:', error);
+          LogConfig.error('HOMEPAGE', '检查和修复过滤规则时出错:', error);
         }
         
         // 第二步：强制应用所有订阅源过滤规则（最高优先级）
-        console.log('[HomePage] 强制应用所有订阅源过滤规则...');
+        LogConfig.info('HOMEPAGE', '强制应用所有订阅源过滤规则...');
         try {
           const updatedCount = await forceApplyAllFeedRules(db);
-          console.log(`[HomePage] 强制应用订阅源过滤规则完成，更新了 ${updatedCount} 篇文章`);
+          LogConfig.info('HOMEPAGE', `强制应用订阅源过滤规则完成，更新了 ${updatedCount} 篇文章`);
           triggerArticleListRefresh(); // 刷新文章列表显示
         } catch (error) {
-          console.error('[HomePage] 强制应用订阅源过滤规则时出错:', error);
+          LogConfig.error('HOMEPAGE', '强制应用订阅源过滤规则时出错:', error);
         }
         
         // 调试全局过滤规则
-        console.log('[HomePage] 检查全局过滤规则...');
+        LogConfig.info('HOMEPAGE', '检查全局过滤规则...');
         try {
           debugGlobalFilterRules();
         } catch (error) {
-          console.error('[HomePage] 调试全局过滤规则时出错:', error);
+          LogConfig.error('HOMEPAGE', '调试全局过滤规则时出错:', error);
         }
         
         // 调试订阅源过滤规则
-        console.log('[HomePage] 检查订阅源过滤规则...');
+        LogConfig.info('HOMEPAGE', '检查订阅源过滤规则...');
         try {
           await debugFeedFilterRules(db);
         } catch (error) {
-          console.error('[HomePage] 调试订阅源过滤规则时出错:', error);
+          LogConfig.error('HOMEPAGE', '调试订阅源过滤规则时出错:', error);
         }
       }, 1000); // 缩短延迟时间，确保尽快应用规则
       
@@ -880,11 +873,11 @@ for (const fetchedArticle of fetchedArticles) {
    */
   const forceFixArticleDisplayStates = async () => {
     if (!db || !dbInitialized) {
-      console.error('[HomePage] 无法修复文章状态：数据库未初始化');
+      LogConfig.error('HOMEPAGE', '无法修复文章状态：数据库未初始化');
       return;
     }
     
-    console.log('[HomePage] 开始强制修复文章显示状态...');
+    LogConfig.info('HOMEPAGE', '开始强制修复文章显示状态...');
     
     try {
       // 获取所有订阅源
@@ -895,11 +888,11 @@ for (const fetchedArticle of fetchedArticles) {
         
         // 仅处理"人人都是产品经理"订阅源
         if (feed.title === "人人都是产品经理") {
-          console.log(`[HomePage] 处理订阅源 "${feed.title}" 的文章`);
+          LogConfig.info('HOMEPAGE', `处理订阅源 "${feed.title}" 的文章`);
           
           // 获取该订阅源的所有文章
           const articles = await db.articles.where('sourceId').equals(feed.id).toArray();
-          console.log(`[HomePage] 找到 ${articles.length} 篇文章需要检查`);
+          LogConfig.info('HOMEPAGE', `找到 ${articles.length} 篇文章需要检查`);
           
           // 记录需要修复的文章
           const articlesToFix: Array<{
@@ -918,9 +911,10 @@ for (const fetchedArticle of fetchedArticles) {
             const hasAI = title.includes('ai');
             const has1700 = title.includes('1700');
             const hasXiaohongshu = title.includes('小红书');
+            const hasDeepSeek = title.includes('deepseek');
             
             // 如果包含任一关键词，应该被隐藏
-            const shouldBeHidden = hasO2O || hasAI || has1700 || hasXiaohongshu;
+            const shouldBeHidden = hasO2O || hasAI || has1700 || hasXiaohongshu || hasDeepSeek;
             
             // 如果当前状态与应有状态不符，则加入修复列表
             if (article.isHidden !== shouldBeHidden) {
@@ -931,16 +925,17 @@ for (const fetchedArticle of fetchedArticles) {
                 reason: hasO2O ? 'O2O' : 
                         hasAI ? 'AI' : 
                         has1700 ? '1700' : 
-                        hasXiaohongshu ? '小红书' : '未知'
+                        hasXiaohongshu ? '小红书' : 
+                        hasDeepSeek ? 'DeepSeek' : '未知'
               });
             }
           }
           
-          console.log(`[HomePage] 需要修复 ${articlesToFix.length} 篇文章`);
+          LogConfig.info('HOMEPAGE', `需要修复 ${articlesToFix.length} 篇文章`);
           
           // 显示需要修复的文章信息
           articlesToFix.forEach(article => {
-            console.log(`[HomePage] 文章 "${article.title}" 将被${article.isHidden ? '隐藏' : '显示'}，原因: ${article.reason}`);
+            LogConfig.info('HOMEPAGE', `文章 "${article.title}" 将被${article.isHidden ? '隐藏' : '显示'}，原因: ${article.reason}`);
           });
           
           // 批量修复文章
@@ -954,15 +949,15 @@ for (const fetchedArticle of fetchedArticles) {
               }
             });
             
-            console.log(`[HomePage] 已修复 ${articlesToFix.length} 篇文章`);
+            LogConfig.info('HOMEPAGE', '已修复文章显示状态');
             triggerArticleListRefresh();
           }
         }
       }
       
-      console.log('[HomePage] 文章显示状态修复完成');
+      LogConfig.info('HOMEPAGE', '文章显示状态修复完成');
     } catch (error) {
-      console.error('[HomePage] 修复文章显示状态时出错:', error);
+      LogConfig.error('HOMEPAGE', '修复文章显示状态时出错:', error);
     }
   };
 

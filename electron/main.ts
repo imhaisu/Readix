@@ -948,5 +948,23 @@ ipcMain.handle('test-doubao-api', async (event, apiKey) => {
   }
 });
 
+// 添加shell-open-external处理程序
+ipcMain.handle('shell-open-external', async (_, url) => {
+  try {
+    // 验证URL是否合法
+    const validUrl = new URL(url);
+    // 只允许http和https协议
+    if (validUrl.protocol !== 'http:' && validUrl.protocol !== 'https:') {
+      throw new Error('只允许HTTP和HTTPS协议');
+    }
+    // 打开外部链接
+    await shell.openExternal(url);
+    return true;
+  } catch (error) {
+    console.error('[Main Process] 打开外部链接失败:', error);
+    throw error;
+  }
+});
+
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and import them here. 
