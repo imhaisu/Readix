@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, message, Tabs, Spin, Space, Tooltip } from 'antd';
+import { Table, Button, Modal, Form, Input, Select, Switch, Popconfirm, message, Tabs, Spin, Space, Tooltip, Radio } from 'antd';
 import { PlusOutlined, DeleteOutlined, EditOutlined, FileTextOutlined } from '@ant-design/icons';
 import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { FilterRule, FeedSource } from '../db/database';
-import { createFilterRule, applyFilterRulesToFeed } from '../utils/filterUtils';
+import { createFilterRule } from '../utils/filterUtils';
+import { applyAllRulesToAllArticles } from '../utils/filterApplier';
 import { v4 as uuidv4 } from 'uuid';
 import styles from './FilterRulesManager.module.css';
 import FilterLogViewer from './FilterLogViewer';
 
-const { TabPane } = Tabs;
 const { Option } = Select;
 
 interface FilterRulesManagerProps {
@@ -33,25 +33,19 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   useEffect(() => {
     const loadFeedRules = async () => {
       if (!db || !isInitialized || !feedId) {
-        console.log('[FilterRulesManager] 数据库未初始化或没有feedId，无法加载订阅源过滤规则');
         setFeedRules([]);
         return;
       }
 
-      console.log(`[FilterRulesManager] 开始加载订阅源 ${feedId} 的过滤规则`);
       setIsLoading(true);
       try {
         const feed = await db.feeds.get(feedId);
-        console.log(`[FilterRulesManager] 获取到订阅源:`, feed);
         if (feed && feed.filterRules) {
-          console.log(`[FilterRulesManager] 订阅源 ${feedId} 的过滤规则:`, JSON.stringify(feed.filterRules));
           setFeedRules(feed.filterRules);
         } else {
-          console.log(`[FilterRulesManager] 订阅源 ${feedId} 没有过滤规则或规则为空`);
           setFeedRules([]);
         }
       } catch (error) {
-        console.error('[FilterRulesManager] 加载订阅源过滤规则失败:', error);
         setFeedRules([]);
       } finally {
         setIsLoading(false);
@@ -64,18 +58,15 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   // 保存订阅源的过滤规则
   const saveFeedRules = async (rules: FilterRule[]) => {
     if (!db || !isInitialized || !feedId) {
-      console.log('[FilterRulesManager] 数据库未初始化或没有feedId，无法保存订阅源过滤规则');
       return;
     }
 
-    console.log(`[FilterRulesManager] 保存订阅源 ${feedId} 的过滤规则:`, JSON.stringify(rules));
     setIsLoading(true);
     try {
       // 确保rules是数组且每个元素都有所需的字段
       const validatedRules = Array.isArray(rules) ? rules.map(rule => {
         // 确保每个规则都有必要的字段
         if (!rule.id) {
-          console.warn('[FilterRulesManager] 发现规则缺少ID，生成新ID');
           rule.id = uuidv4();
         }
         return {
@@ -83,41 +74,27 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           scope: rule.scope || 'title',
           type: rule.type || 'contains',
           keywords: rule.keywords || '',
-          isActive: rule.isActive !== false  // 默认为true
+          isActive: rule.isActive !== false,  // 默认为true
+          keywordLogic: rule.keywordLogic || 'OR',
         };
       }) : [];
-      
-      console.log(`[FilterRulesManager] 验证后的规则:`, JSON.stringify(validatedRules));
       
       // 保存到数据库
       await db.feeds.update(feedId, { filterRules: validatedRules });
       
       // 验证是否保存成功
       const updatedFeed = await db.feeds.get(feedId);
-      console.log(`[FilterRulesManager] 保存后从数据库重新读取:`, updatedFeed?.filterRules);
       
-      // 如果数据库中的规则数量与要保存的不一致，则记录警告
-      if (updatedFeed?.filterRules?.length !== validatedRules.length) {
-        console.warn(`[FilterRulesManager] 警告: 保存的规则数量(${validatedRules.length})与数据库中的(${updatedFeed?.filterRules?.length})不一致!`);
-      }
-      
-      console.log(`[FilterRulesManager] 已更新数据库中订阅源 ${feedId} 的过滤规则`);
       setFeedRules(validatedRules);
       
-      // 应用规则到文章
-      console.log(`[FilterRulesManager] 开始应用过滤规则到订阅源 ${feedId} 的文章`);
-      const updatedCount = await applyFilterRulesToFeed(db, feedId, validatedRules);
-      console.log(`[FilterRulesManager] 应用过滤规则完成，更新了 ${updatedCount} 篇文章`);
+      // 应用规则到所有文章，而不仅仅是当前订阅源的文章
+      const updatedCount = await applyAllRulesToAllArticles(db);
       
       // 触发刷新
       triggerFeedCountRefresh();
       triggerArticleListRefresh();
-      
-      // 显示成功消息
-      message.success(`规则已保存并应用，更新了 ${updatedCount} 篇文章`);
     } catch (error) {
-      console.error('[FilterRulesManager] 保存订阅源过滤规则失败:', error);
-      message.error('保存规则失败');
+      // 保存失败，无需处理
     } finally {
       setIsLoading(false);
     }
@@ -125,15 +102,13 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
 
   // 添加订阅源过滤规则
   const addFeedRule = (rule: Omit<FilterRule, 'id'>) => {
-    const newRule = createFilterRule(rule.scope, rule.type, rule.keywords, rule.isActive);
-    console.log(`[FilterRulesManager] 添加新的订阅源过滤规则:`, newRule);
+    const newRule = createFilterRule(rule.scope, rule.type, rule.keywords, rule.isActive, rule.keywordLogic);
     const updatedRules = [...feedRules, newRule];
     saveFeedRules(updatedRules);
   };
 
   // 更新订阅源过滤规则
   const updateFeedRule = (id: string, changes: Partial<Omit<FilterRule, 'id'>>) => {
-    console.log(`[FilterRulesManager] 更新订阅源过滤规则 ${id}:`, changes);
     const updatedRules = feedRules.map(rule => 
       rule.id === id ? { ...rule, ...changes } : rule
     );
@@ -142,7 +117,6 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
 
   // 删除订阅源过滤规则
   const deleteFeedRule = (id: string) => {
-    console.log(`[FilterRulesManager] 删除订阅源过滤规则 ${id}`);
     const updatedRules = feedRules.filter(rule => rule.id !== id);
     saveFeedRules(updatedRules);
   };
@@ -155,7 +129,8 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
         scope: values.scope,
         type: values.type,
         keywords: values.keywords,
-        isActive: values.isActive !== false // 默认为true
+        isActive: values.isActive !== false, // 默认为true
+        keywordLogic: values.keywordLogic || 'OR',
       };
 
       if (editingRuleId) {
@@ -176,7 +151,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       form.resetFields();
       setEditingRuleId(null);
     } catch (error) {
-      console.error('提交表单失败:', error);
+      // 表单验证失败，无需处理
     }
   };
 
@@ -187,7 +162,8 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       scope: rule.scope,
       type: rule.type,
       keywords: rule.keywords,
-      isActive: rule.isActive
+      isActive: rule.isActive,
+      keywordLogic: rule.keywordLogic || 'OR',
     });
     setIsModalVisible(true);
   };
@@ -209,7 +185,13 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
     {
       title: '类型',
       dataIndex: 'type',
-      render: (type: string) => type === 'contains' ? '包含' : '不包含'
+      render: (type: string) => {
+        switch (type) {
+          case 'contains': return '只显示';
+          case 'not_contains': return '隐藏';
+          default: return type;
+        }
+      }
     },
     {
       title: '关键词',
@@ -265,6 +247,96 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
     }
   ];
 
+  const renderFeedRulesTab = () => (
+    <div className={styles.tabContent}>
+      <div className={styles.header}>
+        <h3>订阅源过滤规则</h3>
+        <Space>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => {
+              setEditingRuleId(null);
+              form.resetFields();
+              form.setFieldsValue({
+                scope: 'title',
+                type: 'contains',
+                keywords: '',
+                isActive: false,
+                keywordLogic: 'OR',
+              });
+              setIsModalVisible(true);
+            }}
+          >
+            添加规则
+          </Button>
+        </Space>
+      </div>
+      <Spin spinning={isLoading}>
+        <Table 
+          dataSource={feedRules} 
+          columns={columns}
+          rowKey="id"
+          pagination={false}
+          locale={{ emptyText: '没有过滤规则' }}
+        />
+      </Spin>
+    </div>
+  );
+
+  const renderGlobalRulesTab = () => (
+    <div className={styles.tabContent}>
+      <div className={styles.header}>
+        <h3>全局过滤规则</h3>
+        <Space>
+          <Button 
+            type="primary" 
+            icon={<PlusOutlined />} 
+            onClick={() => {
+              setEditingRuleId(null);
+              form.resetFields();
+              form.setFieldsValue({
+                scope: 'title',
+                type: 'contains',
+                keywords: '',
+                isActive: false,
+                keywordLogic: 'OR',
+              });
+              setIsModalVisible(true);
+            }}
+          >
+            添加规则
+          </Button>
+        </Space>
+      </div>
+      <Spin spinning={isGlobalRulesLoading}>
+        <Table 
+          dataSource={globalFilterRules} 
+          columns={columns}
+          rowKey="id"
+          pagination={false}
+          locale={{ emptyText: '没有全局过滤规则' }}
+        />
+      </Spin>
+    </div>
+  );
+
+  const tabItems = [];
+
+  if (feedId) {
+    tabItems.push({
+      key: 'feed',
+      label: `订阅源规则 (${feedTitle || '未命名'})`,
+      children: renderFeedRulesTab(),
+    });
+  }
+
+  tabItems.push({
+    key: 'global',
+    label: '全局规则',
+    children: renderGlobalRulesTab(),
+  });
+
   return (
     <div className={styles.container}>
       <div className={styles.header}>
@@ -278,79 +350,10 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
         </Button>
       </div>
 
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        {feedId && (
-          <TabPane tab={`订阅源规则 (${feedTitle || '未命名'})`} key="feed">
-            <div className={styles.header}>
-              <h3>订阅源过滤规则</h3>
-              <Space>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />} 
-                  onClick={() => {
-                    setEditingRuleId(null);
-                    form.resetFields();
-                    form.setFieldsValue({
-                      scope: 'title',
-                      type: 'contains',
-                      keywords: '',
-                      isActive: true
-                    });
-                    setIsModalVisible(true);
-                  }}
-                >
-                  添加规则
-                </Button>
-              </Space>
-            </div>
-            <Spin spinning={isLoading}>
-              <Table 
-                dataSource={feedRules} 
-                columns={columns}
-                rowKey="id"
-                pagination={false}
-                locale={{ emptyText: '没有过滤规则' }}
-              />
-            </Spin>
-          </TabPane>
-        )}
-        <TabPane tab="全局规则" key="global">
-          <div className={styles.header}>
-            <h3>全局过滤规则</h3>
-            <Space>
-              <Button 
-                type="primary" 
-                icon={<PlusOutlined />} 
-                onClick={() => {
-                  setEditingRuleId(null);
-                  form.resetFields();
-                  form.setFieldsValue({
-                    scope: 'title',
-                    type: 'contains',
-                    keywords: '',
-                    isActive: true
-                  });
-                  setIsModalVisible(true);
-                }}
-              >
-                添加规则
-              </Button>
-            </Space>
-          </div>
-          <Spin spinning={isGlobalRulesLoading}>
-            <Table 
-              dataSource={globalFilterRules} 
-              columns={columns}
-              rowKey="id"
-              pagination={false}
-              locale={{ emptyText: '没有全局过滤规则' }}
-            />
-          </Spin>
-        </TabPane>
-      </Tabs>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
       <Modal
-        title={editingRuleId ? "编辑过滤规则" : "添加过滤规则"}
+        title={editingRuleId ? '编辑规则' : '添加规则'}
         open={isModalVisible}
         onOk={handleSubmit}
         onCancel={() => {
@@ -358,54 +361,55 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           setEditingRuleId(null);
           form.resetFields();
         }}
+        destroyOnHidden
       >
-        <Form form={form} layout="vertical">
+        <Form form={form} layout="vertical" name="filterRuleForm" initialValues={{ isActive: false, keywordLogic: 'OR' }}>
           <Form.Item
             name="scope"
-            label="过滤范围"
-            rules={[{ required: true, message: '请选择过滤范围' }]}
+            label="范围"
+            rules={[{ required: true, message: '请选择规则范围' }]}
           >
-            <Select>
-              <Option value="title">标题</Option>
-              <Option value="content">内容</Option>
-              <Option value="author">作者</Option>
+            <Select placeholder="选择范围">
+              <Select.Option value="title">标题</Select.Option>
+              <Select.Option value="content">内容</Select.Option>
+              <Select.Option value="author">作者</Select.Option>
             </Select>
           </Form.Item>
-          
           <Form.Item
             name="type"
-            label="过滤类型"
-            rules={[{ required: true, message: '请选择过滤类型' }]}
+            label="类型"
+            rules={[{ required: true, message: '请选择规则类型' }]}
           >
-            <Select>
-              <Option value="contains">包含</Option>
-              <Option value="not_contains">不包含</Option>
+            <Select placeholder="选择类型">
+              <Select.Option value="contains">只显示包含关键词的文章</Select.Option>
+              <Select.Option value="not_contains">隐藏包含关键词的文章</Select.Option>
             </Select>
           </Form.Item>
-          
           <Form.Item
             name="keywords"
-            label="关键词"
+            label="关键词 (用空格分隔)"
             rules={[{ required: true, message: '请输入关键词' }]}
-            extra="多个关键词请用空格分隔，匹配任一关键词即可触发过滤"
           >
-            <Input placeholder="输入关键词" />
+            <Input.TextArea rows={2} placeholder="例如: 科技 公司" />
           </Form.Item>
-          
-          <Form.Item
-            name="isActive"
-            label="是否启用"
-            valuePropName="checked"
-          >
-            <Switch defaultChecked />
+          <Form.Item name="keywordLogic" label="关键词匹配逻辑">
+            <Radio.Group>
+              <Radio value="OR">匹配任意一个 (或)</Radio>
+              <Radio value="AND">匹配全部 (与)</Radio>
+            </Radio.Group>
+          </Form.Item>
+          <Form.Item name="isActive" label="状态" valuePropName="checked">
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>
 
-      <FilterLogViewer 
-        isOpen={isLogViewerOpen}
-        onClose={() => setIsLogViewerOpen(false)}
-      />
+      {isLogViewerOpen && (
+        <FilterLogViewer 
+          isOpen={isLogViewerOpen} 
+          onClose={() => setIsLogViewerOpen(false)} 
+        />
+      )}
     </div>
   );
 };

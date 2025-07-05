@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, Button, Modal, Space, Badge, Typography, Collapse, Switch, Tabs, Select, Divider } from 'antd';
-import { ClearOutlined, ReloadOutlined, SettingOutlined } from '@ant-design/icons';
+import { ClearOutlined, ReloadOutlined, SettingOutlined, DownloadOutlined } from '@ant-design/icons';
 import { getLogs, clearLogs, setConsoleLogging } from '../utils/filterLogger';
 import { LogConfig, LogLevel, LogModule } from '../utils/logConfig';
 import type { ColumnsType } from 'antd/es/table';
@@ -103,6 +103,34 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
     });
   };
   
+  // 导出日志
+  const handleExportLogs = () => {
+    // 创建要导出的日志内容
+    const logContent = logs.map(log => {
+      const date = new Date(log.timestamp);
+      const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+      const dataStr = log.data ? JSON.stringify(log.data, null, 2) : '';
+      return `[${formattedDate}] [${log.level.toUpperCase()}] ${log.message}\n${dataStr ? `数据: ${dataStr}\n` : ''}`;
+    }).join('\n----------------------------\n');
+    
+    // 创建Blob对象
+    const blob = new Blob([logContent], { type: 'text/plain;charset=utf-8' });
+    
+    // 创建下载链接
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `filter-logs-${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    
+    // 清理
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 0);
+  };
+  
   // 组件挂载或打开时加载日志和设置
   useEffect(() => {
     if (isOpen) {
@@ -178,7 +206,7 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
         return (
           <Collapse ghost>
             <Panel header="查看详情" key="1">
-              <pre style={{ fontSize: '12px' }}>{JSON.stringify(data, null, 2)}</pre>
+              <pre style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(data, null, 2)}</pre>
             </Panel>
           </Collapse>
         );
@@ -211,6 +239,9 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
               <Button icon={<ReloadOutlined />} onClick={loadLogs} size="small">
                 刷新
               </Button>
+              <Button icon={<DownloadOutlined />} onClick={handleExportLogs} size="small" type="primary">
+                导出日志
+              </Button>
               <Button danger icon={<ClearOutlined />} onClick={handleClearLogs} size="small">
                 清除日志
               </Button>
@@ -222,6 +253,7 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
               rowKey={(record) => `${record.timestamp}-${Math.random()}`}
               pagination={{ pageSize: 10 }}
               size="small"
+              scroll={{ x: 'max-content' }}
             />
           </Space>
         </TabPane>

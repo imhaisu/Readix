@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useDatabase } from './DatabaseContext';
 import { FilterRule } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
-import { applyGlobalFilterRules } from '../utils/filterUtils';
+import { applyAllRulesToAllArticles } from '../utils/filterApplier';
 import { message } from 'antd';
 import { LogConfig } from '../utils/logConfig';
 
@@ -15,7 +15,6 @@ interface FilterRulesContextType {
   addGlobalFilterRule: (rule: Omit<FilterRule, 'id'>) => void;
   updateGlobalFilterRule: (id: string, changes: Partial<Omit<FilterRule, 'id'>>) => void;
   deleteGlobalFilterRule: (id: string) => void;
-  applyGlobalRules: () => Promise<number>;
   isLoading: boolean;
 }
 
@@ -92,6 +91,48 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     loadGlobalRules();
   }, []);
 
+  // 在数据库初始化后自动应用所有规则
+  useEffect(() => {
+    if (db && isInitialized) {
+      LogConfig.info('FILTER', '数据库已初始化，自动应用所有过滤规则');
+      // 延迟一点执行，确保其他组件已经加载完成
+      const timer = setTimeout(() => {
+        // 先检查并输出所有规则
+        debugGlobalFilterRules();
+        
+        // 获取所有订阅源规则并输出
+        db.feeds.toArray().then(feeds => {
+          let totalRules = 0;
+          let feedsWithRules = 0;
+          
+          feeds.forEach(feed => {
+            if (feed.filterRules && Array.isArray(feed.filterRules) && feed.filterRules.length > 0) {
+              const activeRules = feed.filterRules.filter(r => r.isActive);
+              LogConfig.info('FILTER', `订阅源 "${feed.title}" 有 ${activeRules.length}/${feed.filterRules.length} 条激活规则`);
+              totalRules += feed.filterRules.length;
+              feedsWithRules++;
+            }
+          });
+          
+          LogConfig.info('FILTER', `共有 ${feedsWithRules}/${feeds.length} 个订阅源设置了过滤规则，总计 ${totalRules} 条规则`);
+        });
+        
+        // 应用所有规则
+        applyAllRulesToAllArticles(db).then(count => {
+          LogConfig.info('FILTER', `应用启动时应用规则完成，处理了 ${count} 篇文章`);
+          if (count > 0) {
+            triggerArticleListRefresh();
+            triggerFeedCountRefresh();
+          }
+        }).catch(error => {
+          LogConfig.error('FILTER', '应用启动时应用规则失败:', error);
+        });
+      }, 1500); // 增加延迟时间，确保数据库完全初始化
+      
+      return () => clearTimeout(timer);
+    }
+  }, [db, isInitialized, triggerArticleListRefresh, triggerFeedCountRefresh]);
+
   // 保存全局过滤规则到本地存储
   const saveGlobalRules = (rules: FilterRule[]) => {
     try {
@@ -102,28 +143,49 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     }
   };
 
+  // 统一的规则应用触发器
+  const triggerRuleApplication = () => {
+    if (!db || !isInitialized) {
+      LogConfig.warn('FILTER', '数据库未初始化，无法应用规则');
+      return;
+    }
+    
+    setIsLoading(true);
+
+    applyAllRulesToAllArticles(db).then(count => {
+      triggerArticleListRefresh();
+      triggerFeedCountRefresh();
+    }).catch(error => {
+      console.error('Failed to apply rules:', error);
+    }).finally(() => {
+      setIsLoading(false);
+    });
+  };
+
   // 添加全局过滤规则
   const addGlobalFilterRule = (rule: Omit<FilterRule, 'id'>) => {
     const newRule: FilterRule = {
-      ...rule,
-      id: uuidv4()
+      id: uuidv4(),
+      scope: rule.scope,
+      type: rule.type,
+      keywords: rule.keywords,
+      isActive: rule.isActive,
+      keywordLogic: rule.keywordLogic || 'OR',
     };
     const updatedRules = [...globalFilterRules, newRule];
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
-    
-    message.success('全局规则已添加，正在应用...');
+    triggerRuleApplication();
   };
 
   // 更新全局过滤规则
   const updateGlobalFilterRule = (id: string, changes: Partial<Omit<FilterRule, 'id'>>) => {
     const updatedRules = globalFilterRules.map(rule => 
-      rule.id === id ? { ...rule, ...changes } : rule
+      rule.id === id ? { ...rule, ...changes, keywordLogic: changes.keywordLogic || rule.keywordLogic || 'OR' } : rule
     );
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
-    
-    message.success('全局规则已更新，正在应用...');
+    triggerRuleApplication();
   };
 
   // 删除全局过滤规则
@@ -131,58 +193,14 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     const updatedRules = globalFilterRules.filter(rule => rule.id !== id);
     setGlobalFilterRules(updatedRules);
     saveGlobalRules(updatedRules);
-    
-    message.success('全局规则已删除，正在应用...');
+    triggerRuleApplication();
   };
-
-  // 应用全局过滤规则
-  const applyGlobalRules = async (): Promise<number> => {
-    if (!db || !isInitialized) {
-      LogConfig.warn('FILTER', '数据库未初始化，无法应用全局过滤规则');
-      return 0;
-    }
-
-    LogConfig.info('FILTER', '开始应用全局过滤规则:', JSON.stringify(globalFilterRules));
-    setIsLoading(true);
-    try {
-      const updatedCount = await applyGlobalFilterRules(db, globalFilterRules);
-      LogConfig.info('FILTER', `应用全局过滤规则完成，更新了 ${updatedCount} 篇文章`);
-      
-      // 触发文章列表和计数刷新
-      triggerArticleListRefresh();
-      triggerFeedCountRefresh();
-      
-      return updatedCount;
-    } catch (error) {
-      LogConfig.error('FILTER', '应用全局过滤规则失败:', error);
-      message.error('应用全局规则失败');
-      return 0;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // 当全局规则变化时自动应用
-  useEffect(() => {
-    if (db && isInitialized && globalFilterRules.length > 0) {
-      LogConfig.info('FILTER', '全局过滤规则变化，立即应用');
-      
-      // 立即应用全局规则
-      applyGlobalRules().then(count => {
-        // 移除这里的toast提示，仅在手动操作时显示
-        // if (count > 0) {
-        //   message.success(`全局规则已应用，更新了 ${count} 篇文章`);
-        // }
-      });
-    }
-  }, [db, isInitialized, globalFilterRules]);
 
   const value = {
     globalFilterRules,
     addGlobalFilterRule,
     updateGlobalFilterRule,
     deleteGlobalFilterRule,
-    applyGlobalRules,
     isLoading
   };
 

@@ -7,88 +7,123 @@ import { logInfo, logDebug, logWarn, logError } from './filterLogger';
  * @param article 要检查的文章
  * @param rules 应用的过滤规则
  * @returns 如果文章应该被隐藏，则返回true
+ * 
+ * 规则行为说明：
+ * 1. "隐藏"(not_contains)规则：如果文章匹配任何一条"隐藏"规则，则隐藏文章
+ * 2. "只显示"(contains)规则：如果存在"只显示"规则，文章必须匹配至少一条才会显示，否则隐藏
+ * 3. 当同时存在两种规则时，"隐藏"规则优先级更高
  */
 export const shouldArticleBeHidden = (article: Article, rules: FilterRule[]): boolean => {
+  // 如果没有规则或没有激活的规则，则不隐藏
   if (!rules || rules.length === 0) {
     return false;
   }
 
-  // 只考虑激活的规则
   const activeRules = rules.filter(rule => rule.isActive);
   if (activeRules.length === 0) {
     return false;
   }
 
-  // 检查每条规则
-  return activeRules.some(rule => {
-    // 确定要检查的内容
-    let contentToCheck = '';
-    switch (rule.scope) {
-      case 'title':
-        contentToCheck = article.title || '';
-        break;
-      case 'content':
-        contentToCheck = article.content || '';
-        break;
-      case 'author':
-        contentToCheck = article.author || '';
-        break;
-      default:
-        return false;
-    }
+  // 分离出"隐藏"和"只显示"规则
+  const hideRules = activeRules.filter(rule => rule.type === 'not_contains');
+  const showOnlyRules = activeRules.filter(rule => rule.type === 'contains');
 
-    // 转为小写进行不区分大小写的比较
-    contentToCheck = contentToCheck.toLowerCase();
-    
-    // 获取要检查的关键词，转为小写
-    const keywordsLower = rule.keywords.toLowerCase();
-    
-    // 打印调试信息
-    logDebug(`检查文章 "${article.title.substring(0, 20)}..." 是否包含关键词 "${rule.keywords}"`, {
-      articleId: article.id,
-      scope: rule.scope,
-      type: rule.type
-    });
-    
-    // 分割关键词（按空格分割）
-    const keywords = keywordsLower.split(/\s+/).filter(k => k.length > 0);
-    
-    // 如果没有有效关键词，则规则不适用
-    if (keywords.length === 0) {
-      return false;
-    }
-    
-    // 检查是否任何关键词匹配（OR逻辑）
-    let hasMatch = false;
-    let matchedKeyword = '';
-    
-    for (const keyword of keywords) {
-      // 直接使用字符串的includes方法进行子字符串匹配
-      const isMatched = contentToCheck.includes(keyword);
-      logDebug(`关键词 "${keyword}" 与内容匹配: ${isMatched}`);
-      
-      if (isMatched) {
-        hasMatch = true;
-        matchedKeyword = keyword;
-        break;
-      }
-    }
-    
-    // 根据规则类型返回结果
-    const result = rule.type === 'contains' ? hasMatch : !hasMatch;
-    
-    // 如果匹配了特定的关键词，输出详细日志
-    if (result) {
-      const sourceId = article.sourceId || 'unknown';
-      const matchReason = hasMatch 
-        ? `匹配关键词"${matchedKeyword}"` 
-        : `不包含任何关键词`;
-      
-      logInfo(`文章"${article.title.substring(0, 30)}..."(来源ID:${sourceId})：${rule.type === 'contains' ? '包含' : '不包含'}规则匹配 - ${matchReason}`);
-    }
-    
-    return result;
+  // 详细日志，帮助调试
+  logDebug(`对文章 "${article.title.substring(0, 20)}..." 应用过滤规则:`, {
+    articleId: article.id,
+    hideRulesCount: hideRules.length,
+    showOnlyRulesCount: showOnlyRules.length
   });
+
+  // 步骤1: 检查"隐藏"规则 - 优先级最高
+  // 如果匹配任何一条"隐藏"规则，则立即隐藏
+  for (const rule of hideRules) {
+    if (checkMatch(article, rule)) {
+      logDebug(`文章 "${article.title.substring(0, 20)}..." 匹配隐藏规则 (关键词: "${rule.keywords}")，将被隐藏`, {
+        articleId: article.id,
+        ruleId: rule.id,
+        ruleType: 'not_contains'
+      });
+      return true;
+    }
+  }
+
+  // 步骤2: 检查"只显示"规则
+  // 如果存在"只显示"规则，但文章不匹配任何一条，则隐藏
+  if (showOnlyRules.length > 0) {
+    // 检查是否匹配任何一条"只显示"规则
+    const matchesAnyShowRule = showOnlyRules.some(rule => checkMatch(article, rule));
+    
+    if (!matchesAnyShowRule) {
+      logDebug(`文章 "${article.title.substring(0, 20)}..." 不匹配任何"只显示"规则，将被隐藏`, {
+        articleId: article.id,
+        showRulesCount: showOnlyRules.length
+      });
+      return true; // 不匹配任何"只显示"规则，所以隐藏
+    } else {
+      logDebug(`文章 "${article.title.substring(0, 20)}..." 匹配至少一条"只显示"规则，将被显示`, {
+        articleId: article.id
+      });
+    }
+  }
+  
+  // 如果通过了所有检查，则不隐藏
+  return false;
+};
+
+/**
+ * 内部辅助函数，检查单条规则是否匹配
+ * @param article 文章对象
+ * @param rule 过滤规则
+ * @returns 是否匹配
+ */
+const checkMatch = (article: Article, rule: FilterRule): boolean => {
+  let contentToCheck = '';
+  switch (rule.scope) {
+    case 'title':
+      contentToCheck = article.title || '';
+      break;
+    case 'content':
+      contentToCheck = article.content || '';
+      break;
+    case 'author':
+      contentToCheck = article.author || '';
+      break;
+    default:
+      return false;
+  }
+
+  // 转为小写进行不区分大小写的比较
+  contentToCheck = contentToCheck.toLowerCase();
+  const keywordsLower = rule.keywords.toLowerCase();
+  
+  // 分割关键词（按空格分割）
+  const keywords = keywordsLower.split(/\s+/).filter(k => k.length > 0);
+  
+  if (keywords.length === 0) {
+    return false;
+  }
+
+  // 记录详细日志
+  logDebug(`检查文章 "${article.title.substring(0, 20)}..." 是否匹配规则:`, {
+    ruleType: rule.type,
+    ruleScope: rule.scope,
+    keywords: keywords.join(', '),
+    keywordLogic: rule.keywordLogic || 'OR'
+  });
+
+  // 根据 keywordLogic 执行匹配
+  if (rule.keywordLogic === 'AND') {
+    // AND 逻辑：必须所有关键词都存在
+    const result = keywords.every(keyword => contentToCheck.includes(keyword));
+    logDebug(`AND逻辑匹配结果: ${result ? '匹配' : '不匹配'}`);
+    return result;
+  } else {
+    // OR 逻辑（默认）：任何一个关键词匹配即算成功
+    const result = keywords.some(keyword => contentToCheck.includes(keyword));
+    logDebug(`OR逻辑匹配结果: ${result ? '匹配' : '不匹配'}`);
+    return result;
+  }
 };
 
 /**
@@ -207,25 +242,22 @@ export const applyFilterRulesToFeed = async (db: any, feedId: string, rules: Fil
 };
 
 /**
- * 创建新的过滤规则
- * @param scope 过滤范围
- * @param type 过滤类型
- * @param keywords 关键词
- * @param isActive 是否激活
- * @returns 新的过滤规则对象
+ * 创建一个新的过滤规则对象
  */
 export const createFilterRule = (
   scope: 'title' | 'content' | 'author', 
   type: 'contains' | 'not_contains', 
   keywords: string, 
-  isActive: boolean = true
+  isActive: boolean = false,
+  keywordLogic: 'OR' | 'AND' = 'OR'
 ): FilterRule => {
   return {
     id: uuidv4(),
     scope,
     type,
     keywords,
-    isActive
+    isActive,
+    keywordLogic,
   };
 };
 
@@ -399,209 +431,139 @@ export const debugFeedFilterRules = async (db: any): Promise<void> => {
     for (const feed of feeds) {
       if (feed.id) {
         logInfo(`-----------------------------------------------`);
-        logInfo(`订阅源 "${feed.title}" (ID: ${feed.id}):`);
+        logInfo(`订阅源 "${feed.title}" (ID: ${feed.id})`);
         
-        // 检查是否有过滤规则
-        if (feed.filterRules && Array.isArray(feed.filterRules) && feed.filterRules.length > 0) {
-          logInfo(`发现 ${feed.filterRules.length} 条过滤规则:`);
+        // 检查过滤规则
+        if (feed.filterRules && Array.isArray(feed.filterRules)) {
+          logInfo(`过滤规则数量: ${feed.filterRules.length}`);
           
-          // 打印每条规则的详细信息
+          // 输出每条规则的详情
           feed.filterRules.forEach((rule: FilterRule, index: number) => {
-            logInfo(`   规则 #${index + 1}:`);
-            logInfo(`     ID: ${rule.id}`);
-            logInfo(`     范围: ${rule.scope}`);
-            logInfo(`     类型: ${rule.type}`);
-            logInfo(`     关键词: ${rule.keywords}`);
-            logInfo(`     状态: ${rule.isActive ? '激活' : '未激活'}`);
+            logInfo(`规则 #${index + 1}:`);
+            logInfo(`  - ID: ${rule.id}`);
+            logInfo(`  - 范围: ${rule.scope}`);
+            logInfo(`  - 类型: ${rule.type}`);
+            logInfo(`  - 关键词: ${rule.keywords}`);
+            logInfo(`  - 激活状态: ${rule.isActive}`);
+            logInfo(`  - 关键词逻辑: ${rule.keywordLogic || 'OR'}`);
           });
-          
-          // 检查激活的规则数量
-          const activeRules = feed.filterRules.filter((rule: FilterRule) => rule.isActive);
-          logInfo(`   其中激活的规则: ${activeRules.length}/${feed.filterRules.length}`);
         } else {
-          logInfo(`没有找到过滤规则`);
+          logInfo(`该订阅源没有过滤规则`);
         }
       }
     }
     
     logInfo(`-----------------------------------------------`);
-    logInfo(`调试信息结束`);
+    logInfo(`调试完成`);
   } catch (error) {
     logError(`调试过滤规则时出错:`, error);
   }
 };
 
 /**
- * 强制应用所有订阅源的过滤规则
- * 这个函数会遍历所有订阅源，应用它们各自的过滤规则
+ * 强制为所有订阅源应用过滤规则
  * @param db 数据库实例
  */
-export const forceApplyAllFeedRules = async (db: any): Promise<number> => {
+export const forceApplyAllFeedRules = async (db: any): Promise<void> => {
   if (!db) {
-    logWarn('[FilterUtils] 无法应用规则：数据库未初始化');
-    return 0;
+    logWarn(`无法应用规则：数据库未初始化`);
+    return;
   }
-  
-  logInfo('[FilterUtils] 开始强制应用所有订阅源的过滤规则...');
   
   try {
     // 获取所有订阅源
     const feeds = await db.feeds.toArray();
-    logInfo(`找到 ${feeds.length} 个订阅源`);
+    logInfo(`开始为 ${feeds.length} 个订阅源强制应用过滤规则`);
     
-    let totalUpdated = 0;
-    
-    // 遍历每个订阅源
     for (const feed of feeds) {
-      if (!feed.id) continue;
-      
-      // 检查是否有过滤规则
-      if (feed.filterRules && Array.isArray(feed.filterRules) && feed.filterRules.length > 0) {
-        logInfo(`为订阅源 "${feed.title}" 应用 ${feed.filterRules.length} 条规则`);
-        
-        // 获取该订阅源的所有文章
-        const articles = await db.articles.where('sourceId').equals(feed.id).toArray();
-        logInfo(`订阅源 "${feed.title}" 有 ${articles.length} 篇文章`);
-        
-        // 记录需要更新的文章
-        const articlesToUpdate: { id: string, isHidden: boolean }[] = [];
-        
-        // 检查每篇文章
-        for (const article of articles) {
-          // 进行详细的调试
-          logInfo(`[FilterDebug] 正在检查文章: "${article.title.substring(0, 30)}..."`);
-          
-          const shouldBeHidden = shouldArticleBeHidden(article, feed.filterRules);
-          
-          // 检查文章是否应该被过滤但当前未被过滤
-          if (shouldBeHidden !== article.isHidden) {
-            articlesToUpdate.push({
-              id: article.id,
-              isHidden: shouldBeHidden
-            });
-            
-            // 记录日志（限制数量）
-            if (articlesToUpdate.length <= 5) {
-              logInfo(`文章 "${article.title}" 的过滤状态将从 ${article.isHidden} 变为 ${shouldBeHidden} (由订阅源规则决定)`);
-            } else if (articlesToUpdate.length === 6) {
-              logInfo(`还有更多文章需要更新，不再一一列出...`);
-            }
-          }
-        }
-        
-        // 批量更新文章
-        if (articlesToUpdate.length > 0) {
-          await db.transaction('rw', db.articles, async () => {
-            for (const update of articlesToUpdate) {
-              // 设置isHidden状态，并添加一个更新时间戳，强制触发UI刷新
-              await db.articles.update(update.id, { 
-                isHidden: update.isHidden,
-                lastUpdated: new Date().toISOString() // 添加时间戳强制刷新
-              });
-              
-              // 额外记录日志
-              logDebug(`已更新文章 ${update.id} 的过滤状态为 ${update.isHidden}`);
-            }
-          });
-          
-          // 触发一个额外的数据库操作，确保变更被提交
-          await db.feeds.update(feed.id, { lastRuleApplied: new Date().toISOString() });
-          
-          logInfo(`已更新订阅源 "${feed.title}" 的 ${articlesToUpdate.length} 篇文章的过滤状态`);
-          totalUpdated += articlesToUpdate.length;
-        } else {
-          logInfo(`订阅源 "${feed.title}" 没有文章需要更新过滤状态`);
-        }
+      if (feed.id && feed.filterRules && Array.isArray(feed.filterRules)) {
+        logInfo(`应用规则到订阅源: ${feed.title} (ID: ${feed.id}), 规则数量: ${feed.filterRules.length}`);
+        await applyFilterRulesToFeed(db, feed.id, feed.filterRules);
       }
     }
     
-    logInfo(`强制应用规则完成，共更新 ${totalUpdated} 篇文章`);
-    
-    // 如果有更新，执行一个全局刷新操作
-    if (totalUpdated > 0) {
-      logInfo(`执行全局刷新操作...`);
-      await db.settings.update('general', { lastFilterUpdate: new Date().toISOString() });
-    }
-    
-    return totalUpdated;
+    logInfo(`所有订阅源的过滤规则已应用完成`);
   } catch (error) {
-    logError('[FilterUtils] 强制应用规则时出错:', error);
-    return 0;
+    logError(`强制应用所有规则时出错:`, error);
   }
 };
 
 /**
- * 检查并修复所有订阅源的过滤规则，确保它们正确应用
- * 在应用启动时调用此函数以确保规则一致性
+ * 检查并修复所有订阅源的过滤规则
  * @param db 数据库实例
  */
 export const checkAndFixAllFeedRules = async (db: any): Promise<void> => {
   if (!db) {
-    logWarn('[FilterUtils] 无法检查规则：数据库未初始化');
+    logWarn(`无法检查规则：数据库未初始化`);
     return;
   }
-  
-  logInfo('[FilterUtils] 开始检查所有订阅源的过滤规则...');
   
   try {
     // 获取所有订阅源
     const feeds = await db.feeds.toArray();
-    logInfo(`找到 ${feeds.length} 个订阅源需要检查`);
+    logInfo(`开始检查 ${feeds.length} 个订阅源的过滤规则`);
     
-    let totalInconsistencies = 0;
+    let fixedCount = 0;
     
-    // 遍历每个订阅源
     for (const feed of feeds) {
-      if (!feed.id) continue;
-      
-      // 检查是否有过滤规则
-      if (feed.filterRules && Array.isArray(feed.filterRules) && feed.filterRules.length > 0) {
-        logInfo(`检查订阅源 "${feed.title}" 的 ${feed.filterRules.length} 条规则`);
-        
-        // 获取该订阅源的所有文章
-        const articles = await db.articles.where('sourceId').equals(feed.id).toArray();
-        
-        // 记录需要修复的文章
-        const articlesToFix: { id: string, isHidden: boolean }[] = [];
-        
-        // 检查每篇文章
-        for (const article of articles) {
-          const shouldBeHidden = shouldArticleBeHidden(article, feed.filterRules);
-          
-          // 如果实际状态与应有状态不符
-          if (shouldBeHidden !== article.isHidden) {
-            articlesToFix.push({
-              id: article.id,
-              isHidden: shouldBeHidden
-            });
-            
-            // 记录前几条不一致的情况
-            if (articlesToFix.length <= 3) {
-              logInfo(`发现不一致: 文章 "${article.title}" 应为 ${shouldBeHidden} 但当前为 ${article.isHidden}`);
-            } else if (articlesToFix.length === 4) {
-              logInfo(`还有更多不一致...`);
-            }
-          }
-        }
-        
-        // 修复不一致的文章
-        if (articlesToFix.length > 0) {
-          logInfo(`修复订阅源 "${feed.title}" 的 ${articlesToFix.length} 篇文章`);
-          totalInconsistencies += articlesToFix.length;
-          
-          await db.transaction('rw', db.articles, async () => {
-            for (const fix of articlesToFix) {
-              await db.articles.update(fix.id, { isHidden: fix.isHidden });
-            }
-          });
+      if (feed.id) {
+        // 检查filterRules是否为有效数组
+        if (!feed.filterRules || !Array.isArray(feed.filterRules)) {
+          logInfo(`修复订阅源 "${feed.title}" (ID: ${feed.id}) 的过滤规则：初始化为空数组`);
+          await db.feeds.update(feed.id, { filterRules: [] });
+          fixedCount++;
         } else {
-          logInfo(`订阅源 "${feed.title}" 的所有文章过滤状态都是一致的`);
+          // 检查每条规则的有效性
+          const validRules = feed.filterRules.filter((rule: any) => {
+            return rule && 
+                   typeof rule === 'object' && 
+                   rule.id && 
+                   rule.scope && 
+                   rule.type && 
+                   typeof rule.keywords === 'string';
+          });
+          
+          // 如果有无效规则，更新为有效规则
+          if (validRules.length !== feed.filterRules.length) {
+            logInfo(`修复订阅源 "${feed.title}" (ID: ${feed.id}) 的过滤规则：移除 ${feed.filterRules.length - validRules.length} 条无效规则`);
+            await db.feeds.update(feed.id, { filterRules: validRules });
+            fixedCount++;
+          }
         }
       }
     }
     
-    logInfo(`检查完成，修复了 ${totalInconsistencies} 个不一致问题`);
+    logInfo(`检查完成，修复了 ${fixedCount} 个订阅源的过滤规则`);
   } catch (error) {
-    logError('[FilterUtils] 检查和修复规则时出错:', error);
+    logError(`检查和修复规则时出错:`, error);
   }
-}; 
+};
+
+/**
+ * 应用所有过滤规则到所有文章
+ * 这是一个总管函数，会应用全局规则和每个订阅源的规则
+ * @param db 数据库实例
+ * @param globalRules 全局过滤规则
+ */
+export const applyAllRulesToAllArticles = async (db: any, globalRules: FilterRule[]): Promise<void> => {
+  if (!db) {
+    logWarn(`无法应用规则：数据库未初始化`);
+    return;
+  }
+  
+  try {
+    logInfo(`开始应用所有过滤规则到所有文章`);
+    
+    // 首先应用全局规则
+    logInfo(`应用全局过滤规则...`);
+    await applyGlobalFilterRules(db, globalRules);
+    
+    // 然后应用每个订阅源的规则
+    logInfo(`应用各订阅源的过滤规则...`);
+    await forceApplyAllFeedRules(db);
+    
+    logInfo(`所有过滤规则已应用完成`);
+  } catch (error) {
+    logError(`应用所有规则时出错:`, error);
+  }
+};

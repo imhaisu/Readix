@@ -51,7 +51,7 @@ export class RssDatabase extends Dexie {
 
     // 添加版本13，支持文章过滤功能
     this.version(13).stores({
-      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, aiMindMap, aiHighlightedContent, isHidden, [sourceId+isRead], [sourceId+isStarred]'
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, aiMindMap, aiHighlightedContent, [sourceId+isRead], [sourceId+isStarred]'
     }).upgrade(async (tx) => {
       console.log("数据库从版本12升级到版本13，添加文章过滤功能");
       // 为所有现有文章添加isHidden字段，默认为false
@@ -108,6 +108,7 @@ export interface FilterRule {
   type: 'contains' | 'not_contains';     // 过滤类型
   keywords: string;                      // 关键词，多个关键词以空格分隔
   isActive: boolean;                     // 规则是否启用
+  keywordLogic?: 'OR' | 'AND'; // 新增：关键词匹配逻辑
 }
 
 export interface Article {
@@ -127,7 +128,6 @@ export interface Article {
   isRead: string;
   isStarred: string;
   isReadLater?: string;
-  isHidden?: boolean; // 新增：是否被过滤隐藏
   tags?: string[];
   guid?: string;
   scrollPosition?: number;
@@ -136,6 +136,7 @@ export interface Article {
   aiMindMap?: string;
   aiHighlightedContent?: string;
   annotations?: Annotation[];
+  isHidden?: boolean; // 添加isHidden字段，用于过滤功能
 }
 
 export interface Group {

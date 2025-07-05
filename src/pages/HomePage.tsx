@@ -10,7 +10,8 @@ import {
   AppstoreAddOutlined,
   ExclamationCircleOutlined,
   SyncOutlined,
-  CloseOutlined
+  CloseOutlined,
+  MenuOutlined
 } from '@ant-design/icons';
 import ArticleList, { ArticleListHandle } from '../components/ArticleList';
 import ArticleDetail from '../components/ArticleDetail';
@@ -23,6 +24,7 @@ import { FeedSource, Article } from '../db/database';
 import { getTodayRange, debounce, updateUnreadCountOptimized, formatDate, logDateIssue } from '../utils/helpers';
 import { debugFeedFilterRules, forceApplyAllFeedRules, checkAndFixAllFeedRules } from '../utils/filterUtils';
 import { debugGlobalFilterRules } from '../contexts/FilterRulesContext';
+import { applyAllRulesToAllArticles } from '../utils/filterApplier';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
 import styles from './HomePage.module.css';
 import { useLayout } from '../contexts/LayoutContext';
@@ -319,184 +321,85 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [filter, feedId, groupId]);
   
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
-    const { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing } = refreshDependenciesRef.current;
-    
-    // 添加防抖机制，避免短时间内多次刷新
+    // 防抖：避免短时间内多次刷新
     const now = Date.now();
-    const MIN_REFRESH_INTERVAL = 5000; // 5秒内不重复刷新
-    if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL) {
-      LogConfig.info('HOMEPAGE', '刷新间隔太短，跳过');
+    if (now - lastRefreshTimeRef.current < 5000) { // 5秒内不重复刷新
+      if (!options?.silent) {
+        message.info('刚刚已经刷新过了，请稍后再试');
+      }
       return;
     }
     lastRefreshTimeRef.current = now;
 
-    if (!db) {
-      LogConfig.error('HOMEPAGE', '数据库未初始化');
-      return;
-    }
-
+    if (!db) return;
+    
+    const { feedId, groupId } = refreshDependenciesRef.current;
+    
     if (!options?.silent) {
       setIsPullRefreshing(true);
     }
-
+    
     try {
-      // 确定要刷新的订阅源
-      let feedsToRefresh: FeedSource[] = [];
+      LogConfig.info('HOMEPAGE', '开始刷新订阅源');
       
       if (feedId) {
         // 刷新单个订阅源
         const feed = await db.feeds.get(feedId);
         if (feed) {
-          feedsToRefresh = [feed];
+          LogConfig.info('HOMEPAGE', `刷新订阅源: ${feed.title}`);
+          const result = await window.electron.parseRssFeed(feed.url);
+          if (result.success) {
+            message.success(`已更新: ${feed.title}`);
+          } else {
+            message.error(`更新失败: ${feed.title}`);
+          }
         }
       } else if (groupId) {
         // 刷新分组内的所有订阅源
-        feedsToRefresh = await db.feeds.where('groupId').equals(groupId).toArray();
+        const feeds = await db.feeds.where('groupId').equals(groupId).toArray();
+        LogConfig.info('HOMEPAGE', `刷新分组内的 ${feeds.length} 个订阅源`);
+        
+        if (feeds.length > 0) {
+          for (const feed of feeds) {
+            try {
+              await window.electron.parseRssFeed(feed.url);
+            } catch (error) {
+              LogConfig.error('HOMEPAGE', `刷新订阅源 ${feed.title} 失败:`, error);
+            }
+          }
+          message.success(`已更新 ${feeds.length} 个订阅源`);
+        } else {
+          message.info('该分组下没有订阅源');
+        }
       } else {
         // 刷新所有订阅源
-        feedsToRefresh = await db.feeds.toArray();
-      }
-
-      try {
-        if (feedsToRefresh.length > 0) {
-          // console.log(`[HomePage] Refreshing ${feedsToRefresh.length} feeds...`);
-          const results = await refreshAllFeeds(feedsToRefresh);
-
-          if (db) {
-            for (const result of results) {
-              const { feed, articles: fetchedArticles } = result;
-              if (fetchedArticles.length > 0) {
-                LogConfig.info('FEED', `处理订阅源 ${feed.title} 的 ${fetchedArticles.length} 篇文章`);
-                
-                // 获取现有文章
-                const existingArticles = await db.articles.where('sourceId').equals(feed.id!).toArray();
-                const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
-                
-                // 处理文章数据
-                const articlesToUpdate: Article[] = [];
-                const articlesToAdd: Article[] = [];
-                
-                // 区分需要更新的文章和需要新增的文章
-for (const fetchedArticle of fetchedArticles) {
-  const existingArticle = existingArticlesMap.get(fetchedArticle.id);
-  
-  if (existingArticle) {
-    // 已存在的文章 - 保留原始发布日期和阅读状态
-    // 使用条件日志，默认不输出
-    if (LogConfig.isModuleEnabled('FEED')) {
-      LogConfig.info('FEED', `更新现有文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}`);
-      LogConfig.info('FEED', `原始日期: ${formatDate(existingArticle.publishDate, true)}, 新日期: ${formatDate(fetchedArticle.publishDate, true)}`);
-    }
-                    
-                    // 决定使用哪个发布日期
-                    let finalPublishDate = existingArticle.publishDate; // 默认保留原始日期
-                    let finalIsFirstFetchDate = existingArticle.isFirstFetchDate;
-                    
-                    // 检查是否是芥末堆网站的文章
-                    const isJiemoduiArticle = fetchedArticle.id.startsWith('jiemodui_') || 
-                                              (existingArticle.sourceId && 
-                                               feeds.find(f => f.id === existingArticle.sourceId)?.url.includes('jiemodui.com'));
-                    
-                        // 芥末堆文章特殊处理：始终保留原始日期
-    if (isJiemoduiArticle) {
-      if (LogConfig.isModuleEnabled('FEED')) {
-        LogConfig.info('FEED', `芥末堆文章，保留原始日期: ${formatDate(existingArticle.publishDate, true)}`);
-      }
-      finalPublishDate = existingArticle.publishDate;
-                    } else {
-                      // 日期更新逻辑:
-                      // 1. 如果新获取的文章有准确日期(非首次获取时间)，而原文章使用的是首次获取时间，则更新日期
-                      // 2. 如果两者都不是首次获取时间，保留较早的日期（避免文章日期不断变化）
-                      // 3. 如果两者都是首次获取时间，保留原始日期（保持稳定性）
-                      if (!fetchedArticle.isFirstFetchDate) {
-                        if (existingArticle.isFirstFetchDate) {
-                                    // 情况1: 找到了更准确的日期
-          if (LogConfig.isModuleEnabled('FEED')) {
-            LogConfig.info('FEED', `找到更准确的日期，从首次获取时间更新为实际发布时间`);
-          }
-          finalPublishDate = fetchedArticle.publishDate;
-          finalIsFirstFetchDate = false;
-          
-          // 记录日期变更
-          if (LogConfig.isModuleEnabled('FEED')) {
-            logDateIssue(
-              `日期更新 (首次获取 → 实际日期)`,
-              existingArticle.title,
-              existingArticle.originalPubDate,
-              finalPublishDate,
-              false
-            );
-          }
-                        } else {
-                                      // 情况2: 两者都有准确日期，保留较早的那个
-            if (fetchedArticle.publishDate < existingArticle.publishDate) {
-              if (LogConfig.isModuleEnabled('FEED')) {
-                LogConfig.info('FEED', `发现更早的准确日期，更新文章日期`);
-              }
-              finalPublishDate = fetchedArticle.publishDate;
-              
-              // 记录日期变更
-              if (LogConfig.isModuleEnabled('FEED')) {
-                logDateIssue(
-                  `日期更新 (发现更早日期)`,
-                  existingArticle.title,
-                  existingArticle.originalPubDate,
-                  finalPublishDate,
-                  false
-                );
-              }
-                          }
-                        }
-                      }
-                    }
-                    
-                    articlesToUpdate.push({
-                      ...fetchedArticle,
-                      // 保留这些字段不变
-                      publishDate: finalPublishDate, // 使用决定的发布日期
-                      isRead: existingArticle.isRead,
-                      isStarred: existingArticle.isStarred,
-                      isReadLater: existingArticle.isReadLater,
-                      scrollPosition: existingArticle.scrollPosition,
-                      annotations: existingArticle.annotations,
-                      // 可以更新的字段
-                      content: fetchedArticle.content || existingArticle.content,
-                      summary: fetchedArticle.summary || existingArticle.summary,
-                      imageUrl: fetchedArticle.imageUrl || existingArticle.imageUrl,
-                      fetchDate: fetchedArticle.fetchDate, // 更新获取时间
-                      // 更新首次获取时间标记
-                      isFirstFetchDate: finalIsFirstFetchDate,
-                    });
-                  } else {
-                    // 新文章 - 直接添加
-                    LogConfig.info('FEED', `添加新文章: ${fetchedArticle.title}, ID: ${fetchedArticle.id}, 日期: ${formatDate(fetchedArticle.publishDate, true)}`);
-                    articlesToAdd.push(fetchedArticle);
-                  }
-                }
-                
-                // 批量更新和添加文章
-                if (articlesToUpdate.length > 0) {
-                  await db.articles.bulkPut(articlesToUpdate);
-                  LogConfig.info('FEED', `已更新 ${articlesToUpdate.length} 篇文章`);
-                }
-                
-                if (articlesToAdd.length > 0) {
-                  await db.articles.bulkAdd(articlesToAdd);
-                  LogConfig.info('FEED', `已添加 ${articlesToAdd.length} 篇新文章`);
-                }
-                
-                // 更新未读计数
-                await updateUnreadCountOptimized(db, feed.id!);
-              }
-            }
+        const allFeeds = await db.feeds.toArray();
+        LogConfig.info('HOMEPAGE', `刷新所有 ${allFeeds.length} 个订阅源`);
+        
+        if (allFeeds.length > 0) {
+          try {
+            // 使用refreshAllFeeds函数刷新所有订阅源
+            const results = await refreshAllFeeds(allFeeds);
+            const successCount = results.filter(result => result.articles.length > 0).length;
+            const failCount = allFeeds.length - successCount;
             
-            // 触发文章列表刷新
-            triggerArticleListRefresh();
+            if (!options?.silent) {
+              if (failCount === 0) {
+                message.success(`已成功更新 ${successCount} 个订阅源`);
+              } else {
+                message.warning(`已更新 ${successCount} 个订阅源，${failCount} 个更新失败`);
+              }
+              
+              // 触发文章列表刷新
+              triggerArticleListRefresh();
+            }
+          } catch (error) {
+            LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
           }
         }
-      } catch (error) {
-        LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
       }
+    } catch (error) {
+      LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
     } finally {
       if (!options?.silent) {
         setTimeout(() => {
@@ -508,6 +411,19 @@ for (const fetchedArticle of fetchedArticles) {
       
       // 手动更新订阅源列表，确保UI显示最新数据
       loadFeeds();
+      
+      // 确保在刷新后应用所有过滤规则
+      if (db) {
+        try {
+          LogConfig.info('HOMEPAGE', '在刷新后重新应用所有过滤规则');
+          // 使用从filterApplier导入的函数
+          await applyAllRulesToAllArticles(db);
+          // 强制刷新文章列表
+          triggerArticleListRefresh();
+        } catch (error) {
+          LogConfig.error('HOMEPAGE', '应用过滤规则失败:', error);
+        }
+      }
     }
   }, [loadFeeds]);
   
@@ -806,360 +722,192 @@ for (const fetchedArticle of fetchedArticles) {
       // 批量删除重复文章
       if (articlesToDelete.length > 0) {
         await db.articles.bulkDelete(articlesToDelete);
-        LogConfig.info('HOMEPAGE', `已删除 ${articlesToDelete.length} 篇重复文章`);
-        
-        // 刷新文章列表
-        triggerArticleListRefresh();
-      } else {
-        LogConfig.info('HOMEPAGE', '没有发现重复文章');
+        LogConfig.info('HOMEPAGE', `已成功清理 ${articlesToDelete.length} 篇重复文章`);
       }
     } catch (error) {
       LogConfig.error('HOMEPAGE', '清理重复文章失败:', error);
     }
-  }, [db, triggerArticleListRefresh]);
-  
-  // 在应用初始化时清理重复文章并调试过滤规则
-  useEffect(() => {
-    if (dbInitialized && db) {
-      cleanupDuplicateArticles();
-      
-      // 延迟调试过滤规则，确保在数据库完全加载后执行
-      const timer = setTimeout(async () => {
-        LogConfig.info('HOMEPAGE', '应用初始化完成，开始检查和修复过滤规则...');
-        
-        // 第一步：检查并修复所有订阅源的过滤规则状态
-        LogConfig.info('HOMEPAGE', '检查并修复订阅源过滤规则...');
-        try {
-          await checkAndFixAllFeedRules(db);
-          LogConfig.info('HOMEPAGE', '完成过滤规则一致性检查和修复');
-        } catch (error) {
-          LogConfig.error('HOMEPAGE', '检查和修复过滤规则时出错:', error);
-        }
-        
-        // 第二步：强制应用所有订阅源过滤规则（最高优先级）
-        LogConfig.info('HOMEPAGE', '强制应用所有订阅源过滤规则...');
-        try {
-          const updatedCount = await forceApplyAllFeedRules(db);
-          LogConfig.info('HOMEPAGE', `强制应用订阅源过滤规则完成，更新了 ${updatedCount} 篇文章`);
-          triggerArticleListRefresh(); // 刷新文章列表显示
-        } catch (error) {
-          LogConfig.error('HOMEPAGE', '强制应用订阅源过滤规则时出错:', error);
-        }
-        
-        // 调试全局过滤规则
-        LogConfig.info('HOMEPAGE', '检查全局过滤规则...');
-        try {
-          debugGlobalFilterRules();
-        } catch (error) {
-          LogConfig.error('HOMEPAGE', '调试全局过滤规则时出错:', error);
-        }
-        
-        // 调试订阅源过滤规则
-        LogConfig.info('HOMEPAGE', '检查订阅源过滤规则...');
-        try {
-          await debugFeedFilterRules(db);
-        } catch (error) {
-          LogConfig.error('HOMEPAGE', '调试订阅源过滤规则时出错:', error);
-        }
-      }, 1000); // 缩短延迟时间，确保尽快应用规则
-      
-      return () => clearTimeout(timer);
-    }
-  }, [dbInitialized, cleanupDuplicateArticles, db, triggerArticleListRefresh]);
-
-  /**
-   * 直接修复文章的显示状态，绕过常规的过滤规则
-   * 这个函数用于在正常过滤规则失效时强制设置文章的状态
-   */
-  const forceFixArticleDisplayStates = async () => {
-    if (!db || !dbInitialized) {
-      LogConfig.error('HOMEPAGE', '无法修复文章状态：数据库未初始化');
-      return;
-    }
-    
-    LogConfig.info('HOMEPAGE', '开始强制修复文章显示状态...');
-    
-    try {
-      // 获取所有订阅源
-      const feeds = await db.feeds.toArray();
-      
-      for (const feed of feeds) {
-        if (!feed.id) continue;
-        
-        // 仅处理"人人都是产品经理"订阅源
-        if (feed.title === "人人都是产品经理") {
-          LogConfig.info('HOMEPAGE', `处理订阅源 "${feed.title}" 的文章`);
-          
-          // 获取该订阅源的所有文章
-          const articles = await db.articles.where('sourceId').equals(feed.id).toArray();
-          LogConfig.info('HOMEPAGE', `找到 ${articles.length} 篇文章需要检查`);
-          
-          // 记录需要修复的文章
-          const articlesToFix: Array<{
-            id: string;
-            title: string;
-            isHidden: boolean;
-            reason: string;
-          }> = [];
-          
-          // 检查每篇文章
-          for (const article of articles) {
-            const title = article.title.toLowerCase();
-            
-            // 检查是否包含特定关键词
-            const hasO2O = title.includes('o2o');
-            const hasAI = title.includes('ai');
-            const has1700 = title.includes('1700');
-            const hasXiaohongshu = title.includes('小红书');
-            const hasDeepSeek = title.includes('deepseek');
-            
-            // 如果包含任一关键词，应该被隐藏
-            const shouldBeHidden = hasO2O || hasAI || has1700 || hasXiaohongshu || hasDeepSeek;
-            
-            // 如果当前状态与应有状态不符，则加入修复列表
-            if (article.isHidden !== shouldBeHidden) {
-              articlesToFix.push({
-                id: article.id,
-                title: article.title,
-                isHidden: shouldBeHidden,
-                reason: hasO2O ? 'O2O' : 
-                        hasAI ? 'AI' : 
-                        has1700 ? '1700' : 
-                        hasXiaohongshu ? '小红书' : 
-                        hasDeepSeek ? 'DeepSeek' : '未知'
-              });
-            }
-          }
-          
-          LogConfig.info('HOMEPAGE', `需要修复 ${articlesToFix.length} 篇文章`);
-          
-          // 显示需要修复的文章信息
-          articlesToFix.forEach(article => {
-            LogConfig.info('HOMEPAGE', `文章 "${article.title}" 将被${article.isHidden ? '隐藏' : '显示'}，原因: ${article.reason}`);
-          });
-          
-          // 批量修复文章
-          if (articlesToFix.length > 0) {
-            await db.transaction('rw', db.articles, async () => {
-              for (const article of articlesToFix) {
-                await db.articles.update(article.id, { 
-                  isHidden: article.isHidden,
-                  lastUpdated: new Date().toISOString() + '_force'
-                });
-              }
-            });
-            
-            LogConfig.info('HOMEPAGE', '已修复文章显示状态');
-            triggerArticleListRefresh();
-          }
-        }
-      }
-      
-      LogConfig.info('HOMEPAGE', '文章显示状态修复完成');
-    } catch (error) {
-      LogConfig.error('HOMEPAGE', '修复文章显示状态时出错:', error);
-    }
-  };
-
-  // 调用一次强制修复
-  useEffect(() => {
-    if (dbInitialized && db) {
-      // 延迟5秒执行强制修复，确保在其他初始化完成后
-      const timer = setTimeout(() => {
-        forceFixArticleDisplayStates();
-      }, 5000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [dbInitialized, db]);
-
-  if (showWelcomePage) {
-    return <WelcomePage onAddFirstFeed={handleAddFirstFeed} />;
-  }
-
-  if (!dbInitialized || !settingsInitialized) {
-    return (
-      <Layout className={styles.homeLayout}>
-        <Header className={styles.header}>
-          <Title level={4} className={styles.headerTitle}>&nbsp;</Title>
-        </Header>
-        <Content style={{ padding: '20px', textAlign: 'center' }}>
-          <Skeleton active paragraph={{ rows: 10 }} />
-        </Content>
-      </Layout>
-    );
-  }
+  }, [db]);
 
   return (
     <div className={styles.homeLayout}>
-      <div 
-        className={`${styles.contentLayout} ${isResizing ? styles.isResizing : ''}`}
-        ref={panelGroupContainerRef}
-      >
-        <PanelGroup 
-          direction="horizontal" 
-          ref={panelGroupHandleRef}
-          onLayout={handleMainLayout}
-          className={`${styles.panelGroup} ${isFocusMode ? styles.focusMode : ''}`}
+      {showWelcomePage ? (
+        <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
+      ) : !dbInitialized || !settingsInitialized ? (
+        <Layout className={styles.homeLayout}>
+          <Header className={styles.header}>
+            <Title level={4} className={styles.headerTitle}>&nbsp;</Title>
+          </Header>
+          <Content style={{ padding: '20px', textAlign: 'center' }}>
+            <Skeleton active paragraph={{ rows: 10 }} />
+          </Content>
+        </Layout>
+      ) : (
+        <div 
+          className={`${styles.contentLayout} ${isResizing ? styles.isResizing : ''}`}
+          ref={panelGroupContainerRef}
         >
-          {isArticleListVisible && (
-            <>
-              <Panel
-                ref={listPanelRef}
-                defaultSize={settings.layout.mainLayout?.[0] ?? 33}
-                minSize={25}
-                maxSize={50}
-                collapsible
-                id="article-list-panel"
-                className={styles.articleListPanel}
-              >
-                <div 
-                  className={styles.articleListColumn}
-                  onScrollCapture={handleScrollCapture}
-                >
-                  <div className={styles.listHeader}>
-                    <div className={styles.listTitle}>
-                      <Title level={4} className={styles.panelHeaderTitle} ellipsis>
-                        {pageTitle}
-                      </Title>
-                      <Space className={styles.panelHeaderControls}>
-                        {isPullRefreshing && (
-                          <div className={styles.headerRefreshIndicator}>
-                            <Spin size="small" />
-                          </div>
-                        )}
-                        <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
-                            <Button
-                              icon={<SearchOutlined />}
-                              type={'text'} 
-                              onClick={() => setSearchModeActive(!searchModeActive)}
-                              className={styles.controlButton}
-                            />
-                        </Tooltip>
-                        <Tooltip title="标记当前列表已读">
-                            <Button 
-                              icon={<CheckCircleOutlined />} 
-                              onClick={handleMarkAllReadLocal} 
-                              type="text" 
-                              className={styles.controlButton}
-                            />
-                        </Tooltip>
-                      </Space>
-                    </div>
-
-                    {searchModeActive && (
-                      <div className={styles.panelSearchInputContainer}>
-                        <Input
-                            ref={searchInputRef}
-                            placeholder="搜索"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className={styles.panelSearchInput}
-                            allowClear
-                            autoFocus
-                        />
-                      </div>
-                    )}
-
-
-                  </div>
-                  
-                  <div 
-                    className={styles.articleListContainerWrapper}
-                    ref={articleListContainerRef}
-                    onWheel={handleWheel}
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                  >
-                    {feeds.length > 0 || groupId || feedId ? (
-                      <ArticleList
-                        ref={articleListRef}
-                        key={`${feedId}-${groupId}-${activeListFilter}-${listRefreshKey}`}
-                        filter={articleFilterForList}
-                        searchTerm={searchTerm}
-                        onSelectArticle={handleArticleSelect}
-                        selectedArticleId={selectedArticleId}
-                        isTodayView={isTodayView}
-                        currentFeedId={feedId}
-                        currentGroupId={groupId}
-                        lastUpdatedArticleInfo={lastUpdatedArticleInfo}
-                        onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
-                        isPullingDown={pullDownProgress > 0}
-                      />
-                    ) : (
-                      <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
-                    )}
-                  </div>
-                  <div className={styles.listFooterControls}>
-                    <Radio.Group
-                      value={activeListFilter}
-                      onChange={(e) => {
-                          const newFilter = e.target.value as FilterType;
-                          // console.log('[HomePage] Radio.Group onChange CALLED. newFilter:', newFilter, 'Current context:', { feedId, groupId });
-                          setFilter(newFilter);
-                        }}
-                      style={{ width: '100%', display: 'flex' }}
-                    >
-                      <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          <AppstoreAddOutlined />
-                          <span>全部</span>
-                        </div>
-                      </Radio.Button>
-                      <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          <CheckCircleOutlined />
-                          <span>未读</span>
-                        </div>
-                      </Radio.Button>
-                      <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
-                          <StarOutlined />
-                          <span>收藏</span>
-                        </div>
-                      </Radio.Button>
-                    </Radio.Group>
-                  </div>
-                </div>
-              </Panel>
-              <PanelResizeHandle 
-                className={styles.resizeHandle} 
-                onDragging={setIsResizing}
-              />
-            </>
-          )}
-          <Panel
-            ref={detailPanelRef}
-            defaultSize={settings.layout.mainLayout[1]}
-            minSize={30}
+          <PanelGroup 
+            direction="horizontal" 
+            ref={panelGroupHandleRef}
+            onLayout={handleMainLayout}
+            className={`${styles.panelGroup} ${isFocusMode ? styles.focusMode : ''}`}
           >
-            <div className={styles.articleDetailContainer}>
-              {selectedArticleId ? (
-                <ArticleDetail 
-                  key={selectedArticleId}
-                  articleId={selectedArticleId} 
-                  viewMode={articleDetailViewMode} 
-                  onChangeViewMode={handleArticleDetailViewModeChange}
-                  onClose={handleCloseArticle}
-                  onArticleModified={handleArticleModified}
-                  onNavigate={handleNavigate}
-                />
-              ) : (
-                <div className={styles.emptyDetailPane}>
-                  {/* 隐藏的可拖拽区域已通过CSS ::before伪元素添加 */}
-                  <div style={{ textAlign: 'center' }}>
-                    <div className={styles.artisticTitle}>Readix</div>
-                    <div className={styles.emptyDescription}>阅读点亮心智</div>
+            {isArticleListVisible && (
+              <>
+                <Panel
+                  ref={listPanelRef}
+                  defaultSize={settings.layout.mainLayout?.[0] ?? 33}
+                  minSize={25}
+                  maxSize={50}
+                  collapsible
+                  id="article-list-panel"
+                  className={styles.articleListPanel}
+                >
+                  <div 
+                    className={styles.articleListColumn}
+                    onScrollCapture={handleScrollCapture}
+                  >
+                    <div className={styles.listHeader}>
+                      <div className={styles.listTitle}>
+                        <Title level={4} className={styles.panelHeaderTitle} ellipsis>
+                          {pageTitle}
+                        </Title>
+                        <Space className={styles.panelHeaderControls}>
+                          {isPullRefreshing && (
+                            <div className={styles.headerRefreshIndicator}>
+                              <Spin size="small" />
+                            </div>
+                          )}
+                          <Tooltip title={searchModeActive ? "收起搜索" : "搜索文章"}>
+                              <Button
+                                icon={<SearchOutlined />}
+                                type={'text'} 
+                                onClick={() => setSearchModeActive(!searchModeActive)}
+                                className={styles.controlButton}
+                              />
+                          </Tooltip>
+                          <Tooltip title="标记当前列表已读">
+                              <Button 
+                                icon={<CheckCircleOutlined />} 
+                                onClick={handleMarkAllReadLocal} 
+                                type="text" 
+                                className={styles.controlButton}
+                              />
+                          </Tooltip>
+                        </Space>
+                      </div>
+
+                      {searchModeActive && (
+                        <div className={styles.panelSearchInputContainer}>
+                          <Input
+                              ref={searchInputRef}
+                              placeholder="搜索"
+                              value={searchTerm}
+                              onChange={(e) => setSearchTerm(e.target.value)}
+                              className={styles.panelSearchInput}
+                              allowClear
+                              autoFocus
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div 
+                      className={styles.articleListContainerWrapper}
+                      ref={articleListContainerRef}
+                      onWheel={handleWheel}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                    >
+                      {feeds.length > 0 || groupId || feedId ? (
+                        <ArticleList
+                          ref={articleListRef}
+                          key={`${feedId}-${groupId}-${activeListFilter}-${listRefreshKey}`}
+                          filter={articleFilterForList}
+                          searchTerm={searchTerm}
+                          onSelectArticle={handleArticleSelect}
+                          selectedArticleId={selectedArticleId}
+                          isTodayView={isTodayView}
+                          currentFeedId={feedId}
+                          currentGroupId={groupId}
+                          lastUpdatedArticleInfo={lastUpdatedArticleInfo}
+                          onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
+                          isPullingDown={pullDownProgress > 0}
+                        />
+                      ) : (
+                        <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
+                      )}
+                    </div>
+                    <div className={styles.listFooterControls}>
+                      <Radio.Group
+                        value={activeListFilter}
+                        onChange={(e) => {
+                            const newFilter = e.target.value as FilterType;
+                            setFilter(newFilter);
+                          }}
+                        style={{ width: '100%', display: 'flex' }}
+                      >
+                        <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <AppstoreAddOutlined />
+                            <span>全部</span>
+                          </div>
+                        </Radio.Button>
+                        <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <CheckCircleOutlined />
+                            <span>未读</span>
+                          </div>
+                        </Radio.Button>
+                        <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                            <StarOutlined />
+                            <span>收藏</span>
+                          </div>
+                        </Radio.Button>
+                      </Radio.Group>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          </Panel>
-        </PanelGroup>
-      </div>
+                </Panel>
+                <PanelResizeHandle 
+                  className={styles.resizeHandle} 
+                  onDragging={setIsResizing}
+                />
+              </>
+            )}
+            <Panel
+              ref={detailPanelRef}
+              defaultSize={settings.layout.mainLayout[1]}
+              minSize={30}
+            >
+              <div className={styles.articleDetailContainer}>
+                {selectedArticleId ? (
+                  <ArticleDetail 
+                    key={selectedArticleId}
+                    articleId={selectedArticleId} 
+                    viewMode={articleDetailViewMode} 
+                    onChangeViewMode={handleArticleDetailViewModeChange}
+                    onClose={handleCloseArticle}
+                    onArticleModified={handleArticleModified}
+                    onNavigate={handleNavigate}
+                  />
+                ) : (
+                  <div className={styles.emptyDetailPane}>
+                    <div style={{ textAlign: 'center' }}>
+                      <div className={styles.artisticTitle}>Readix</div>
+                      <div className={styles.emptyDescription}>阅读点亮心智</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Panel>
+          </PanelGroup>
+        </div>
+      )}
     </div>
   );
 };
 
-export default HomePage; 
+export default HomePage;

@@ -12,13 +12,30 @@ import { FilterProvider } from './contexts/FilterContext';
 import { FilterRulesProvider } from './contexts/FilterRulesContext';
 import PulsingLoader from './components/PulsingLoader';
 import { LayoutProvider } from './contexts/LayoutContext';
+import { applyAllRulesToAllArticles } from './utils/filterApplier';
+import { message } from 'antd';
 
 const AppContent: React.FC = () => {
   const { isInitialized: settingsInitialized } = useSettings();
-  const { isInitialized: dbInitialized } = useDatabase();
+  const { db, isInitialized: dbInitialized, triggerArticleListRefresh, triggerFeedCountRefresh } = useDatabase();
   
   // 同时检查两个上下文是否都已初始化
   const isInitialized = settingsInitialized && dbInitialized;
+
+  useEffect(() => {
+    if (isInitialized && db) {
+      console.log('App is initialized, running filter check...');
+      
+      applyAllRulesToAllArticles(db).then(updatedCount => {
+        if (updatedCount > 0) {
+          triggerArticleListRefresh();
+          triggerFeedCountRefresh();
+        }
+      }).catch(error => {
+        console.error('Failed to apply all rules on startup:', error);
+      });
+    }
+  }, [isInitialized, db, triggerArticleListRefresh, triggerFeedCountRefresh]);
   
   if (!isInitialized) {
     return <PulsingLoader />;

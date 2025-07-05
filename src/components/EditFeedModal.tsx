@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid, Radio, Tabs } from 'antd';
+import { Modal, Form, Input, Select, Button, message, Tooltip, Upload, Image, Avatar, Grid, Radio, Tabs, Space } from 'antd';
 import { InfoCircleOutlined, UploadOutlined, PictureOutlined, FilterOutlined } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { FeedSource, Group } from '../db/database';
@@ -107,7 +107,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
 
       const updates: Partial<FeedSource> = {
         title: values.title,
-        groupId: values.groupId,
+        groupId: values.groupId === '_ungrouped' ? undefined : values.groupId,
         iconUrl: finalIconUrl,
         defaultViewMode: values.defaultViewMode,
       };
@@ -181,8 +181,8 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
       
       <Form.Item name="groupId" label="分组">
         <Select placeholder="选择分组（可选）" allowClear>
-          <Option value={null}>(无分组)</Option>
-          {groups.map(group => (group.id && <Option key={group.id} value={group.id}>{group.name}</Option>))}
+          <Select.Option value="_ungrouped">(无分组)</Select.Option>
+          {groups.map(group => (group.id && <Select.Option key={group.id} value={group.id}>{group.name}</Select.Option>))}
         </Select>
       </Form.Item>
 
@@ -195,9 +195,8 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
         label="图标设置"
         tooltip="可粘贴URL、上传图片或选择预设图标。"
       >
-        <Input.Group compact>
+        <Space.Compact style={{ width: '100%' }}>
           <Input 
-            style={{ width: 'calc(100% - 92px)' }}
             placeholder="粘贴图标URL或选择下方预设" 
             value={form.getFieldValue('iconUrlInput')}
             onChange={handleIconUrlInputChange} 
@@ -205,7 +204,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
           <Upload {...uploadProps}>
               <Button icon={<UploadOutlined />}>上传</Button>
           </Upload>
-        </Input.Group>
+        </Space.Compact>
       </Form.Item>
 
       <Form.Item label="选择预设图标">
@@ -254,6 +253,25 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
     )
   );
 
+  const items = [
+    {
+      key: 'basic',
+      label: '基本信息',
+      children: renderBasicInfoTab(),
+    },
+    {
+      key: 'filter',
+      label: (
+        <span>
+          <FilterOutlined />
+          过滤规则
+        </span>
+      ),
+      children: renderFilterRulesTab(),
+      disabled: !feed || !feed.id,
+    },
+  ];
+
   return (
     <Modal
       title="修改订阅源信息"
@@ -264,15 +282,16 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
       okText="保存"
       cancelText="取消"
       width={screens.md ? 700 : '90%'}
+      footer={[
+        <Button key="back" onClick={onCancel}>
+          取消
+        </Button>,
+        <Button key="submit" type="primary" loading={loading} onClick={handleSubmit}>
+          保存
+        </Button>,
+      ]}
     >
-      <Tabs activeKey={activeTab} onChange={setActiveTab}>
-        <TabPane tab="基本信息" key="basic">
-          {renderBasicInfoTab()}
-        </TabPane>
-        <TabPane tab={<span><FilterOutlined /> 过滤规则</span>} key="filter">
-          {renderFilterRulesTab()}
-        </TabPane>
-      </Tabs>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={items} />
     </Modal>
   );
 };

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { Article, FeedSource } from '../db/database';
+import { Article, FeedSource, FilterRule } from '../db/database';
 import { processIconUrl } from '../utils/iconUtils';
 import Dexie from 'dexie';
 import { usePrevious } from './usePrevious';
+import { shouldArticleBeHidden } from '../utils/filterUtils';
+import { useFilterRules } from '../contexts/FilterRulesContext';
 
 export interface UseArticleListManagerProps {
   filter: any;
@@ -31,12 +33,14 @@ export const useArticleListManager = ({
 }: UseArticleListManagerProps) => {
   const { db, isInitialized, triggerFeedCountRefresh, articleListRefreshTrigger } = useDatabase();
   const { settings } = useSettings();
+  const { globalFilterRules } = useFilterRules();
 
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [allArticles, setAllArticles] = useState<Article[]>([]);
   const [displayedArticles, setDisplayedArticles] = useState<Article[]>([]);
   const [feedInfoMap, setFeedInfoMap] = useState<Map<string, FeedSource>>(new Map());
+  const [feedRulesMap, setFeedRulesMap] = useState<Map<string, FilterRule[]>>(new Map());
   const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [exemptedArticleIds, setExemptedArticleIds] = useState<Set<string>>(new Set());
@@ -122,28 +126,41 @@ export const useArticleListManager = ({
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
 
-        // 首先过滤掉被隐藏的文章
-        collection = collection.filter(article => article.isHidden !== true);
-
-        // Filter by Feed or Group
+        // Filter by Feed or Group (DB-side)
+        let feedsInScope: FeedSource[] = [];
         if (currentFeedId) {
+          const feed = await db.feeds.get(currentFeedId);
+          if (feed) feedsInScope.push(feed);
           collection = collection.filter(article => article.sourceId === currentFeedId);
         } else if (currentGroupId) {
-          const feedsInGroup = await db.feeds.where('groupId').equals(currentGroupId).toArray();
-          const feedIdsInGroup = new Set(feedsInGroup.map(f => f.id).filter((id): id is string => !!id));
+          feedsInScope = await db.feeds.where('groupId').equals(currentGroupId).toArray();
+          const feedIdsInGroup = new Set(feedsInScope.map(f => f.id).filter((id): id is string => !!id));
           if (feedIdsInGroup.size > 0) {
             collection = collection.filter(article => article.sourceId ? feedIdsInGroup.has(article.sourceId) : false);
           } else {
             setAllArticles([]);
-            // Ensure loading states are reset even if we return early
             setLoading(false);
             setIsRefreshing(false);
             setHasInitialLoaded(true);
             return;
           }
+        } else {
+          // No specific context, fetch all feeds for rule application
+          feedsInScope = await db.feeds.toArray();
         }
         
         const fetchedArticles = await collection.toArray();
+
+        // 构建订阅源规则映射
+        const newFeedRulesMap = new Map<string, FilterRule[]>();
+        for (const feed of feedsInScope) {
+          if (feed.id && feed.filterRules && Array.isArray(feed.filterRules)) {
+            newFeedRulesMap.set(feed.id, feed.filterRules);
+          }
+        }
+        setFeedRulesMap(newFeedRulesMap);
+        
+        // 按发布日期排序
         fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
         setAllArticles(fetchedArticles);
 
@@ -192,6 +209,33 @@ export const useArticleListManager = ({
   // Effect 2: Filter and sort articles for display when data or filters change
   const displayedArticlesResult = useMemo(() => {
     let filtered = [...allArticles];
+    // 过滤开始
+
+    // 应用过滤规则（动态过滤，不依赖于数据库中的isHidden字段）
+    filtered = filtered.filter(article => {
+      // 如果文章ID在豁免列表中，则始终显示
+      if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) {
+        return true;
+      }
+
+      // 首先检查数据库中的isHidden字段
+      if (article.isHidden === true) {
+        return false;
+      }
+
+      // 获取该文章对应的订阅源规则
+      const feedRules = article.sourceId ? feedRulesMap.get(article.sourceId) || [] : [];
+      const activeFeedRules = feedRules.filter(r => r.isActive);
+      
+      // 获取激活的全局规则
+      const activeGlobalRules = globalFilterRules.filter(r => r.isActive);
+      
+      // 合并规则并检查文章是否应该被隐藏
+      const combinedRules = [...activeFeedRules, ...activeGlobalRules];
+      
+      const shouldHide = shouldArticleBeHidden(article, combinedRules);
+      return !shouldHide;
+    });
 
     // Client-side search term filter
     if (searchTerm && searchTerm.trim() !== '') {
@@ -207,8 +251,6 @@ export const useArticleListManager = ({
     // Apply main filters from the 'filter' prop
     if (filter) {
       filtered = filtered.filter(article => {
-        if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) return true;
-
         let passes = true;
         if (typeof filter.isRead === 'string' && article.isRead !== filter.isRead) {
           passes = false;
@@ -226,29 +268,16 @@ export const useArticleListManager = ({
       });
     }
 
-    // Keep selected article in view
-    if (selectedArticleId) {
-      const isSelectedInList = filtered.some((a: Article) => a.id === selectedArticleId);
-      if (!isSelectedInList) {
-        const selectedArticle = allArticles.find((a: Article) => a.id === selectedArticleId);
-        if (selectedArticle) {
-          // Instead of pushing and re-sorting, find the correct position and insert
-          const insertIndex = filtered.findIndex((a: Article) => a.publishDate < selectedArticle.publishDate);
-          if (insertIndex === -1) {
-            filtered.push(selectedArticle);
-          } else {
-            filtered.splice(insertIndex, 0, selectedArticle);
-          }
-        }
-      }
-    }
+    return {
+      articles: filtered,
+      total: allArticles.length,
+      filtered: filtered.length,
+    };
+  }, [allArticles, searchTerm, filter, exemptedArticleIds, persistentlyExemptedIds, feedRulesMap, globalFilterRules]);
 
-    return filtered;
-  }, [allArticles, filter, searchTerm, exemptedArticleIds, persistentlyExemptedIds, selectedArticleId]);
-
-  // 使用 useMemo 计算结果更新 state
+  // Update displayed articles when the result changes
   useEffect(() => {
-    setDisplayedArticles(displayedArticlesResult);
+    setDisplayedArticles(displayedArticlesResult.articles);
   }, [displayedArticlesResult]);
 
   const handleToggleStar = async (articleId: string) => {

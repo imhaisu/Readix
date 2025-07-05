@@ -1,5 +1,6 @@
-import { Article, FeedSource } from '../db/database';
+import { Article, FeedSource, FilterRule } from '../db/database';
 import { generateUniqueId, validateDate, logDateIssue } from './helpers';
+import { shouldArticleBeHidden } from './filterUtils';
 
 // 日志控制开关
 const LOG_CONFIG = {
@@ -282,49 +283,27 @@ const dateExtractors = [
  * @param defaultDate 默认日期
  * @returns 修复后的日期对象和一个标志，表示是否使用了首次获取时间
  */
-const fixFeedDateIssues = (feedUrl: string, item: any, defaultDate: Date): { date: Date, isFirstFetchDate: boolean } => {
-  // 减少日志输出，只保留关键信息
-  const isJiemodui = feedUrl.includes('jiemodui.com');
-  const isDebugMode = isJiemodui && LOG_CONFIG.ENABLE_JIEMODUI_LOGS; // 只对芥末堆网站启用详细日志
+const fixFeedDateIssues = (feedUrl: string, item: any): { date: Date, isFirstFetchDate: boolean } => {
+  const defaultDate = new Date();
+  const siteRule = siteSpecificDateRules[new URL(feedUrl).hostname] || {};
   
-  if (isDebugMode) {
-    log.date(`[RSS Parser] 处理文章日期: "${item.title}", 原始日期: ${item.pubDate || item.isoDate || '无'}`);
-  }
-  
-  // 检查是否有特定网站的规则
-  const siteRule = Object.entries(siteSpecificDateRules).find(([domain]) => feedUrl.includes(domain))?.[1];
-  
-  // 如果网站规则指定优先使用原始日期，且原始日期存在，则直接使用
-  if (siteRule?.useOriginalDate && (item.pubDate || item.isoDate)) {
-    const date = new Date(item.pubDate || item.isoDate);
-    if (!isNaN(date.getTime())) {
-      if (isDebugMode) {
-        log.date(`[RSS Parser] 根据网站规则使用原始日期: ${date.toLocaleDateString()} 对于文章: ${item.title}`);
-      }
-      return { date, isFirstFetchDate: false };
-    }
-  }
-  
-  // 尝试使用网站特定的日期提取器
-  if (siteRule?.dateExtractors) {
+  // 1. 网站特定日期提取器
+  if (siteRule.dateExtractors) {
     for (const extractor of siteRule.dateExtractors) {
       try {
         const date = extractor(item);
         if (date) {
-          if (isDebugMode) {
-            log.date(`[RSS Parser] 使用网站特定规则提取日期: ${date.toLocaleDateString()} 对于文章: ${item.title}`);
-          }
           return { date, isFirstFetchDate: false };
         }
       } catch (e) {
-        if (isDebugMode) {
-          log.warn(`[RSS Parser] 网站特定日期提取器出错:`, e);
+        if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
+          log.error(`网站特定日期提取器出错:`, e);
         }
       }
     }
   }
   
-  // 尝试通用日期提取器
+  // 2. 通用日期提取器
   for (const extractor of dateExtractors) {
     try {
       const date = extractor(item);
@@ -332,15 +311,15 @@ const fixFeedDateIssues = (feedUrl: string, item: any, defaultDate: Date): { dat
         return { date, isFirstFetchDate: false };
       }
     } catch (e) {
-      if (isDebugMode) {
-        log.warn(`[RSS Parser] 日期提取器出错:`, e);
+      if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
+        log.error(`日期提取器出错:`, e);
       }
     }
   }
   
   // 如果所有方法都失败，使用当前日期，但标记为首次获取时间
-  if (isDebugMode) {
-    log.date(`[RSS Parser] 无法提取日期，使用首次获取时间: ${item.title}`);
+  if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
+    log.error(`无法提取日期，使用首次获取时间: ${item.title}`);
   }
   return { date: defaultDate, isFirstFetchDate: true };
 };
@@ -377,189 +356,99 @@ const generateArticleId = (item: any, feedSource: FeedSource): string => {
 };
 
 /**
- * 获取并解析RSS源 (通过主进程)
- * @param feed 订阅源信息
- * @returns 解析后的文章列表
+ * 解析单个RSS订阅源，并返回文章列表
+ * @param feedSource 订阅源信息
+ * @returns 解析后的文章数组
  */
-export const fetchRssFeed = async (feedSource: FeedSource): Promise<Article[]> => {
-  if (!window.electron) {
-    log.error('Electron API 不可用');
-    return [];
-  }
+export const fetchRssFeed = async (
+  feedSource: FeedSource,
+): Promise<Article[]> => {
+  log.feed(`\n--- 开始获取订阅源: ${feedSource.title} ---`);
+  log.feed(`URL: ${feedSource.url}`);
+
   try {
-    log.feed(`[RSS Parser] 开始获取订阅源: ${feedSource.url}`);
     const result = await window.electron.parseRssFeed(feedSource.url);
     if (!result || !result.success || !result.data) {
-      log.error(`解析RSS源失败 (来自主进程): ${feedSource.url}`, result?.error);
+      log.error(`获取或解析失败: ${feedSource.title}`);
       return [];
     }
+    const feed = result.data;
 
-    const feedData = result.data;
-    log.feed(`[RSS Parser] 成功获取订阅源: ${feedSource.url}, 包含 ${feedData.items?.length || 0} 篇文章`);
+    log.feed(`成功获取并解析: ${feedSource.title}，找到 ${feed.items.length} 篇文章`);
+
+    const articles: Article[] = [];
     
-    // 检查是否是芥末堆网站
-    const isJiemodui = feedSource.url.includes('jiemodui.com');
-    
-    // 如果是芥末堆网站，尝试获取现有文章的日期信息
-    let existingArticlesMap = new Map<string, number>();
-    if (isJiemodui && feedSource.id) {
-      try {
-        // 使用数据库上下文获取数据库实例
-        const db = await import('../db/database').then(module => module.dbInstance);
-        if (db) {
-          const existingArticles = await db.articles.where('sourceId').equals(feedSource.id).toArray();
-          existingArticlesMap = new Map(
-            existingArticles.map((article: Article) => {
-              // 使用标题作为键，因为芥末堆的ID可能会变
-              const titleKey = article.title.replace(/\s+/g, '');
-              return [titleKey, article.publishDate];
-            })
-          );
-          log.jiemodui(`[RSS Parser] 芥末堆: 加载了 ${existingArticlesMap.size} 篇现有文章的日期信息`);
-        }
-      } catch (e) {
-        log.error('[RSS Parser] 获取现有芥末堆文章失败:', e);
+    // 获取该订阅源的过滤规则
+    const feedRules = feedSource.filterRules || [];
+    // 获取全局过滤规则（如果存在）
+    let globalRules: FilterRule[] = [];
+    try {
+      const globalRulesJson = localStorage.getItem('global_filter_rules');
+      if (globalRulesJson) {
+        globalRules = JSON.parse(globalRulesJson);
       }
+    } catch (error) {
+      log.error('解析全局过滤规则失败:', error);
     }
     
-    // 解析文章内容
-    const articles: Article[] = (feedData.items || []).map((item: any) => {
-      const content = item.contentEncoded || item.content || item.description || '';
-      let imageUrl: string | undefined = undefined;
-      if (item.media && item.media.$ && item.media.$.url) {
-        imageUrl = item.media.$.url;
-      } else if (item.enclosure && item.enclosure.url && item.enclosure.type?.startsWith('image/')){
-        imageUrl = item.enclosure.url;
-      } else if (content) {
-        const imgMatch = content.match(/<img[^>]+src=['\"]([^'\">]+)['\"]/i);
-        if (imgMatch && imgMatch[1]) {
-          imageUrl = imgMatch[1];
-        }
-      }
-      
-      const author = item.creator || item.author || feedData.title;
-      
-      // 为文章生成稳定的唯一ID
-      const articleUniqueIdentifier = generateArticleId(item, feedSource);
-      
-      // 确保 publishDate 有效
-      let rawPubDate = item.pubDate || item.isoDate;
-      let publishDateObj = rawPubDate ? new Date(rawPubDate) : new Date(); 
-      if (isNaN(publishDateObj.getTime())) {
-        // 只有芥末堆网站才记录日期解析错误
-        if (isJiemodui) {
-          log.warn(`芥末堆: 文章"${item.title || '无标题'}"的日期格式无效: ${rawPubDate}`);
-        }
-        publishDateObj = new Date();
-      }
-      
-      // 特殊处理芥末堆文章的日期
-      let date: Date;
-      let isFirstFetchDate = false;
-      
-      if (isJiemodui) {
-        // 尝试使用现有的日期
-        const titleKey = item.title.replace(/\s+/g, '');
-        const existingDate = existingArticlesMap.get(titleKey);
-        
-        if (existingDate) {
-          // 如果数据库中已有该文章，使用数据库中的日期
-          date = new Date(existingDate);
-          log.jiemodui(`[RSS Parser] 芥末堆: "${item.title}" - 使用现有日期: ${new Date(existingDate).toLocaleDateString()}`);
-        } else {
-          // 如果是新文章，尝试从内容中提取日期
-          let extractedDate: Date | null = null;
-          
-          // 尝试从内容中提取中文日期格式（YYYY年MM月DD日）
-          if (content) {
-            const match = content.match(/(\d{4})年(\d{1,2})月(\d{1,2})日/);
-            if (match) {
-              const year = parseInt(match[1], 10);
-              const month = parseInt(match[2], 10) - 1;
-              const day = parseInt(match[3], 10);
-              
-              extractedDate = new Date(year, month, day);
-              if (isValidReasonableDate(extractedDate)) {
-                log.jiemodui(`[RSS Parser] 芥末堆: "${item.title}" - 从内容提取日期: ${extractedDate.toLocaleDateString()}`);
-              } else {
-                extractedDate = null;
-              }
-            }
-          }
-          
-          if (!extractedDate) {
-            // 如果无法提取日期，使用当前日期但减去一个随机的小时数，避免所有文章都显示相同时间
-            const randomHours = Math.floor(Math.random() * 12); // 0-11小时的随机值
-            date = new Date();
-            date.setHours(date.getHours() - randomHours);
-            isFirstFetchDate = true;
-            log.jiemodui(`[RSS Parser] 芥末堆: "${item.title}" - 新文章使用随机偏移时间`);
-          } else {
-            date = extractedDate;
-          }
-        }
-      } else {
-        // 非芥末堆文章，使用正常的日期处理逻辑，但减少日志输出
-        const dateResult = fixFeedDateIssues(feedSource.url, item, publishDateObj);
-        date = dateResult.date;
-        isFirstFetchDate = dateResult.isFirstFetchDate;
+    // 合并规则
+    const combinedRules = [...feedRules, ...globalRules].filter(rule => rule.isActive);
+    log.feed(`应用 ${combinedRules.length} 条过滤规则 (${feedRules.length} 条订阅源规则, ${globalRules.length} 条全局规则)`);
+    
+    for (const item of feed.items) {
+      if (!item.title || !item.link) {
+        log.warn(`文章缺少标题或链接，已跳过。标题: ${item.title}, 链接: ${item.link}`);
+        continue;
       }
 
-      // 只对芥末堆网站或有问题的日期记录日志
-      if ((isJiemodui && LOG_CONFIG.ENABLE_JIEMODUI_LOGS) || (isFirstFetchDate && LOG_CONFIG.ENABLE_DATE_LOGS)) {
-        logDateIssue(
-          `订阅源: ${feedSource.url}`,
-          item.title || '无标题',
-          rawPubDate,
-          date,
-          isFirstFetchDate
-        );
-      }
-
-      const contentText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      const summary = contentText.substring(0, 200) + (contentText.length > 200 ? '...' : '');
+      const { date: publishedDate, isFirstFetchDate } = fixFeedDateIssues(feedSource.url, item);
       
-      const article = {
-        id: articleUniqueIdentifier,
-        sourceId: feedSource.id,
-        title: item.title || '无标题',
-        url: item.link || '',
-        author,
-        publishDate: date.getTime(), // 存储时间戳
-        fetchDate: Date.now(), // 记录当前获取时间的时间戳
-        originalPubDate: rawPubDate || '',
-        isFirstFetchDate: isFirstFetchDate, // 添加标记，表示是否使用了首次获取时间作为发布时间
-        content,
-        contentText,
-        summary,
-        imageUrl,
+      const article: Article = {
+        id: generateArticleId(item, feedSource),
+        title: item.title,
+        url: item.link,
+        author: item.author || item.creator || '',
+        publishDate: publishedDate.getTime(),
+        fetchDate: Date.now(),
+        content: item.content || item.contentSnippet || item.contentEncoded || '',
         isRead: 'false',
         isStarred: 'false',
-        isHidden: false,
-        tags: [],
-        guid: item.guid, // 也保存原始 guid (如果存在)
+        sourceId: feedSource.id || '',
+        isFirstFetchDate: isFirstFetchDate,
       };
-      
-      // 只对芥末堆网站记录详细的文章处理日志
-      if (isJiemodui) {
-        log.jiemodui(`[RSS Parser] 芥末堆: 处理文章 "${article.title}", ID: ${article.id.substring(0, 20)}...`);
+
+      // 应用过滤规则，设置isHidden属性
+      if (combinedRules.length > 0) {
+        article.isHidden = shouldArticleBeHidden(article, combinedRules);
+        if (article.isHidden) {
+          log.feed(`文章 "${article.title.substring(0, 30)}..." 被过滤规则隐藏`);
+        }
+      }
+
+      if (LOG_CONFIG.ENABLE_ARTICLE_LOGS) {
+        log.article(`处理文章: ${article.title}`);
+        log.article(`  - ID: ${article.id}`);
+        log.article(`  - 日期: ${article.publishDate}`);
+        log.article(`  - 过滤状态: ${article.isHidden ? '隐藏' : '显示'}`);
       }
       
-      return article;
-    });
+      articles.push(article);
+    }
     
+    log.feed(`--- 订阅源处理完毕: ${feedSource.title} ---`);
     return articles;
+
   } catch (error) {
-    log.error(`调用主进程解析RSS源时出错: ${feedSource.url}`, error);
+    log.error(`在 fetchRssFeed 中发生错误 (${feedSource.title}):`, error);
     return [];
   }
 };
 
 /**
  * 刷新所有订阅源
- * @param feeds 订阅源列表
- * @param onProgress 进度回调
- * @param onComplete 完成回调
+ * @param feeds
+ * @param onProgress
+ * @param onComplete
  */
 export const refreshAllFeeds = async (
   feeds: FeedSource[],
@@ -570,34 +459,25 @@ export const refreshAllFeeds = async (
   
   for (const feed of feeds) {
     try {
-      // 注意：这里调用的是更新后的 fetchRssFeed，它会通过 IPC 与主进程通信
       const articles = await fetchRssFeed(feed);
       results.push({ feed, articles });
-      
       if (onProgress) {
         onProgress(feed, articles);
       }
     } catch (error) {
-      log.error(`刷新订阅源失败: ${feed.url}`, error);
-      results.push({ feed, articles: [] }); // 即使失败也记录，以便UI可以反映
-      
-      if (onProgress) {
-        onProgress(feed, []);
-      }
+      log.error(`刷新订阅源 "${feed.title}" 时失败:`, error);
     }
   }
-  
+
   if (onComplete) {
     onComplete(results);
   }
-  
-  return results;
 };
 
 /**
- * 从URL获取RSS源信息 (通过主进程)
- * @param url RSS源URL
- * @returns 源信息 (包含 title, url, iconUrl)
+ * 获取订阅源信息，用于添加新订阅源时的预览
+ * @param url 订阅源URL
+ * @returns 包含标题、描述等信息的对象
  */
 export const getFeedInfo = async (url: string): Promise<Partial<FeedSource> | null> => {
   if (!window.electron) {

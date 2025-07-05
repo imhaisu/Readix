@@ -30,6 +30,7 @@ const SettingsPage: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [testingApiKey, setTestingApiKey] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
+  const [activeTab, setActiveTab] = useState('app');
 
   useEffect(() => {
     if (isInitialized) {
@@ -191,7 +192,7 @@ const SettingsPage: React.FC = () => {
           }}
           className={styles.form}
         >
-          <Tabs defaultActiveKey="app" className={styles.tabs}>
+          <Tabs defaultActiveKey="app" className={styles.tabs} activeKey={activeTab} onChange={setActiveTab}>
             <Tabs.TabPane tab="应用" key="app">
               <div className={styles.formSection}>
                 <Title level={5}>行为</Title>
@@ -299,11 +300,13 @@ const SettingsPage: React.FC = () => {
           
           <Divider />
 
-          <Form.Item>
-            <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
-              保存全部设置
-            </Button>
-          </Form.Item>
+          {activeTab !== 'filter' && (
+            <Form.Item>
+              <Button type="primary" htmlType="submit" icon={<SaveOutlined />}>
+                保存全部设置
+              </Button>
+            </Form.Item>
+          )}
         </Form>
       </Content>
     </Layout>
