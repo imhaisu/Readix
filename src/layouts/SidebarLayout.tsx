@@ -415,7 +415,11 @@ const SidebarLayout: React.FC = () => {
 
   const getSelectedKey = () => {
     const path = location.pathname;
+    if (path === '/today') {
+      return 'home';
+    }
     if (path === '/') {
+      // 根路径默认也选中"今日"菜单项
       return 'home';
     }
     if (path === '/all') {
@@ -688,12 +692,12 @@ const SidebarLayout: React.FC = () => {
                   </div>
                 ),
                 onClick: () => {
-                  if (location.pathname === '/') {
+                  if (location.pathname === '/today') {
                     // 即使已经在"今天"页面，也触发刷新
                     handleRefreshAll(false);
                     document.dispatchEvent(new CustomEvent('request-list-refresh'));
                   } else {
-                    navigate('/');
+                    navigate('/today');
                   }
                 }
               },

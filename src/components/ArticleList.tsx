@@ -22,6 +22,7 @@ import styles from './ArticleList.module.css';
 import PulsingLoader from './PulsingLoader';
 import { useArticleListManager } from '../hooks/useArticleListManager'; // 导入新的 Hook
 import { extractFirstImage, extractFirstParagraphText } from '../utils/helpers'; // 导入辅助函数
+import { debounce } from 'lodash';
 
 interface ArticleListProps {
   filter: any;
@@ -54,6 +55,8 @@ export interface ArticleListHandle {
   getScrollableElement: () => HTMLDivElement | null;
   getArticles: () => Article[];
   scrollToArticle: (articleId: string) => void;
+  getScrollPosition: () => number;
+  setScrollPosition: (position: number) => void;
 }
 
 // 创建一个记录图标加载错误的Map
@@ -98,6 +101,46 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
 
   // 添加强制刷新状态
   const [forceRefreshKey, setForceRefreshKey] = useState(0);
+
+  // 添加保存和恢复滚动位置的功能
+  const listScrollPositionKey = `articleList_scrollPos_${currentFeedId || ''}_${currentGroupId || ''}_${filter?.isRead || ''}`;
+  
+  // 保存滚动位置
+  const saveScrollPosition = useCallback(() => {
+    if (containerRef.current) {
+      const scrollTop = containerRef.current.scrollTop;
+      localStorage.setItem(listScrollPositionKey, scrollTop.toString());
+    }
+  }, [listScrollPositionKey]);
+
+  // 恢复滚动位置
+  useEffect(() => {
+    if (containerRef.current && !isPullingDown && displayedArticles.length > 0) {
+      const savedPosition = localStorage.getItem(listScrollPositionKey);
+      if (savedPosition) {
+        setTimeout(() => {
+          if (containerRef.current) {
+            containerRef.current.scrollTop = parseInt(savedPosition, 10);
+          }
+        }, 100); // 短暂延迟确保DOM已更新
+      }
+    }
+  }, [displayedArticles, listScrollPositionKey, isPullingDown]);
+
+  // 监听滚动事件保存位置
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = debounce(() => {
+      saveScrollPosition();
+    }, 200);
+
+    container.addEventListener('scroll', handleScroll);
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [saveScrollPosition]);
 
   const scrollToArticle = (articleId: string) => {
     if (!containerRef.current) return;
@@ -412,7 +455,20 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     getScrollableElement: () => containerRef.current,
     getArticles: () => displayedArticles,
     scrollToArticle: scrollToArticle,
+    getScrollPosition: () => containerRef.current?.scrollTop || 0,
+    setScrollPosition: (position) => {
+      if (containerRef.current) {
+        containerRef.current.scrollTop = position;
+      }
+    }
   }));
+
+  // 组件卸载时保存滚动位置
+  useEffect(() => {
+    return () => {
+      saveScrollPosition();
+    };
+  }, [saveScrollPosition]);
 
   return (
     <div 

@@ -76,7 +76,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [pageTitle, setPageTitle] = useState('所有文章');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isTodayView, setIsTodayView] = useState(false);
+  const [isTodayView, setIsTodayView] = useState(() => {
+    // 只有在明确指定今日视图时才设置为true
+    return window.location.pathname === '/today';
+  });
   const [popoverVisible, setPopoverVisible] = useState(false);
   const [searchModeActive, setSearchModeActive] = useState(false);
   const [lastUpdatedArticleInfo, setLastUpdatedArticleInfo] = useState<{ id: string, changes: Partial<Article> } | null>(null);
@@ -261,15 +264,22 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         setPageTitle('未读文章');
       } else if (filter === 'all') {
         setPageTitle('所有文章');
-      } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
+      } else if (window.location.pathname === '/today') {
         setPageTitle('今日文章');
+      } else if (filter === undefined && !feedId && !groupId) {
+        // 如果没有明确的筛选条件，使用通用标题
+        if (isTodayView) {
+          setPageTitle('今日文章');
+        } else {
+          setPageTitle('我的阅读');
+        }
       } else {
         setPageTitle('所有文章');
       }
     };
 
     updateTitle();
-  }, [db, feedId, groupId, filter]);
+  }, [db, feedId, groupId, filter, isTodayView]);
 
   const loadFeeds = async () => {
     if (!db) return;
@@ -311,14 +321,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setSelectedArticleId(null); 
     }
     
-    const newIsToday = filter === undefined && !feedId && !groupId;
-    setIsTodayView(newIsToday);
+    // 只在路由参数变化时更新isTodayView
+    const isToday = window.location.pathname === '/today' || 
+                   (filter === undefined && !feedId && !groupId);
+    
+    if (isToday !== isTodayView) {
+      setIsTodayView(isToday);
+    }
 
     prevFeedIdRef.current = feedId;
     prevGroupIdRef.current = groupId;
     prevFilterPropRef.current = filter;
 
-  }, [filter, feedId, groupId]);
+  }, [filter, feedId, groupId, isTodayView]);
   
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
     // 防抖：避免短时间内多次刷新
@@ -504,6 +519,11 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (articleId && listPanelRef.current?.getSize() === 0) {
       listPanelRef.current?.expand();
     }
+    
+    // 保存当前状态
+    if (articleId) {
+      saveCurrentBrowsingState();
+    }
   };
 
   const handleNavigate = (direction: 'next' | 'prev') => {
@@ -553,12 +573,24 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       conditions.isStarred = 'true';
     } else if (filter === 'unread') {
       conditions.isRead = 'false';
-    } else if (window.location.pathname === '/today' || (filter === undefined && !feedId && !groupId)) {
-      // Today view (either via route prop or default route)
+    } else if (filter === 'all') {
+      // 不添加额外条件
+    } else if (filter === 'today' || window.location.pathname === '/today') {
+      // 明确指定今日视图
+      LogConfig.info('HOMEPAGE', '应用今日筛选条件');
+      const todayRange = getTodayRange();
+      conditions.publishDate = { $gte: todayRange.start, $lte: todayRange.end };
+      // 确保isTodayView状态正确
+      if (!isTodayView) {
+        LogConfig.info('HOMEPAGE', '设置isTodayView为true');
+        setIsTodayView(true);
+      }
+    } else if (window.location.pathname === '/today' || isTodayView) {
+      // 只有在明确指定今日视图或isTodayView为true时才应用今日筛选条件
       const todayRange = getTodayRange();
       conditions.publishDate = { $gte: todayRange.start, $lte: todayRange.end };
     }
-    // `filter === 'all'` needs no initial condition.
+    // 移除默认应用今日视图的逻辑
     
     // 2. Additively apply the Radio.Group filter from the bottom bar.
     if (activeListFilter === 'starred') {
@@ -568,7 +600,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
     
     return conditions;
-  }, [feedId, groupId, activeListFilter, filter]);
+  }, [feedId, groupId, activeListFilter, filter, isTodayView]);
 
   const handleAddFirstFeed = (feed: FeedSource) => {
     navigate(`/feed/${feed.id}`);
@@ -577,6 +609,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const handleArticleDetailViewModeChange = (mode: 'full' | 'web' | 'original') => {
     setArticleDetailViewMode(mode);
+    // 保存当前的视图模式
+    saveCurrentBrowsingState();
   };
 
   const handleMarkAllReadLocal = async () => {
@@ -645,7 +679,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   // 检查是否有文章存在
   const [hasArticles, setHasArticles] = useState(true);
   
-  // 检查是否有任何文章存在的函数
+  // 检查是否应该显示欢迎页面
+  const [shouldShowWelcomePage, setShouldShowWelcomePage] = useState(false);
+  
+  // 检查是否有文章存在的函数
   useEffect(() => {
     const checkForArticles = async () => {
       if (!db || !dbInitialized) return;
@@ -654,17 +691,21 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         // 检查是否至少有一篇文章
         const count = await db.articles.count();
         setHasArticles(count > 0);
+        
+        // 检查是否有保存的浏览状态
+        const hasSavedState = localStorage.getItem('lastBrowsingState') !== null;
+        
+        // 只有在没有订阅源、没有文章且没有保存状态的情况下才显示欢迎页面
+        setShouldShowWelcomePage(feeds.length === 0 && !count && !hasSavedState && !searchTerm);
       } catch (error) {
         LogConfig.error('HOMEPAGE', '检查文章失败:', error);
         setHasArticles(true); // 出错时假设有文章，避免不必要地显示欢迎页面
+        setShouldShowWelcomePage(false);
       }
     };
     
     checkForArticles();
-  }, [db, dbInitialized, articleListRefreshTrigger]);
-
-  // 仅当确认没有订阅源且没有文章时才显示欢迎页面
-  const showWelcomePage = dbInitialized && settingsInitialized && feeds.length === 0 && !hasArticles && !searchTerm;
+  }, [db, dbInitialized, articleListRefreshTrigger, feeds.length, searchTerm]);
 
   // 从URL查询参数中获取articleId
   useEffect(() => {
@@ -722,9 +763,166 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
   }, [db]);
 
+  // 保存浏览状态到 localStorage
+  const saveCurrentBrowsingState = useCallback(() => {
+    if (!dbInitialized) return;
+    
+    const browsingState = {
+      feedId: feedId || null,
+      groupId: groupId || null,
+      selectedArticleId,
+      articleDetailViewMode,
+      pageTitle,
+      path: location.pathname,
+      searchTerm,
+      activeListFilter
+    };
+    
+    localStorage.setItem('lastBrowsingState', JSON.stringify(browsingState));
+    LogConfig.info('HOMEPAGE', '保存浏览状态:', browsingState);
+  }, [feedId, groupId, selectedArticleId, articleDetailViewMode, pageTitle, location.pathname, searchTerm, dbInitialized, activeListFilter]);
+
+  // 在组件卸载或窗口关闭时保存状态
+  useEffect(() => {
+    // 在组件卸载时保存状态
+    return () => {
+      saveCurrentBrowsingState();
+    };
+  }, [saveCurrentBrowsingState]);
+
+  // 添加窗口关闭事件监听器
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveCurrentBrowsingState();
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [saveCurrentBrowsingState]);
+
+  // 从 localStorage 恢复浏览状态
+  useEffect(() => {
+    if (!dbInitialized || !settingsInitialized) return;
+    
+    LogConfig.info('HOMEPAGE', '开始尝试恢复浏览状态...');
+    LogConfig.info('HOMEPAGE', `当前路径: ${location.pathname}, 查询参数: ${searchParams.toString()}`);
+    
+    // 检查 URL 是否已经有指定的路径，如果有就不恢复存储的状态
+    // 修改：只有当路径是根路径时才恢复状态，避免覆盖明确的导航
+    const isRootPath = location.pathname === '/';
+    if (!isRootPath) {
+      LogConfig.info('HOMEPAGE', '检测到特定路径，不恢复存储状态');
+      return;
+    }
+    
+    const savedStateJson = localStorage.getItem('lastBrowsingState');
+    if (!savedStateJson) {
+      LogConfig.info('HOMEPAGE', '没有找到保存的浏览状态');
+      // 如果没有保存的状态，可以选择设置为今日视图
+      LogConfig.info('HOMEPAGE', '没有保存的状态，设置为今日视图');
+      setIsTodayView(true);
+      return;
+    }
+    
+    try {
+      const savedState = JSON.parse(savedStateJson);
+      LogConfig.info('HOMEPAGE', '恢复浏览状态:', savedState);
+      
+      // 恢复路径和选择的文章
+      if (savedState.path && savedState.path !== '/' && savedState.path !== location.pathname) {
+        // 如果有特定路径，先导航过去
+        LogConfig.info('HOMEPAGE', `恢复到保存的路径: ${savedState.path}`);
+        if (savedState.selectedArticleId) {
+          // 如果有选中的文章，添加到查询参数
+          LogConfig.info('HOMEPAGE', `恢复路径和文章ID: ${savedState.path}?articleId=${savedState.selectedArticleId}`);
+          navigate(`${savedState.path}?articleId=${savedState.selectedArticleId}`);
+        } else {
+          LogConfig.info('HOMEPAGE', `恢复路径: ${savedState.path}`);
+          navigate(savedState.path);
+        }
+        return; // 导航后退出，避免重复设置状态
+      } 
+      
+      if (savedState.feedId) {
+        // 恢复订阅源
+        LogConfig.info('HOMEPAGE', `恢复到保存的订阅源: ${savedState.feedId}`);
+        if (savedState.selectedArticleId) {
+          LogConfig.info('HOMEPAGE', `恢复订阅源和文章ID: /feed/${savedState.feedId}?articleId=${savedState.selectedArticleId}`);
+          navigate(`/feed/${savedState.feedId}?articleId=${savedState.selectedArticleId}`);
+        } else {
+          LogConfig.info('HOMEPAGE', `恢复订阅源: /feed/${savedState.feedId}`);
+          navigate(`/feed/${savedState.feedId}`);
+        }
+        return; // 导航后退出
+      } else if (savedState.groupId) {
+        // 恢复分组
+        LogConfig.info('HOMEPAGE', `恢复到保存的分组: ${savedState.groupId}`);
+        if (savedState.selectedArticleId) {
+          LogConfig.info('HOMEPAGE', `恢复分组和文章ID: /group/${savedState.groupId}?articleId=${savedState.selectedArticleId}`);
+          navigate(`/group/${savedState.groupId}?articleId=${savedState.selectedArticleId}`);
+        } else {
+          LogConfig.info('HOMEPAGE', `恢复分组: /group/${savedState.groupId}`);
+          navigate(`/group/${savedState.groupId}`);
+        }
+        return; // 导航后退出
+      } else if (savedState.selectedArticleId) {
+        // 只恢复选中的文章
+        LogConfig.info('HOMEPAGE', `恢复选中的文章ID: ${savedState.selectedArticleId}`);
+        setSelectedArticleId(savedState.selectedArticleId);
+        if (savedState.articleDetailViewMode) {
+          LogConfig.info('HOMEPAGE', `恢复文章视图模式: ${savedState.articleDetailViewMode}`);
+          setArticleDetailViewMode(savedState.articleDetailViewMode);
+        }
+      }
+      
+      // 恢复搜索词
+      if (savedState.searchTerm) {
+        LogConfig.info('HOMEPAGE', `恢复搜索词: ${savedState.searchTerm}`);
+        setSearchTerm(savedState.searchTerm);
+        setSearchModeActive(true);
+      }
+      
+      // 如果没有特定的路径或订阅源/分组，但有保存的activeListFilter，恢复它
+      if (savedState.activeListFilter) {
+        LogConfig.info('HOMEPAGE', `恢复筛选器: ${savedState.activeListFilter}`);
+        setFilter(savedState.activeListFilter);
+      }
+      
+      // 根据保存的页面标题决定是否是今日视图
+      if (savedState.pageTitle === '今日文章') {
+        LogConfig.info('HOMEPAGE', '根据保存的页面标题设置为今日视图');
+        setIsTodayView(true);
+      } else {
+        LogConfig.info('HOMEPAGE', `根据保存的页面标题设置为非今日视图: ${savedState.pageTitle}`);
+        setIsTodayView(false);
+      }
+      
+    } catch (error) {
+      LogConfig.error('HOMEPAGE', '恢复浏览状态失败:', error);
+    }
+  }, [dbInitialized, settingsInitialized, navigate, location.pathname, searchParams, setFilter]);
+
+  // 监控isTodayView状态变化
+  useEffect(() => {
+    LogConfig.info('HOMEPAGE', `isTodayView状态变化: ${isTodayView}`);
+  }, [isTodayView]);
+
+  // 监控filter状态变化
+  useEffect(() => {
+    LogConfig.info('HOMEPAGE', `filter状态变化: ${filter}`);
+  }, [filter]);
+
+  // 监控activeListFilter状态变化
+  useEffect(() => {
+    LogConfig.info('HOMEPAGE', `activeListFilter状态变化: ${activeListFilter}`);
+  }, [activeListFilter]);
+
   return (
     <div className={styles.homeLayout}>
-      {showWelcomePage ? (
+      {shouldShowWelcomePage ? (
         <WelcomePage onAddFirstFeed={handleAddFirstFeed} />
       ) : !dbInitialized || !settingsInitialized ? (
         <Layout className={styles.homeLayout}>

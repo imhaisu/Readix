@@ -88,6 +88,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   
   // 记录是否是从笔记中心跳转过来的
   const [isFromNotesPage, setIsFromNotesPage] = useState(false);
+  
+  // 添加一个ref来跟踪滚动位置是否已经恢复
+  const scrollPositionRestored = useRef(false);
 
   const iconButtonStyle: React.CSSProperties = {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -428,12 +431,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
   const saveScrollPosition = useCallback(async (articleIdToSave: string, position: number) => {
     if (!db || !articleIdToSave) return;
+    
     try {
+      // 移除本地状态更新，仅保存到数据库
+      // 不再更新article状态，避免触发循环渲染
       await db.articles.update(articleIdToSave, { scrollPosition: position });
     } catch (error) {
-      console.error('保存文章滚动位置失败:', error);
+      console.error("保存阅读进度失败:", error);
     }
-  }, [db]);
+  }, [db]); // 只依赖db，移除article依赖
 
   useEffect(() => {
     setIsMounted(true);
@@ -562,6 +568,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
   useEffect(() => {
     loadArticle();
+    // 每次文章ID变化时，重置滚动位置恢复标志
+    scrollPositionRestored.current = false;
   }, [articleId, loadArticle]);
 
   const handleFetchAndUpgradeArticle = useCallback(async (articleToUpgrade: Article) => {
@@ -578,43 +586,83 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     }
   }, [annotations, performUpgrade]);
 
+  // 创建一个滚动处理函数，在滚动时保存位置
+  const handleScroll = useCallback(
+    debounce(() => {
+      if (!article || !scrollableContentRef.current) return;
+      const currentPosition = scrollableContentRef.current.scrollTop;
+      saveScrollPosition(article.id, currentPosition);
+    }, 300),
+    [article, saveScrollPosition]
+  );
+
+  // 添加滚动事件监听
   useEffect(() => {
+    if (!scrollableContentRef.current || !article) return; // 确保article存在
+
+    const scrollableContent = scrollableContentRef.current;
+    scrollableContent.addEventListener('scroll', handleScroll);
+
     return () => {
-      if (articleId && scrollableContentRef.current) {
-        saveScrollPosition(articleId, scrollableContentRef.current.scrollTop);
+      scrollableContent.removeEventListener('scroll', handleScroll);
+      // 组件卸载时保存当前滚动位置
+      if (article && scrollableContentRef.current) {
+        saveScrollPosition(article.id, scrollableContentRef.current.scrollTop);
       }
     };
-  }, [articleId, saveScrollPosition]);
+  }, [article?.id, handleScroll, saveScrollPosition]); // 只依赖article.id而不是整个article对象
 
+  // 在浏览器窗口关闭前保存位置
   useEffect(() => {
-    const contentElement = scrollableContentRef.current;
-    if (!contentElement || (viewMode !== 'full' && viewMode !== 'original')) return;
-
-    let scrollSaveTimer: NodeJS.Timeout;
-
-    const handleScroll = () => {
-      if (article && articleId) {
-        clearTimeout(scrollSaveTimer);
-        scrollSaveTimer = setTimeout(() => {
-          if (db) {
-            db.articles.update(articleId, { scrollPosition: contentElement.scrollTop });
-          }
-        }, 250);
+    const handleBeforeUnload = () => {
+      if (article && scrollableContentRef.current) {
+        // 同步方式保存，确保在关闭前能完成
+        try {
+          const position = scrollableContentRef.current.scrollTop;
+          localStorage.setItem(`temp_scroll_${article.id}`, position.toString());
+        } catch (e) {
+          console.error("临时保存阅读进度失败:", e);
+        }
       }
     };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [article?.id]); // 只依赖article.id而不是整个article对象
 
-    if (article && article.scrollPosition && article.scrollPosition > 0) {
-      contentElement.scrollTop = article.scrollPosition;
-    } else {
-      contentElement.scrollTop = 0;
+  // 恢复滚动位置
+  useEffect(() => {
+    if (!article || !scrollableContentRef.current) return;
+    
+    // 使用组件级ref跟踪是否已恢复过滚动位置，避免多次恢复
+    if (scrollPositionRestored.current) return;
+    
+    // 首先尝试从localStorage获取临时保存的位置
+    const tempScroll = localStorage.getItem(`temp_scroll_${article.id}`);
+    if (tempScroll) {
+      localStorage.removeItem(`temp_scroll_${article.id}`); // 使用后删除
+      setTimeout(() => {
+        if (scrollableContentRef.current) {
+          scrollableContentRef.current.scrollTop = parseInt(tempScroll, 10);
+          scrollPositionRestored.current = true;
+        }
+      }, 100);
+      return;
     }
-
-    contentElement.addEventListener('scroll', handleScroll);
-    return () => {
-      contentElement.removeEventListener('scroll', handleScroll);
-      clearTimeout(scrollSaveTimer);
-    };
-  }, [article, articleId, db, viewMode]);
+    
+    // 如果没有临时保存的位置，则使用数据库中的位置
+    if (article.scrollPosition && article.scrollPosition > 0) {
+      setTimeout(() => {
+        if (scrollableContentRef.current) {
+          scrollableContentRef.current.scrollTop = article.scrollPosition || 0;
+          scrollPositionRestored.current = true;
+        }
+      }, 100);
+    }
+  }, [article?.id]); // 只依赖article.id而不是整个article对象
 
   useEffect(() => {
     if (viewMode === 'web') {
