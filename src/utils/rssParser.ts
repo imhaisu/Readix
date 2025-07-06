@@ -7,7 +7,7 @@ const LOG_CONFIG = {
   ENABLE_FEED_LOGS: false,    // 订阅源获取的日志
   ENABLE_ARTICLE_LOGS: false, // 文章处理的日志
   ENABLE_DATE_LOGS: false,    // 日期处理的日志
-  ENABLE_ERROR_LOGS: true,    // 错误日志（始终建议开启）
+  ENABLE_ERROR_LOGS: false,    // 错误日志（始终建议开启）
   ENABLE_JIEMODUI_LOGS: false, // 芥末堆特定的日志
   ENABLE_WARN_LOGS: false,    // 警告日志
 };
@@ -91,6 +91,24 @@ const siteSpecificDateRules: Record<string, {
           const date = new Date(year, month, day);
           if (isValidReasonableDate(date)) {
             // console.log(`[RSS Parser] 从芥末堆内容中提取到日期: ${date.toISOString()} 对于文章: ${item.title}`);
+            return date;
+          }
+        }
+        return null;
+      },
+      // 新增：尝试从标题中提取日期（如果有）
+      (item: any): Date | null => {
+        if (!item.title) return null;
+        
+        // 尝试匹配标题中的日期格式，例如 "YYYY-MM-DD" 或 "YYYY/MM/DD" 或 "YYYY.MM.DD"
+        const match = item.title.match(/(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+        if (match) {
+          const year = parseInt(match[1], 10);
+          const month = parseInt(match[2], 10) - 1;
+          const day = parseInt(match[3], 10);
+          
+          const date = new Date(year, month, day);
+          if (isValidReasonableDate(date)) {
             return date;
           }
         }
@@ -273,6 +291,25 @@ const dateExtractors = [
     }
     
     return null;
+  },
+  
+  // 8. 新增：尝试从标题中提取日期
+  (item: any): Date | null => {
+    if (!item.title) return null;
+    
+    // 尝试匹配标题中的日期格式，例如 "YYYY-MM-DD" 或 "YYYY/MM/DD" 或 "YYYY.MM.DD"
+    const match = item.title.match(/(\d{4})[-\/\.](\d{1,2})[-\/\.](\d{1,2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      
+      const date = new Date(year, month, day);
+      if (isValidReasonableDate(date)) {
+        return date;
+      }
+    }
+    return null;
   }
 ];
 
@@ -317,11 +354,16 @@ const fixFeedDateIssues = (feedUrl: string, item: any): { date: Date, isFirstFet
     }
   }
   
-  // 如果所有方法都失败，使用当前日期，但标记为首次获取时间
+  // 3. 如果所有方法都失败，使用智能日期生成逻辑
   if (LOG_CONFIG.ENABLE_ERROR_LOGS) {
-    log.error(`无法提取日期，使用首次获取时间: ${item.title}`);
+    log.warn(`无法提取日期，使用智能日期生成: ${item.title}`);
   }
-  return { date: defaultDate, isFirstFetchDate: true };
+  
+  // 智能日期生成：如果无法从内容中提取日期，则使用当前获取时间作为文章日期。
+  // 在数据库更新逻辑中，会检查 isFirstFetchDate 标志。
+  // 如果为 true，则保留第一次获取时设定的日期，避免后续刷新覆盖。
+  // 这样就实现了"没有时间, 就按照获取的第一次的时间存下来"的逻辑。
+  return { date: new Date(), isFirstFetchDate: true };
 };
 
 /**
@@ -401,10 +443,14 @@ export const fetchRssFeed = async (
         continue;
       }
 
+      // 生成文章ID
+      const articleId = generateArticleId(item, feedSource);
+      
+      // 尝试提取日期
       const { date: publishedDate, isFirstFetchDate } = fixFeedDateIssues(feedSource.url, item);
       
       const article: Article = {
-        id: generateArticleId(item, feedSource),
+        id: articleId,
         title: item.title,
         url: item.link,
         author: item.author || item.creator || '',
@@ -414,7 +460,7 @@ export const fetchRssFeed = async (
         isRead: 'false',
         isStarred: 'false',
         sourceId: feedSource.id || '',
-        isFirstFetchDate: isFirstFetchDate,
+        isFirstFetchDate,
       };
 
       // 应用过滤规则，设置isHidden属性
@@ -449,12 +495,13 @@ export const fetchRssFeed = async (
  * @param feeds
  * @param onProgress
  * @param onComplete
+ * @returns 包含feed和articles的结果数组
  */
 export const refreshAllFeeds = async (
   feeds: FeedSource[],
   onProgress?: (feed: FeedSource, articles: Article[]) => void,
   onComplete?: (results: { feed: FeedSource, articles: Article[] }[]) => void
-) => {
+): Promise<{ feed: FeedSource, articles: Article[] }[]> => {
   const results: { feed: FeedSource, articles: Article[] }[] = [];
   
   for (const feed of feeds) {
@@ -472,6 +519,8 @@ export const refreshAllFeeds = async (
   if (onComplete) {
     onComplete(results);
   }
+  
+  return results;
 };
 
 /**

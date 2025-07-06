@@ -32,6 +32,8 @@ import { processFeedIcons } from '../utils/iconUtils';
 import { useFilter } from '../contexts/FilterContext';
 import styles from './SidebarLayout.module.css';
 import { useLayout } from '../contexts/LayoutContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { useTitleBar } from '../contexts/TitleBarContext';
 
 const { Content } = Layout;
 
@@ -442,35 +444,60 @@ const SidebarLayout: React.FC = () => {
       }
       
       const results = await refreshAllFeeds(feedsToRefresh);
+      
+      // 确保results是数组且可迭代
+      if (results && Array.isArray(results)) {
+        for (const result of results) {
+          const { feed, articles: fetchedArticles } = result;
+          if (fetchedArticles.length > 0 && feed.id) {
+            const existingArticles = await db.articles.where('sourceId').equals(feed.id).toArray();
+            const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
 
-      for (const result of results) {
-        const { feed, articles: fetchedArticles } = result;
-        if (fetchedArticles.length > 0 && feed.id) {
-          const existingArticles = await db.articles.where('sourceId').equals(feed.id).toArray();
-          const existingArticlesMap = new Map(existingArticles.map(a => [a.id, a]));
-
-          const articlesToPut = fetchedArticles.map(fetchedArticle => {
-            const existingArticle = existingArticlesMap.get(fetchedArticle.id);
-            if (existingArticle) {
-              return {
-                ...fetchedArticle,
-                isRead: existingArticle.isRead,
-                isStarred: existingArticle.isStarred,
-                scrollPosition: existingArticle.scrollPosition,
-                isReadLater: existingArticle.isReadLater,
-              };
-            } else {
-              return fetchedArticle;
-            }
-          });
-          
-          await db.articles.bulkPut(articlesToPut);
-          await updateUnreadCountOptimized(db, feed.id);
+            const articlesToPut = fetchedArticles.map((fetchedArticle: DbArticle) => {
+              const existingArticle = existingArticlesMap.get(fetchedArticle.id);
+              if (existingArticle) {
+                return {
+                  ...fetchedArticle,
+                  isRead: existingArticle.isRead,
+                  isStarred: existingArticle.isStarred,
+                  scrollPosition: existingArticle.scrollPosition,
+                  isReadLater: existingArticle.isReadLater,
+                  // 如果原文章使用的是首次获取时间，则保留原始日期
+                  publishDate: existingArticle.isFirstFetchDate ? existingArticle.publishDate : fetchedArticle.publishDate,
+                  // 保留首次获取时间标记
+                  isFirstFetchDate: existingArticle.isFirstFetchDate || fetchedArticle.isFirstFetchDate,
+                  // 添加一个时间戳字段，确保数据库能检测到变化
+                  lastRefreshed: Date.now()
+                };
+              } else {
+                return fetchedArticle;
+              }
+            });
+            
+            await db.articles.bulkPut(articlesToPut);
+            await updateUnreadCountOptimized(db, feed.id);
+          }
         }
+      } else {
+        console.warn('[SidebarLayout] refreshAllFeeds返回的结果不是数组或为空:', results);
       }
 
+      // 强制刷新文章列表
       triggerFeedCountRefresh();
       triggerArticleListRefresh();
+      
+      // 如果当前在查看某个订阅源，强制重新加载该订阅源的文章
+      const currentPath = window.location.pathname;
+      if (currentPath.startsWith('/feed/')) {
+        const feedId = currentPath.split('/feed/')[1];
+        const currentFeed = feeds.find(f => f.id === feedId);
+        if (currentFeed) {
+          // 延迟一点执行，确保前面的操作已完成
+          setTimeout(() => {
+            triggerArticleListRefresh();
+          }, 100);
+        }
+      }
 
     } catch (error) {
       console.error('[SidebarLayout] Feed refresh operation failed:', error);
