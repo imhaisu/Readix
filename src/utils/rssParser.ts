@@ -384,16 +384,32 @@ const generateArticleId = (item: any, feedSource: FeedSource): string => {
     return id;
   }
   
-  // 通用ID生成逻辑
+  // 增强通用ID生成逻辑，使其更稳定
   if (item.guid) {
     // 优先使用guid作为唯一标识
-    return item.guid;
+    return `guid_${item.guid.replace(/\s+/g, '')}`;
   } else if (item.link) {
-    // 如果没有guid，使用链接作为唯一标识
-    return item.link;
+    // 如果没有guid，规范化处理链接作为唯一标识
+    // 移除协议、www、查询参数，保留核心URL结构
+    const normalizedLink = item.link
+      .replace(/https?:\/\//, '')
+      .replace(/www\./, '')
+      .replace(/\?.*$/, '');
+    
+    // 如果有标题，结合标题的前20个字符（移除空白）增加唯一性
+    if (item.title) {
+      const titleHash = item.title
+        .replace(/\s+/g, '')
+        .substring(0, 20);
+      return `link_${normalizedLink}_${titleHash}`;
+    }
+    
+    return `link_${normalizedLink}`;
   } else {
     // 如果既没有guid也没有link，使用标题和源URL生成唯一标识
-    return `${feedSource.url}#${item.title}`;
+    const titleHash = item.title ? 
+      item.title.replace(/\s+/g, '').substring(0, 30) : 'notitle';
+    return `title_${feedSource.url.replace(/https?:\/\//, '')}_${titleHash}`;
   }
 };
 
@@ -503,6 +519,7 @@ export const refreshAllFeeds = async (
   onComplete?: (results: { feed: FeedSource, articles: Article[] }[]) => void
 ): Promise<{ feed: FeedSource, articles: Article[] }[]> => {
   const results: { feed: FeedSource, articles: Article[] }[] = [];
+  const failedFeeds: FeedSource[] = [];
   
   for (const feed of feeds) {
     try {
@@ -513,6 +530,28 @@ export const refreshAllFeeds = async (
       }
     } catch (error) {
       log.error(`刷新订阅源 "${feed.title}" 时失败:`, error);
+      failedFeeds.push(feed);
+    }
+  }
+  
+  // 对失败的订阅源尝试一次重试，但使用更严格的错误处理
+  if (failedFeeds.length > 0) {
+    log.warn(`第一次刷新失败的订阅源: ${failedFeeds.length}个，开始重试...`);
+    
+    for (const feed of failedFeeds) {
+      try {
+        // 使用更长的超时时间重试
+        const articles = await fetchRssFeed(feed);
+        results.push({ feed, articles });
+        if (onProgress) {
+          onProgress(feed, articles);
+        }
+        log.warn(`订阅源 "${feed.title}" 重试成功`);
+      } catch (error) {
+        log.error(`订阅源 "${feed.title}" 重试仍然失败:`, error);
+        // 仍然添加到结果中，但文章为空数组
+        results.push({ feed, articles: [] });
+      }
     }
   }
 

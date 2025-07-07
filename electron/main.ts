@@ -23,6 +23,18 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 const isDevelopment = process.env.NODE_ENV === 'development' || !app.isPackaged;
 
+// 在文件前部添加ensureDirectoriesExist函数
+// 确保必要的目录存在
+const ensureDirectoriesExist = () => {
+  // 确保faviconsDir存在
+  if (!fs.existsSync(faviconsDir)) {
+    fs.mkdirSync(faviconsDir, { recursive: true });
+    console.log(`[Main Process] 已创建图标缓存目录: ${faviconsDir}`);
+  }
+  
+  // 可以在这里添加其他需要确保存在的目录
+};
+
 const createWindow = () => {
   // 定义 Store 的 schema 以获得类型安全
   const store = new Store<{ windowBounds: { width: number; height: number; x?: number; y?: number } }>({
@@ -281,7 +293,43 @@ function createTray() {
 // 这段程序将会在 Electron 结束初始化
 // 和创建浏览器窗口的时候调用
 // 部分 API 在 ready 事件触发后才能使用
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // 首先确保用户数据目录存在
+  ensureDirectoriesExist();
+  
+  // 创建主窗口
+  createWindow();
+  
+  // 创建系统托盘图标
+  createTray();
+
+  // 设置V8内存限制调整
+  // 注意：这些值可能需要根据实际情况调整
+  app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512');
+  
+  // 添加未捕获异常处理
+  process.on('uncaughtException', (error) => {
+    console.error('[Main Process] 未捕获异常:', error);
+    // 可以在这里记录错误，但不终止应用
+  });
+  
+  // 监控内存使用
+  const memoryMonitor = setInterval(() => {
+    const memUsage = process.memoryUsage();
+    // 如果RSS内存超过600MB，触发垃圾收集
+    if (memUsage.rss > 600 * 1024 * 1024) {
+      console.log('[Main Process] 检测到高内存使用，触发垃圾收集');
+      if (global.gc) {
+        global.gc();
+      }
+    }
+  }, 60000); // 每分钟检查一次
+  
+  // 清理函数
+  app.on('will-quit', () => {
+    clearInterval(memoryMonitor);
+  });
+});
 
 // 除了 macOS 外，当所有窗口都被关闭的时候退出程序。 macOS 中用户通常期望应用在没有窗口可见的情况下继续运行，除非用户显式退出
 app.on('window-all-closed', () => {
@@ -333,6 +381,19 @@ async function fetchAndParseFeed(feedUrl: string) {
   }
 
   const parsedFeed = await rssParser.parseString(feedText);
+
+  // 添加内存优化 - 限制处理的文章数量
+  if (parsedFeed.items && parsedFeed.items.length > 30) {
+    console.log(`[Main Process] 大量文章(${parsedFeed.items.length})处理，实施分批优化`);
+    
+    // 保存原始长度
+    const originalLength = parsedFeed.items.length;
+    
+    // 只保留最新的30篇文章进行处理
+    parsedFeed.items = parsedFeed.items.slice(0, 30);
+    
+    console.log(`[Main Process] 已优化处理：从${originalLength}篇减少到${parsedFeed.items.length}篇`);
+  }
 
   // 修复相对 URL
   const baseLink = parsedFeed.link || feedUrl;

@@ -26,7 +26,7 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { FeedSource, Group, Article as DbArticle } from '../db/database';
 import { refreshAllFeeds, fetchRssFeed } from '../utils/rssParser';
-import { cleanupOldArticles } from '../utils/cleanupHelper';
+import { cleanupOldArticles, cleanupOrphanedArticles, detectAndCleanupDuplicateArticles } from '../utils/cleanupHelper';
 import { getTodayRange, updateUnreadCountOptimized } from '../utils/helpers';
 import { processFeedIcons } from '../utils/iconUtils';
 import { useFilter } from '../contexts/FilterContext';
@@ -431,6 +431,9 @@ const SidebarLayout: React.FC = () => {
     return path.substring(1);
   };
 
+  // 添加状态管理refreshCompletedTrigger
+  const [refreshCompletedTrigger, setRefreshCompletedTrigger] = useState(0);
+
   const handleRefreshAll = useCallback(async (isSilent: boolean = false) => {
     if (!db || (refreshing && !isSilent) || feeds.length === 0) {
         if (refreshing && !isSilent) log.count('[SidebarLayout] Refresh already in progress or no feeds.');
@@ -509,6 +512,8 @@ const SidebarLayout: React.FC = () => {
       if (!isSilent) {
         setRefreshing(false);
       }
+      // 增加这一行，更新完成触发器
+      setRefreshCompletedTrigger(prev => prev + 1);
     }
   }, [db, refreshing, feeds, triggerArticleListRefresh, triggerFeedCountRefresh]);
 
@@ -596,6 +601,50 @@ const SidebarLayout: React.FC = () => {
       siderPanelRef.current?.expand();
     }
   };
+
+  // 修改清理任务的useEffect
+  useEffect(() => {
+    // 启动应用时和每次刷新所有订阅源后，执行一次清理
+    let cleanupTimeout: NodeJS.Timeout;
+    
+    const scheduleCleanup = () => {
+      // 延迟2秒执行，确保刷新操作已完成
+      cleanupTimeout = setTimeout(async () => {
+        if (db && dbInitialized) {
+          try {
+            console.log('[SidebarLayout] 开始执行自动清理任务...');
+            
+            // 清理重复文章
+            await detectAndCleanupDuplicateArticles(db);
+            
+            // 清理无效文章 
+            await cleanupOrphanedArticles(db);
+            
+            // 根据保留天数清理旧文章
+            if (settings && settings.general.retentionDays > 0) {
+              await cleanupOldArticles(db, settings.general.retentionDays);
+            }
+            
+            console.log('[SidebarLayout] 自动清理任务完成');
+          } catch (error) {
+            console.error('[SidebarLayout] 自动清理过程中发生错误:', error);
+          }
+        }
+      }, 2000);
+    };
+    
+    // 数据库初始化后执行一次
+    if (dbInitialized) {
+      scheduleCleanup();
+    }
+    
+    // 返回清理函数
+    return () => {
+      if (cleanupTimeout) {
+        clearTimeout(cleanupTimeout);
+      }
+    };
+  }, [dbInitialized, refreshCompletedTrigger, settings, db]);
 
   return (
     <Layout 

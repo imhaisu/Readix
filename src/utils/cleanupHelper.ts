@@ -98,4 +98,109 @@ export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> 
     console.error('[Cleanup] 清理孤儿文章时出错:', error);
     return 0;
   }
-}; 
+};
+
+/**
+ * 智能检测与清理重复文章
+ * @param db 数据库实例
+ * @returns 清理的文章数量
+ */
+export const detectAndCleanupDuplicateArticles = async (db: RssDatabase): Promise<number> => {
+  console.log('[Cleanup] 开始智能检测与清理重复文章...');
+  
+  try {
+    // 获取所有文章
+    const allArticles = await db.articles.toArray();
+    
+    // 创建文章内容指纹映射
+    const articleFingerprints = new Map<string, Article[]>();
+    
+    // 对每篇文章生成指纹
+    allArticles.forEach(article => {
+      // 提取标题和链接的核心部分作为指纹
+      const title = article.title.replace(/\s+/g, '').toLowerCase();
+      const url = article.url
+        .replace(/https?:\/\//, '')
+        .replace(/www\./, '')
+        .replace(/\?.*$/, '');
+      
+      // 指纹为标题+URL组合的哈希
+      const fingerprint = `${article.sourceId}#${title}#${url}`;
+      
+      if (!articleFingerprints.has(fingerprint)) {
+        articleFingerprints.set(fingerprint, []);
+      }
+      
+      articleFingerprints.get(fingerprint)!.push(article);
+    });
+    
+    // 找出需要删除的重复文章
+    const articlesToDelete: string[] = [];
+    
+    articleFingerprints.forEach((duplicates, fingerprint) => {
+      if (duplicates.length > 1) {
+        // 按照优先级排序：保留已读、有注释、被标星的文章
+        duplicates.sort((a, b) => {
+          // 1. 首先考虑是否有注释或标星
+          const aHasAnnotations = a.annotations && a.annotations.length > 0;
+          const bHasAnnotations = b.annotations && b.annotations.length > 0;
+          
+          if (aHasAnnotations && !bHasAnnotations) return -1;
+          if (!aHasAnnotations && bHasAnnotations) return 1;
+          
+          if (a.isStarred === 'true' && b.isStarred !== 'true') return -1;
+          if (a.isStarred !== 'true' && b.isStarred === 'true') return 1;
+          
+          // 2. 已读文章优先于未读文章（防止未读计数异常）
+          if (a.isRead === 'true' && b.isRead !== 'true') return -1;
+          if (a.isRead !== 'true' && b.isRead === 'true') return 1;
+          
+          // 3. 如果以上条件都相同，保留发布日期较新的
+          return b.publishDate - a.publishDate;
+        });
+        
+        // 保留排序后的第一篇，删除其余的
+        for (let i = 1; i < duplicates.length; i++) {
+          articlesToDelete.push(duplicates[i].id);
+        }
+      }
+    });
+    
+    // 批量删除重复文章
+    if (articlesToDelete.length > 0) {
+      await db.articles.bulkDelete(articlesToDelete);
+      console.log(`[Cleanup] 已成功清理 ${articlesToDelete.length} 篇重复文章`);
+      
+      // 更新受影响的订阅源计数
+      await updateAffectedFeedCounts(db);
+      
+      return articlesToDelete.length;
+    }
+    
+    console.log('[Cleanup] 未发现需要清理的重复文章');
+    return 0;
+  } catch (error) {
+    console.error('[Cleanup] 检测和清理重复文章失败:', error);
+    return 0;
+  }
+};
+
+/**
+ * 更新受影响的订阅源计数
+ * @param db 数据库实例
+ */
+async function updateAffectedFeedCounts(db: RssDatabase): Promise<void> {
+  const feeds = await db.feeds.toArray();
+  for (const feed of feeds) {
+    if (feed.id) {
+      const unreadCount = await db.articles.where({
+        sourceId: feed.id,
+        isRead: 'false',
+        isHidden: false
+      }).count();
+      
+      await db.feeds.update(feed.id, { unreadCount });
+    }
+  }
+  console.log('[Cleanup] 已更新所有受影响订阅源的未读计数');
+} 
