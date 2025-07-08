@@ -240,22 +240,36 @@ export const useArticleListManager = ({
           }
         }
 
-        // Fetch associated feed info for the loaded articles
-        if (fetchedArticles.length > 0) {
-          const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
-          if (sourceIds.length > 0) {
-            const feeds = await db.feeds.where('id').anyOf(sourceIds as string[]).toArray();
-            const newFeedInfoMap = new Map<string, FeedSource>();
-            for (const feed of feeds) {
-              if (feed && feed.id) {
-                newFeedInfoMap.set(feed.id, {
-                  ...feed,
-                  iconUrl: await processIconUrl(feed.iconUrl),
-                });
-              }
+        // 获取所有文章中涉及的订阅源ID
+        const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
+        
+        // 修复：确保获取所有需要的订阅源，而不仅仅是当前上下文中的
+        // 这样即使在未读筛选条件下也能显示正确的订阅源信息
+        if (sourceIds.length > 0) {
+          const feeds = await db.feeds.where('id').anyOf(sourceIds as string[]).toArray();
+          const newFeedInfoMap = new Map<string, FeedSource>();
+          
+          for (const feed of feeds) {
+            if (feed && feed.id) {
+              newFeedInfoMap.set(feed.id, {
+                ...feed,
+                iconUrl: await processIconUrl(feed.iconUrl),
+              });
             }
-            setFeedInfoMap(newFeedInfoMap);
           }
+          
+          // 确保当前选中的订阅源也在映射中
+          if (currentFeedId && !newFeedInfoMap.has(currentFeedId)) {
+            const currentFeed = await db.feeds.get(currentFeedId);
+            if (currentFeed) {
+              newFeedInfoMap.set(currentFeedId, {
+                ...currentFeed,
+                iconUrl: await processIconUrl(currentFeed.iconUrl),
+              });
+            }
+          }
+          
+          setFeedInfoMap(newFeedInfoMap);
         }
         
         if (!hasInitialLoaded) {

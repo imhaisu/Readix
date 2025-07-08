@@ -998,15 +998,29 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   if (loading) {
     return (
       <div className={styles.articleDetailContainer} style={articleStyle}>
-        <Skeleton active paragraph={{ rows: 15 }} />
+        <div className={styles.loadingContainer}>
+          <Spin size="large" />
+          <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>正在加载文章内容...</p>
+        </div>
       </div>
     );
   }
 
   if (!article) {
-    return <div className={styles.articleDetailContainer} style={articleStyle}>
-      <Empty description="文章不存在或已被删除" className={styles.emptyState} />
-    </div>;
+    return (
+      <div className={styles.articleDetailContainer} style={articleStyle}>
+        <div className={styles.errorContainer}>
+          <Empty description="文章不存在或已被删除" className={styles.emptyState} />
+          <Button 
+            type="primary" 
+            onClick={handleCloseDetail} 
+            style={{ marginTop: 16 }}
+          >
+            返回列表
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   const isAnyAiLoading = isSummaryLoading || isMindmapLoading || isHighlightLoading;

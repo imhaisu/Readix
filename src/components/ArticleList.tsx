@@ -337,7 +337,27 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
 
   const renderListItem = (article: Article) => {
     const feed = article.sourceId ? feedInfoMap.get(article.sourceId) : undefined;
-    const articleSourceTitle = feed ? feed.title : '未知来源';
+    
+    // 优化未知来源的处理逻辑
+    let articleSourceTitle = '未知来源';
+    if (feed?.title) {
+      articleSourceTitle = feed.title;
+    } else if (article.sourceId) {
+      // 尝试从文章的 sourceId 中提取域名或其他信息作为备用显示
+      try {
+        // 如果 sourceId 是 URL 形式，尝试提取主机名
+        if (article.sourceId.startsWith('http')) {
+          const url = new URL(article.sourceId);
+          articleSourceTitle = url.hostname;
+        } else {
+          // 如果 sourceId 不是 URL 但包含有意义的标识符，则使用它
+          articleSourceTitle = article.sourceId.split('-')[0] || '未知来源';
+        }
+      } catch (e) {
+        articleSourceTitle = '未知来源';
+      }
+    }
+    
     const articleSourceIconUrl = feed ? feed.iconUrl : undefined;
     const isArticleSelected = selectedArticleId === article.id;
     const isRead = article.isRead === 'true';
@@ -434,11 +454,36 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     }
   
     if (displayedArticles.length === 0) {
-      return null;
+      // 显示一个更友好的空状态
+      return (
+        <div className={styles.emptyState || ''} style={{ 
+          padding: '48px 24px', 
+          textAlign: 'center',
+          color: 'var(--text-secondary)'
+        }}>
+          <Empty 
+            description="没有找到文章" 
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        </div>
+      );
     }
   
     return (
       <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
+        {isRefreshing && (
+          <div style={{ 
+            padding: '12px', 
+            textAlign: 'center', 
+            position: 'sticky', 
+            top: 0, 
+            backgroundColor: 'var(--bg-primary)',
+            zIndex: 5,
+            borderBottom: '1px solid var(--border-color)'
+          }}>
+            <PulsingLoader />
+          </div>
+        )}
         <AnimatePresence>
           {displayedArticles.map(article => renderListItem(article))}
         </AnimatePresence>
