@@ -711,8 +711,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   useEffect(() => {
     const articleIdFromUrl = searchParams.get('articleId');
     if (articleIdFromUrl) {
-      LogConfig.info('HOMEPAGE', `从URL查询参数中获取articleId: ${articleIdFromUrl}`);
-      setSelectedArticleId(articleIdFromUrl);
+      // 解码URL参数中的文章ID
+      const decodedArticleId = decodeURIComponent(articleIdFromUrl);
+      LogConfig.info('HOMEPAGE', `从URL查询参数中获取articleId: ${decodedArticleId}`);
+      setSelectedArticleId(decodedArticleId);
     }
   }, [searchParams, feedId, groupId]);
 

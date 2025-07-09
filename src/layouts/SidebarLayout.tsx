@@ -413,6 +413,132 @@ const SidebarLayout: React.FC = () => {
     }
   }, [navigate, location, isFeedListVisible, setIsFeedListVisible]);
 
+  // 添加一个ref来跟踪导航是否已经执行
+  const navigationExecutedRef = useRef(false);
+
+  useEffect(() => {
+    // 确保数据库和设置都已初始化，且导航尚未执行
+    if (!dbInitialized || !settingsInitialized || navigationExecutedRef.current) {
+      if (!dbInitialized || !settingsInitialized) {
+        console.log('[SidebarLayout] 等待数据库和设置初始化完成...');
+      }
+      return;
+    }
+    
+    // 标记导航已执行，防止重复执行
+    navigationExecutedRef.current = true;
+    
+    console.log('[SidebarLayout] 数据库和设置已初始化，开始恢复浏览状态...');
+    
+    // 优先尝试使用完整的浏览状态
+    const savedStateJson = localStorage.getItem('lastBrowsingState');
+    if (savedStateJson) {
+      try {
+        const savedState = JSON.parse(savedStateJson);
+        console.log('[SidebarLayout] 找到保存的浏览状态:', savedState);
+        
+        // 如果有保存的路径，使用它
+        if (savedState.path && savedState.path !== '/') {
+          // 如果有选中的文章，添加到查询参数
+          if (savedState.selectedArticleId) {
+            // 使用encodeURIComponent处理文章ID中的特殊字符
+            const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
+            console.log(`[SidebarLayout] 恢复到路径和文章: ${savedState.path}?articleId=${encodedArticleId}`);
+            navigate(`${savedState.path}?articleId=${encodedArticleId}`, { replace: true });
+          } else {
+            console.log(`[SidebarLayout] 恢复到路径: ${savedState.path}`);
+            navigate(savedState.path, { replace: true });
+          }
+          return; // 导航后退出
+        }
+        
+        // 如果有保存的订阅源
+        if (savedState.feedId) {
+          if (savedState.selectedArticleId) {
+            // 使用encodeURIComponent处理文章ID中的特殊字符
+            const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
+            console.log(`[SidebarLayout] 恢复到订阅源和文章: /feed/${savedState.feedId}?articleId=${encodedArticleId}`);
+            navigate(`/feed/${savedState.feedId}?articleId=${encodedArticleId}`, { replace: true });
+          } else {
+            console.log(`[SidebarLayout] 恢复到订阅源: /feed/${savedState.feedId}`);
+            navigate(`/feed/${savedState.feedId}`, { replace: true });
+          }
+          return; // 导航后退出
+        }
+        
+        // 如果有保存的分组
+        if (savedState.groupId) {
+          if (savedState.selectedArticleId) {
+            // 使用encodeURIComponent处理文章ID中的特殊字符
+            const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
+            console.log(`[SidebarLayout] 恢复到分组和文章: /group/${savedState.groupId}?articleId=${encodedArticleId}`);
+            navigate(`/group/${savedState.groupId}?articleId=${encodedArticleId}`, { replace: true });
+          } else {
+            console.log(`[SidebarLayout] 恢复到分组: /group/${savedState.groupId}`);
+            navigate(`/group/${savedState.groupId}`, { replace: true });
+          }
+          return; // 导航后退出
+        }
+      } catch (error) {
+        console.error('[SidebarLayout] 恢复浏览状态失败:', error);
+      }
+    } else {
+      console.log('[SidebarLayout] 未找到保存的浏览状态，尝试使用lastPath');
+    }
+    
+    // 如果没有完整的浏览状态，回退到使用lastPath
+    const lastPath = localStorage.getItem('lastPath');
+    console.log(`[SidebarLayout] lastPath = ${lastPath}`);
+    
+    // 验证路径是否有效的函数
+    const isValidPath = (path: string) => {
+      // 基本路径总是有效的
+      if (['/all', '/today', '/notes', '/readlater', '/settings'].includes(path)) {
+        return true;
+      }
+      
+      // 检查订阅源路径
+      if (path.startsWith('/feed/')) {
+        const feedId = path.split('/feed/')[1];
+        // 如果feeds已加载，检查feedId是否存在
+        if (feeds.length > 0) {
+          return feeds.some(feed => feed.id && feed.id === feedId);
+        }
+        // 如果feeds未加载，暂时认为路径有效，后续会重定向
+        return true;
+      }
+      
+      // 检查分组路径
+      if (path.startsWith('/group/')) {
+        const groupId = path.split('/group/')[1];
+        // 如果groups已加载，检查groupId是否存在
+        if (groups.length > 0) {
+          return groups.some(group => group.id && group.id === groupId);
+        }
+        // 如果groups未加载，暂时认为路径有效，后续会重定向
+        return true;
+      }
+      
+      // 其他情况认为无效
+      return false;
+    };
+
+    if (lastPath && lastPath !== '/' && isValidPath(lastPath)) {
+      console.log(`[SidebarLayout] 导航到上次的路径: ${lastPath}`);
+      navigate(lastPath, { replace: true });
+    } else {
+      console.log('[SidebarLayout] 导航到默认视图: /all');
+      navigate('/all', { replace: true });
+    }
+  }, [navigate, feeds, groups, dbInitialized, settingsInitialized]);
+
+  useEffect(() => {
+    if (location.pathname !== '/settings') {
+      // 当路径不是设置页面时，记录当前路径
+      localStorage.setItem('lastPath', location.pathname);
+    }
+  }, [location.pathname]);
+
   const getSelectedKey = () => {
     const path = location.pathname;
     if (path === '/today') {

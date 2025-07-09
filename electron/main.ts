@@ -219,25 +219,43 @@ const createWindow = () => {
 function createTray() {
   if (process.platform === 'darwin' || process.platform === 'win32') {
     try {
-      // 尝试创建托盘图标，如果失败则跳过
       let iconPath = '';
       
       if (isDevelopment) {
-        // 尝试先找 .png，不存在则尝试 .svg
-        const pngPath = path.join(process.cwd(), 'public/icon.png');
-        const svgPath = path.join(process.cwd(), 'public/icon.svg');
+        // 在开发模式下，CWD (当前工作目录) 就是项目的根目录
+        const icnsDevPath = path.join(process.cwd(), 'assets', 'icons.icns');
+        const pngDevPath = path.join(process.cwd(), 'public', 'icon.png');
         
-        iconPath = fs.existsSync(pngPath) ? pngPath : (fs.existsSync(svgPath) ? svgPath : '');
+        // 在 macOS 上优先使用用户指定的 .icns 文件
+        if (process.platform === 'darwin' && fs.existsSync(icnsDevPath)) {
+          iconPath = icnsDevPath;
+        } else if (fs.existsSync(pngDevPath)) {
+          // 在其他系统或 .icns 不存在时，回退到 .png
+          iconPath = pngDevPath;
+        }
       } else {
-        // 生产环境路径
-        const pngPath = path.join(__dirname, '../renderer/icon.png');
-        const svgPath = path.join(__dirname, '../renderer/icon.svg');
+        // 在生产环境中, 图标文件会被复制到 renderer 的输出目录
+        // __dirname 是当前执行文件所在的目录 (例如 dist/electron)
+        const baseIconPath = path.join(__dirname, '../renderer');
         
-        iconPath = fs.existsSync(pngPath) ? pngPath : (fs.existsSync(svgPath) ? svgPath : '');
+        const pngProdPath = path.join(baseIconPath, 'icon.png');
+        const icnsProdPath = path.join(baseIconPath, 'icon.icns');
+
+        if (fs.existsSync(pngProdPath)) {
+          iconPath = pngProdPath;
+        } else if (process.platform === 'darwin' && fs.existsSync(icnsProdPath)) {
+          iconPath = icnsProdPath;
+        }
       }
       
-      if (iconPath && fs.existsSync(iconPath)) {
-        tray = new Tray(iconPath);
+      if (iconPath) {
+        const image = nativeImage.createFromPath(iconPath);
+        // 在 macOS 上, 将图片设置为模板图像, 以便它能适应系统主题（暗/亮模式）
+        if (process.platform === 'darwin') {
+          image.setTemplateImage(true);
+        }
+
+        tray = new Tray(image);
         
         const contextMenu = Menu.buildFromTemplate([
           { 
@@ -250,42 +268,32 @@ function createTray() {
               }
             }
           },
-          { 
-            label: '刷新全部', 
-            click: () => {
-              if (mainWindow) {
-                mainWindow.webContents.send('refresh-all');
-              }
-            }
-          },
           { type: 'separator' },
-          { 
-            label: '退出', 
-            click: () => {
-              app.quit();
-            }
-          }
+          { label: '退出', click: () => app.quit() }
         ]);
+
         tray.setToolTip('Readix');
         tray.setContextMenu(contextMenu);
-        
-        tray.on('click', () => {
-          if (mainWindow) {
-            if (mainWindow.isVisible()) {
-              mainWindow.hide();
+
+        // macOS 上的特殊处理
+        if (process.platform === 'darwin') {
+          tray.on('click', () => {
+            if (mainWindow) {
+              if (mainWindow.isVisible()) {
+                mainWindow.hide();
+              } else {
+                mainWindow.show();
+              }
             } else {
-              mainWindow.show();
+              createWindow();
             }
-          } else {
-            createWindow();
-          }
-        });
+          });
+        }
       } else {
-        console.warn('未找到有效的图标文件，跳过托盘图标创建。');
+        console.log('[Main Process] Tray icon not found, skipping tray creation.');
       }
     } catch (error) {
       console.error('创建托盘图标时出错:', error);
-      // 忽略错误，应用可以没有托盘图标正常运行
     }
   }
 }
@@ -657,10 +665,10 @@ ipcMain.handle('window-is-maximized', async () => {
 });
 
 // 新增：处理获取 favicon 的请求
-ipcMain.handle('get-favicon', async (_, feedUrl) => {
+ipcMain.handle('get-favicon', async (_, url) => {
   let iconPathToReturn = ''; // 定义并初始化 iconPathToReturn
   try {
-    const parsedUrl = new URL(feedUrl);
+    const parsedUrl = new URL(url);
     const domain = parsedUrl.hostname;
     
     // 使用Google的favicon服务替代faviconkit
@@ -670,10 +678,10 @@ ipcMain.handle('get-favicon', async (_, feedUrl) => {
     const localIconPath = path.join(faviconsDir, localIconFileName);
 
     if (fs.existsSync(localIconPath)) {
-      console.log(`[Main Process] Icon for ${feedUrl} found in cache: ${localIconPath}`);
+      console.log(`[Main Process] Icon for ${url} found in cache: ${localIconPath}`);
       iconPathToReturn = url.pathToFileURL(localIconPath).toString();
     } else {
-      console.log(`[Main Process] Downloading favicon from ${faviconUrl} for ${feedUrl}`);
+      console.log(`[Main Process] Downloading favicon from ${faviconUrl} for ${url}`);
       const response = await axios.get(faviconUrl, {
         responseType: 'arraybuffer',
         timeout: 10000 // 设置10秒超时
@@ -685,7 +693,7 @@ ipcMain.handle('get-favicon', async (_, feedUrl) => {
 
     return { success: true, data: iconPathToReturn };
   } catch (error: any) { // 将 error 显式声明为 any 类型
-    console.error(`[Main Process] Failed to get favicon for ${feedUrl}:`, error);
+    console.error(`[Main Process] Failed to get favicon for ${url}:`, error);
     return { success: false, error: error.message || 'Unknown error during getting favicon' };
   }
 });

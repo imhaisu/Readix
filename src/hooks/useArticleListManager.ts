@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { Article, FeedSource, FilterRule } from '../db/database';
@@ -7,6 +7,8 @@ import Dexie from 'dexie';
 import { usePrevious } from './usePrevious';
 import { shouldArticleBeHidden } from '../utils/filterUtils';
 import { useFilterRules } from '../contexts/FilterRulesContext';
+import { DatabaseContext } from '../contexts/DatabaseContext';
+import { useLayout } from '../contexts/LayoutContext';
 
 export interface UseArticleListManagerProps {
   filter: any;
