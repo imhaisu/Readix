@@ -11,51 +11,47 @@ interface FeedSource {
 declare global {
   interface Window {
     electron: {
-      // 应用信息
       getAppVersion: () => Promise<string>;
       getPlatform: () => Promise<'darwin' | 'win32' | 'linux'>;
-
-      // 窗口控制
       windowControls: {
         minimize: () => void;
         maximize: () => void;
         close: () => void;
         isMaximized: () => Promise<boolean>;
       };
-      
-      // 设置
-      getSettings: () => Promise<any>; // 这里的 any 可以替换为更具体的 Settings 类型
-      saveSettings: (settings: any) => void;
-      
-      // 订阅源、文章、内容抓取
-      parseRssFeed: (url: string) => Promise<any>;
-      getRssFeedInfo: (url: string) => Promise<any>;
-      addFeed: (feedData: FeedSource) => Promise<any>; // 替换为具体的返回值类型
-      deleteFeed: (feedId: string) => Promise<void>;
-      updateFeed: (feedId: string, updates: Partial<FeedSource>) => Promise<void>;
-      getFeeds: () => Promise<FeedSource[]>; // 假设返回 FeedSource 数组
-      fetchArticleContent: (url: string) => Promise<{ title: string; content: string } | null>;
-
-      // OPML
-      importOpml: () => Promise<any>; // 替换为具体的 OPML 导入结果类型
-      exportOpml: (opmlContent: string) => Promise<void>;
-
-      // 系统交互
-      shellOpenExternal: (url: string) => Promise<void>;
-      getSystemIcon: (type: 'folder' | 'file') => Promise<string>; // 假设返回 base64 字符串
-      getLocalIconBase64: (filePath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
-
-      // 通信与事件监听
-      onMessage: (channel: string, callback: (...args: any[]) => void) => () => void;
-
-      // AI 功能
-      invokeAI: (type: 'summary' | 'mindmap' | 'highlight', content: string, contentText: string) => Promise<{ success: boolean; data?: any; error?: string }>;
-      testDoubaoApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
-      streamAiSummary: (contentText: string) => void;
-      onAiSummaryUpdate: (callback: (type: 'chunk' | 'end' | 'error', data?: any) => void) => () => void;
-
-      // 新增方法
-      refreshAllFeeds: (feeds: FeedSource[]) => Promise<{ feed: FeedSource, articles: any[] }[]>;
+      titleBar: {
+        doubleClickHandler: () => void;
+        updateTrafficLightsPosition: (x: number, y: number) => void;
+      };
+      feedUtilities: {
+        testFeedUrl: (url: string) => Promise<any>;
+      };
+      openLink: (url: string) => void;
+      openFile: (path: string) => void;
+      focusWindow: () => void;
+      fetchFilterRules: () => Promise<any>;
+      openFilterLog: () => Promise<void>;
+      saveFilterRules: (rules: any) => Promise<void>;
+      updateArticles: (feedId: string) => Promise<void>;
+      refreshFeed: (feedId: string) => Promise<void>;
+      getArticleContent: (url: string) => Promise<any>;
+      getSystemFonts: () => Promise<string[]>;
+      getDarkMode: () => Promise<boolean>;
+      getSavedSettings: () => Promise<any>;
+      saveSettings: (settings: any) => Promise<void>;
+      showSaveDialog: (options: any) => Promise<any>;
+      exportArticles: (options: any) => Promise<any>;
+      importOPML: () => Promise<any>;
+      exportOPML: () => Promise<any>;
+      refreshAllFeeds: (feeds: any[]) => Promise<any>;
+      ipcRenderer: {
+        on: (channel: string, listener: (...args: any[]) => void) => void;
+        once: (channel: string, listener: (...args: any[]) => void) => void;
+        removeListener: (channel: string, listener: (...args: any[]) => void) => void;
+        removeAllListeners: (channel: string) => void;
+        send: (channel: string, ...args: any[]) => void;
+        invoke: (channel: string, ...args: any[]) => Promise<any>;
+      };
     };
   }
 }

@@ -41,6 +41,50 @@ import MindMapModal from './MindMapModal';
 import { useArticleListManager } from '../hooks/useArticleListManager';
 import { useNavigate } from 'react-router-dom';
 
+// 添加处理图片加载错误的函数
+const handleImageError = async (event: React.SyntheticEvent<HTMLImageElement>) => {
+  const img = event.currentTarget;
+  const src = img.src;
+  
+  // 防止重复处理同一图片
+  if (img.dataset.tried === 'true') {
+    console.log(`[图片代理] 已尝试修复，但仍然失败: ${src}`);
+    img.style.display = 'none';
+    return;
+  }
+  
+  console.log(`[图片代理] 图片加载失败，尝试代理请求: ${src}`);
+  img.dataset.tried = 'true';
+  
+  try {
+    // 对少数派图片进行特殊处理
+    if (src.includes('cdnfile.sspai.com')) {
+      // 尝试移除缩放参数
+      const cleanSrc = src.replace(/\?imageView2.*$/, '');
+      console.log(`[图片代理] 尝试清理URL参数: ${cleanSrc}`);
+      img.src = cleanSrc;
+      return;
+    }
+    
+    // 使用Electron的图片代理服务
+    if (window.electron && window.electron.ipcRenderer) {
+      const dataUrl = await window.electron.ipcRenderer.invoke('proxy-image', src);
+      if (dataUrl) {
+        console.log(`[图片代理] 成功获取代理图片`);
+        img.src = dataUrl;
+        return;
+      }
+    }
+    
+    // 如果代理失败，隐藏图片
+    console.log(`[图片代理] 代理请求失败，隐藏图片`);
+    img.style.display = 'none';
+  } catch (error) {
+    console.error(`[图片代理] 处理图片错误:`, error);
+    img.style.display = 'none';
+  }
+};
+
 interface ArticleDetailProps {
   articleId: string | null;
   onClose?: () => void;
@@ -494,7 +538,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           const currentArticleData = await db.articles.get(articleId);
   
           if (currentArticleData) {
-            const source = await db.feeds.get(currentArticleData.sourceId);
+            // 始终重新获取最新的订阅源信息，以确保显示正确
+            const source = currentArticleData.sourceId ? 
+              await db.feeds.get(currentArticleData.sourceId) : undefined;
+            
+            // 更新订阅源标题
             setSourceTitle(source?.title);
 
             if (!currentArticleData.isFullText && source?.defaultViewMode === 'fulltext') {
@@ -515,10 +563,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
             setArticle(currentArticleData);
   
-            if (source) {
-              setSourceTitle(source.title);
-            }
-
             if (currentArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
               await db.articles.update(articleId, { isRead: 'true' });
               console.log(`文章 ${articleId} 已自动标记为已读。`);
@@ -714,17 +758,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           img.style.cursor = 'pointer';
           
           // 添加图片错误处理
-          img.addEventListener('error', () => {
-            img.classList.add('broken-image');
-            console.log('图片加载失败:', img.getAttribute('src'));
-            
-            // 尝试替换http为https，有时候这能解决问题
-            const src = img.getAttribute('src');
-            if (src && src.startsWith('http:')) {
-              const newSrc = src.replace('http:', 'https:');
-              img.setAttribute('src', newSrc);
-            }
-          });
+          img.addEventListener('error', handleImageError as any);
           
           img.addEventListener('click', (e) => {
             if (img.classList.contains('broken-image')) return;

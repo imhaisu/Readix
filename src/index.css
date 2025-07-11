@@ -138,14 +138,14 @@ html, body, #root {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-/* 全局过渡效果 */
+/* 全局过渡效果 - 减少过渡时间 */
 .fade-enter {
   opacity: 0;
 }
 
 .fade-enter-active {
   opacity: 1;
-  transition: opacity 300ms;
+  transition: opacity 100ms; /* 从300ms减少到100ms */
 }
 
 .fade-exit {
@@ -154,7 +154,7 @@ html, body, #root {
 
 .fade-exit-active {
   opacity: 0;
-  transition: opacity 300ms;
+  transition: opacity 100ms; /* 从300ms减少到100ms */
 }
 
 /* 应用主布局 */
@@ -596,16 +596,21 @@ html, body, #root {
 
 /* --- Pulsing Loader --- */
 .pulsing-loader-container {
+  /* 移除全屏遮罩效果 */
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 100vh;
-  width: 100vw;
-  position: fixed;
-  top: 0;
-  left: 0;
-  background-color: var(--bg-primary);
-  z-index: 9999;
+  /* 移除全局覆盖 */
+  /* height: 100vh; */
+  /* width: 100vw; */
+  /* position: fixed; */
+  /* top: 0; */
+  /* left: 0; */
+  /* background-color: var(--bg-primary); */
+  /* z-index: 9999; */
+  height: auto;
+  width: auto;
+  padding: 10px;
 }
 
 .pulsing-loader {
@@ -615,12 +620,23 @@ html, body, #root {
 }
 
 .pulsing-loader .dot {
-  width: 12px;
-  height: 12px;
-  margin: 0 6px;
+  width: 8px; /* 减小点的大小 */
+  height: 8px;
+  margin: 0 4px;
   border-radius: 50%;
   background-color: var(--text-tertiary);
   animation: pulse 1.4s infinite ease-in-out both;
+}
+
+/* 为紧凑模式定制样式 */
+.pulsing-loader.compact .dot {
+  width: 6px; /* 更小的点 */
+  height: 6px;
+  margin: 0 3px;
+}
+
+.pulsing-loader-container.compact {
+  padding: 6px;
 }
 
 .pulsing-loader .dot:nth-child(1) {

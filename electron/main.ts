@@ -8,6 +8,8 @@ import Parser from 'rss-parser';
 import axios from 'axios';
 import crypto from 'crypto';
 import type { Settings } from '../src/types/settings'; // 导入类型
+import fetch from 'node-fetch';
+import { execSync } from 'child_process';
 
 // AI 服务配置
 const AI_MODEL = 'doubao-seed-1-6-250615';
@@ -743,10 +745,13 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
     const { JSDOM } = await import('jsdom');
     const { Readability } = await import('@mozilla/readability');
     
+    // 提取网站域名作为referrer
+    const originUrl = new URL(articleUrl).origin;
+    
     const dom = await JSDOM.fromURL(articleUrl, {
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      referrer: articleUrl,
-      resources: "usable", // 允许加载外部资源
+      referrer: originUrl, // 使用文章URL的origin作为referrer
+      resources: "usable" // 允许加载外部资源
     });
     
     const reader = new Readability(dom.window.document);
@@ -771,8 +776,18 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
               img.setAttribute('src', absoluteSrc);
             }
             
-            // 添加错误处理，当图片加载失败时提供备用方案
-            img.setAttribute('onerror', "this.onerror=null; this.style.display='none';");
+            // 改进图片错误处理，添加更多的备选方案
+            img.setAttribute('onerror', `
+              this.onerror=null; 
+              console.error('图片加载失败: ' + this.src); 
+              // 尝试创建备用图片URL
+              if(this.src.includes('cdnfile.sspai.com')) {
+                // 如果是少数派图片链接尝试修改URL
+                this.src = this.src.replace('imageView2/2/w/1120/q/40/interlace/1/ignore-error/1', '');
+              } else {
+                this.style.display='none';
+              }
+            `);
             
             // 确保图片不会超出容器宽度
             img.setAttribute('style', 'max-width: 100%; height: auto;');
@@ -1032,6 +1047,44 @@ ipcMain.handle('shell-open-external', async (_, url) => {
   } catch (error) {
     console.error('[Main Process] 打开外部链接失败:', error);
     throw error;
+  }
+});
+
+// 设置图片代理功能
+ipcMain.handle('proxy-image', async (event, imageUrl) => {
+  try {
+    // 从URL中提取域名作为referer
+    const url = new URL(imageUrl);
+    const referer = url.origin;
+    
+    console.log(`[Image Proxy] 代理请求图片: ${imageUrl}`);
+    console.log(`[Image Proxy] 使用Referer: ${referer}`);
+    
+    // 请求图片并传递合适的请求头
+    const response = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': referer,
+        'Origin': referer
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`图片请求失败: ${response.status} ${response.statusText}`);
+    }
+    
+    // 获取图片数据和类型
+    const buffer = await response.buffer();
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // 将图片转换为Data URL
+    const base64 = buffer.toString('base64');
+    const dataUrl = `data:${contentType};base64,${base64}`;
+    
+    return dataUrl;
+  } catch (error) {
+    console.error('[Image Proxy] 代理图片失败:', error);
+    return null;
   }
 });
 

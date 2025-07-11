@@ -393,7 +393,8 @@
   overflow: hidden;
   opacity: 0;
   max-height: 0px;
-  transition: opacity 0.3s ease, max-height 0.3s ease, padding 0.3s ease;
+  /* 减少动画过渡时间，使其更迅速 */
+  transition: opacity 0.1s ease, max-height 0.1s ease, padding 0.1s ease;
   background-color: var(--bg-primary);
   position: absolute;
   top: 0; /* 修改：定位到顶部 */
@@ -403,9 +404,9 @@
 }
 
 .pullToRefreshIndicatorContainer.visible {
-  opacity: 1;
-  max-height: 40px; /* 动画高度 */
-  padding: 8px 0;
+  opacity: 0.8; /* 降低不透明度 */
+  max-height: 30px; /* 减小高度 */
+  padding: 6px 0;
 }
 
 /* Style for the pull-to-refresh icon */

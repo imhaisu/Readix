@@ -76,6 +76,53 @@ contextBridge.exposeInMainWorld('electron', {
       ipcRenderer.removeListener('ai-summary-stream-error', errorHandler);
     };
   },
+  
+  // 添加ipcRenderer接口，使前端能够使用主进程的功能
+  ipcRenderer: {
+    on: (channel: string, func: (...args: any[]) => void) => {
+      const validChannels = ['ai-summary-update', 'filter-log-entry', 'new-articles'];
+      if (validChannels.includes(channel)) {
+        ipcRenderer.on(channel, (event, ...args) => func(...args));
+      }
+    },
+    once: (channel: string, func: (...args: any[]) => void) => {
+      const validChannels = ['ai-summary-update', 'filter-log-entry', 'new-articles'];
+      if (validChannels.includes(channel)) {
+        ipcRenderer.once(channel, (event, ...args) => func(...args));
+      }
+    },
+    removeListener: (channel: string, listener: (...args: any[]) => void) => {
+      const validChannels = ['ai-summary-update', 'filter-log-entry', 'new-articles'];
+      if (validChannels.includes(channel)) {
+        ipcRenderer.removeListener(channel, listener);
+      }
+    },
+    removeAllListeners: (channel: string) => {
+      const validChannels = ['ai-summary-update', 'filter-log-entry', 'new-articles'];
+      if (validChannels.includes(channel)) {
+        ipcRenderer.removeAllListeners(channel);
+      }
+    },
+    send: (channel: string, ...args: any[]) => {
+      const validChannels = ['update-filter-log', 'clear-filter-log'];
+      if (validChannels.includes(channel)) {
+        ipcRenderer.send(channel, ...args);
+      }
+    },
+    invoke: (channel: string, ...args: any[]) => {
+      const validChannels = [
+        'fetch-article-content', 
+        'get-article-content', 
+        'fetch-filter-rules', 
+        'save-filter-rules',
+        'proxy-image'
+      ];
+      if (validChannels.includes(channel)) {
+        return ipcRenderer.invoke(channel, ...args);
+      }
+      return Promise.reject(new Error(`Invalid channel: ${channel}`));
+    }
+  }
 });
 
 // 暴露窗口控制API
