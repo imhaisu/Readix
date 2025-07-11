@@ -77,6 +77,12 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   isPullingDown,
 }, ref) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const selectArticleRef = useRef(onSelectArticle);
+  
+  // 更新ref的值，这样我们可以在副作用中安全地使用它
+  useEffect(() => {
+    selectArticleRef.current = onSelectArticle;
+  }, [onSelectArticle]);
 
   const {
     loading,
@@ -95,7 +101,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     currentGroupId,
     lastUpdatedArticleInfo,
     listRefreshKey,
-    onSelectArticle,
+    onSelectArticle: selectArticleRef.current,
     onLastUpdatedArticleInfoChange,
   });
 
@@ -199,12 +205,12 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
 
     const nextArticle = displayedArticles[nextIndex];
     if (nextArticle) {
-      onSelectArticle(nextArticle.id);
+      selectArticleRef.current(nextArticle.id);
       
       // 自动滚动到选中的文章
       scrollToArticle(nextArticle.id);
     }
-  }, [selectedArticleId, displayedArticles, onSelectArticle]);
+  }, [selectedArticleId, displayedArticles]);
 
   // 添加键盘事件监听
   useEffect(() => {
@@ -236,7 +242,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   }, []);
 
   const handleArticleClick = (articleId: string) => {
-    onSelectArticle(articleId);
+    selectArticleRef.current(articleId);
   };
 
   const toggleStar = async (articleId: string) => {
@@ -249,8 +255,8 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
       await handleToggleStar(article.id);
       // 移除收藏状态变化的提示，用户可以直接从界面上看到变化
     } catch (error) {
-      console.error('Failed to toggle star status:', error);
-      message.error('收藏操作失败');
+      console.error('无法切换星标状态', error);
+      message.error('切换星标状态失败');
     }
   };
 
@@ -473,15 +479,16 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
       <div className={styles.scrollableArticleListContainer} ref={containerRef} tabIndex={-1}>
         {isRefreshing && (
           <div style={{ 
-            padding: '12px', 
+            padding: '6px', /* 减少内边距 */
             textAlign: 'center', 
             position: 'sticky', 
             top: 0, 
             backgroundColor: 'var(--bg-primary)',
             zIndex: 5,
-            borderBottom: '1px solid var(--border-color)'
+            // 删除底部边框线
+            // borderBottom: '1px solid var(--border-color)'
           }}>
-            <PulsingLoader />
+            <PulsingLoader inline={true} compact={true} />
           </div>
         )}
         <AnimatePresence>
