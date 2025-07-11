@@ -157,16 +157,76 @@
 /* 自定义高亮 <mark> 标签样式 */
 :global(.customHighlight) {
   background-color: #ffe58f;
-  border-radius: 3px;
-  padding: 2px 1px;
+  border-radius: 2px;
+  padding: 0;
+  margin: 0;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.2s;
 }
 
-/* 带笔记的高亮有特殊样式 */
+:global(.customHighlight):hover {
+  background-color: #ffd666;
+}
+
 :global(.customHighlightWithNote) {
-  background-color: #ffd591; /* 更深的颜色 */
-  border-bottom: 2px dotted #fa8c16; /* 添加底部虚线，更容易识别为带笔记 */
+  background-color: #ffd666;
+  border-bottom: 1px dashed #faad14;
+}
+
+:global(.customHighlightWithNote):hover {
+  background-color: #ffc53d;
+}
+
+/* 分段高亮样式 */
+:global(.segment-start),
+:global(.segment-middle),
+:global(.segment-end) {
+  display: inline;
+  white-space: inherit; /* 继承父元素的空白处理方式 */
+  vertical-align: baseline; /* 确保垂直对齐一致 */
+  padding: 0;
+  margin: 0;
+}
+
+:global(.segment-start) {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: 0 !important; /* 防止右侧出现间隙 */
+  padding-right: 0 !important;
+}
+
+:global(.segment-middle) {
+  border-radius: 0;
+  margin-left: 0 !important; /* 防止左侧出现间隙 */
+  margin-right: 0 !important; /* 防止右侧出现间隙 */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+:global(.segment-end) {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: 0 !important; /* 防止左侧出现间隙 */
+  padding-left: 0 !important;
+}
+
+/* 防止分段高亮之间出现换行 */
+:global(.segment-start + br + .segment-middle),
+:global(.segment-middle + br + .segment-middle),
+:global(.segment-middle + br + .segment-end) {
+  margin-top: -1.5em; /* 抵消换行的效果 */
+}
+
+/* 确保分段高亮在不同HTML元素之间的连贯性 */
+:global(p > .segment-end + p > .segment-start),
+:global(div > .segment-end + div > .segment-start),
+:global(span > .segment-end + span > .segment-start),
+:global(li > .segment-end + li > .segment-start) {
+  margin-top: 0 !important;
 }
 
 :global(.aiHighlight) {
@@ -193,7 +253,43 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  font-family: var(--font-family-sans);
+}
+
+/* Reeder风格的简单加载动画 */
+.reederLoader {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.reederLoader .dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--text-secondary, #999);
+  border-radius: 50%;
+  margin: 0 4px;
+  opacity: 0.6;
+  animation: reederPulse 1.4s infinite ease-in-out both;
+}
+
+.reederLoader .dot:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.reederLoader .dot:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes reederPulse {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
 }
 
 .article {

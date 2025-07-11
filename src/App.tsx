@@ -10,7 +10,7 @@ import { useDatabase } from './contexts/DatabaseContext';
 import { TitleBarProvider, useTitleBar } from './contexts/TitleBarContext';
 import { FilterProvider } from './contexts/FilterContext';
 import { FilterRulesProvider } from './contexts/FilterRulesContext';
-import PulsingLoader from './components/PulsingLoader';
+// 移除 PulsingLoader 导入
 import { LayoutProvider } from './contexts/LayoutContext';
 import { applyAllRulesToAllArticles } from './utils/filterApplier';
 import { message } from 'antd';
@@ -38,7 +38,8 @@ const AppContent: React.FC = () => {
   }, [isInitialized, db, triggerArticleListRefresh, triggerFeedCountRefresh]);
   
   if (!isInitialized) {
-    return <PulsingLoader />;
+    // 替换为空白内容，不显示加载动画
+    return <div className="app-initializing" />;
   }
   
   return (

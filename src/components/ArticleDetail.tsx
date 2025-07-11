@@ -999,8 +999,11 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return (
       <div className={styles.articleDetailContainer} style={articleStyle}>
         <div className={styles.loadingContainer}>
-          <Spin size="large" />
-          <p style={{ marginTop: 16, color: 'var(--text-secondary)' }}>正在加载文章内容...</p>
+          <div className={styles.reederLoader}>
+            <div className={styles.dot}></div>
+            <div className={styles.dot}></div>
+            <div className={styles.dot}></div>
+          </div>
         </div>
       </div>
     );

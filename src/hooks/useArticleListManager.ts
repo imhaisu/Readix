@@ -7,7 +7,6 @@ import Dexie from 'dexie';
 import { usePrevious } from './usePrevious';
 import { shouldArticleBeHidden } from '../utils/filterUtils';
 import { useFilterRules } from '../contexts/FilterRulesContext';
-import { DatabaseContext } from '../contexts/DatabaseContext';
 import { useLayout } from '../contexts/LayoutContext';
 
 export interface UseArticleListManagerProps {
@@ -63,6 +62,7 @@ export const useArticleListManager = ({
 
   const prevFilter = usePrevious(filter);
   const prevSelectedArticleId = usePrevious(selectedArticleId);
+  const prevFeedId = usePrevious(currentFeedId);
 
   // 当选中的文章改变时，将之前选中的文章ID添加到豁免列表中
   useEffect(() => {
@@ -84,17 +84,50 @@ export const useArticleListManager = ({
     }
   }, [selectedArticleId, prevSelectedArticleId, allArticles, currentFeedId]);
 
+  // 当订阅源变化时，清除不属于新订阅源的豁免文章
+  useEffect(() => {
+    if (prevFeedId !== currentFeedId) {
+      // 清理豁免列表，只保留与新订阅源匹配的文章
+      setExemptedArticleIds(prev => {
+        const newSet = new Set<string>();
+        // 如果有当前选中的文章并且它属于当前订阅源，保留它
+        if (selectedArticleIdRef.current) {
+          const selectedArticle = allArticles.find(a => a.id === selectedArticleIdRef.current);
+          if (selectedArticle && (!currentFeedId || selectedArticle.sourceId === currentFeedId)) {
+            newSet.add(selectedArticleIdRef.current);
+          }
+        }
+        return newSet;
+      });
+      
+      // 同样清理持久豁免列表
+      setPersistentlyExemptedIds(prev => {
+        const newSet = new Set<string>();
+        if (selectedArticleIdRef.current) {
+          const selectedArticle = allArticles.find(a => a.id === selectedArticleIdRef.current);
+          if (selectedArticle && (!currentFeedId || selectedArticle.sourceId === currentFeedId)) {
+            newSet.add(selectedArticleIdRef.current);
+          }
+        }
+        return newSet;
+      });
+    }
+  }, [currentFeedId, prevFeedId, allArticles]);
+
   // 当过滤条件或上下文变化时，清除持久豁免列表，但保留当前选中的文章
   useEffect(() => {
     setPersistentlyExemptedIds(prev => {
       const newSet = new Set<string>();
-      // 如果有当前选中的文章，保留它
+      // 如果有当前选中的文章，保留它，但仅当它属于当前订阅源
       if (selectedArticleIdRef.current) {
-        newSet.add(selectedArticleIdRef.current);
+        const selectedArticle = allArticles.find(a => a.id === selectedArticleIdRef.current);
+        if (selectedArticle && (!currentFeedId || selectedArticle.sourceId === currentFeedId)) {
+          newSet.add(selectedArticleIdRef.current);
+        }
       }
       return newSet;
     });
-  }, [filter, currentFeedId, currentGroupId, listRefreshKey]);
+  }, [filter, currentFeedId, currentGroupId, listRefreshKey, allArticles]);
 
   // 当文章列表刷新时，确保当前选中的文章仍然在豁免列表中
   useEffect(() => {
@@ -114,7 +147,9 @@ export const useArticleListManager = ({
       );
       
       // 只有在标记为未读时，或者当前选中的文章被标记为已读时，才添加到豁免列表
-      if (newStatus === 'false' || articleId === selectedArticleIdRef.current) {
+      // 且只有当文章属于当前订阅源时才添加到豁免列表
+      if ((newStatus === 'false' || articleId === selectedArticleIdRef.current) && 
+          (!currentFeedId || sourceId === currentFeedId)) {
         setExemptedArticleIds(prev => new Set([...prev, articleId]));
       }
       
@@ -134,7 +169,7 @@ export const useArticleListManager = ({
     } catch (error) {
       console.error("Error toggling article read status:", error);
     }
-  }, [db, feedInfoMap, triggerFeedCountRefresh, onLastUpdatedArticleInfoChange, lastUpdatedArticleInfo, selectedArticleIdRef]);
+  }, [db, feedInfoMap, triggerFeedCountRefresh, onLastUpdatedArticleInfoChange, lastUpdatedArticleInfo, selectedArticleIdRef, currentFeedId]);
 
   const toggleFnRef = useRef(toggleArticleReadStatus);
   toggleFnRef.current = toggleArticleReadStatus;
@@ -299,15 +334,15 @@ export const useArticleListManager = ({
 
     // 应用过滤规则（动态过滤，不依赖于数据库中的isHidden字段）
     filtered = filtered.filter(article => {
-      // 如果文章ID在豁免列表中，则始终显示，但必须符合当前订阅源上下文
-      const isExempted = exemptedArticleIds.has(article.id) || 
-                         persistentlyExemptedIds.has(article.id) || 
-                         article.id === selectedArticleIdRef.current;
-      
-      // 修复：如果当前选择了特定订阅源，则所有文章（包括豁免的文章）必须匹配该订阅源
+      // 修复：检查文章是否属于当前订阅源，这是第一个最严格的过滤条件
       if (currentFeedId && article.sourceId !== currentFeedId) {
         return false;
       }
+      
+      // 检查文章是否在豁免列表中
+      const isExempted = exemptedArticleIds.has(article.id) || 
+                         persistentlyExemptedIds.has(article.id) || 
+                         article.id === selectedArticleIdRef.current;
       
       if (isExempted) {
         return true;
@@ -355,17 +390,13 @@ export const useArticleListManager = ({
     // Apply main filters from the 'filter' prop
     if (filter) {
       filtered = filtered.filter(article => {
-        // 首先检查文章是否属于当前选中的订阅源
-        if (currentFeedId && article.sourceId !== currentFeedId) {
-          return false;
-        }
-        
-        // 如果是当前选中的文章，显示它（前提是已通过上面的订阅源检查）
+        // 如果是当前选中的文章，显示它，但前提是它属于当前订阅源
+        // 这个检查已经在上面完成，这里不需要重复
         if (article.id === selectedArticleIdRef.current) {
           return true;
         }
         
-        // 如果文章在豁免列表中，即使它不符合过滤条件，也应该显示（前提是已通过上面的订阅源检查）
+        // 如果文章在豁免列表中，即使它不符合过滤条件，也应该显示
         if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) {
           return true;
         }

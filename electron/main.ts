@@ -39,7 +39,7 @@ const createWindow = () => {
   // 定义 Store 的 schema 以获得类型安全
   const store = new Store<{ windowBounds: { width: number; height: number; x?: number; y?: number } }>({
     defaults: {
-      windowBounds: { width: 1280, height: 800 }
+      windowBounds: { width: 1280, height: 900 }
     }
   });
 
@@ -55,7 +55,7 @@ const createWindow = () => {
       x = undefined;
       y = undefined;
       width = 1280;
-      height = 800;
+      height = 900;
   }
 
 
@@ -72,7 +72,7 @@ const createWindow = () => {
     x,
     y,
     minWidth: 800, // 设置一个合理的最小宽度
-    minHeight: 600,
+    minHeight: 650,
     show: false, // 先不显示窗口，等待加载完成
     webPreferences: {
       nodeIntegration: false,
