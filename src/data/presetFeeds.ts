@@ -54,9 +54,9 @@ export const presetFeeds: PresetFeedCategory[] = [
     title: '人工智能',
     feeds: [
       {
-        name: '机器之心',
-        url: 'https://www.jiqizhixin.com/rss',
-        favicon: 'https://www.google.com/s2/favicons?domain=jiqizhixin.com&sz=128',
+        name: '量子位',
+        url: 'https://www.qbitai.com/feed',
+        favicon: 'https://www.google.com/s2/favicons?domain=qbitai.com&sz=128',
       },
     ],
   },

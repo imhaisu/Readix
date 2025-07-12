@@ -250,7 +250,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   const renderFeedRulesTab = () => (
     <div className={styles.tabContent}>
       <div className={styles.header}>
-        <h3>订阅源过滤规则</h3>
+        <h3>订阅源阅读偏好</h3>
         <Space>
           <Button 
             type="primary" 
@@ -268,7 +268,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
               setIsModalVisible(true);
             }}
           >
-            添加规则
+            添加偏好
           </Button>
         </Space>
       </div>
@@ -278,7 +278,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           columns={columns}
           rowKey="id"
           pagination={false}
-          locale={{ emptyText: '没有过滤规则' }}
+          locale={{ emptyText: '没有阅读偏好' }}
         />
       </Spin>
     </div>
@@ -287,7 +287,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
   const renderGlobalRulesTab = () => (
     <div className={styles.tabContent}>
       <div className={styles.header}>
-        <h3>全局过滤规则</h3>
+        <h3>全局阅读偏好</h3>
         <Space>
           <Button 
             type="primary" 
@@ -305,7 +305,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
               setIsModalVisible(true);
             }}
           >
-            添加规则
+            添加偏好
           </Button>
         </Space>
       </div>
@@ -315,7 +315,7 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
           columns={columns}
           rowKey="id"
           pagination={false}
-          locale={{ emptyText: '没有全局过滤规则' }}
+          locale={{ emptyText: '没有全局阅读偏好' }}
         />
       </Spin>
     </div>
@@ -353,13 +353,16 @@ const FilterRulesManager: React.FC<FilterRulesManagerProps> = ({ feedId, feedTit
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
 
       <Modal
-        title={editingRuleId ? '编辑规则' : '添加规则'}
+        title={editingRuleId ? "编辑阅读偏好" : "添加阅读偏好"}
         open={isModalVisible}
         onOk={handleSubmit}
         onCancel={() => {
           setIsModalVisible(false);
           setEditingRuleId(null);
           form.resetFields();
+        }}
+        styles={{
+          body: { padding: '16px 24px' }
         }}
         destroyOnHidden
       >

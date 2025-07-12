@@ -183,11 +183,13 @@ export interface Annotation {
 
 // 新增：主题接口
 export interface Topic {
-  id?: string;
+  id: string;
   name: string;
   description?: string;
   createdAt: number;
-  order?: number;
+  order: number;
+  filterRules?: TopicFilterRule[]; // 新增：主题过滤规则
+  iconName?: string; // 添加图标名称字段，用于存储图标标识
 }
 
 // 新增：主题与订阅源关联接口
@@ -195,6 +197,16 @@ export interface TopicFeed {
   id?: string;
   topicId: string;
   feedId: string;
+}
+
+// 新增：主题过滤规则接口
+export interface TopicFilterRule {
+  id: string;
+  field: string;
+  operation: string;
+  value: string | number | boolean | number[] | any; // 更灵活的值类型
+  logic: 'AND' | 'OR'; // 与其他规则的组合逻辑
+  isActive: boolean; // 规则是否启用
 }
 
 // --- 单例模式实现 ---

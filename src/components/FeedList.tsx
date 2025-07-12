@@ -13,7 +13,8 @@ import {
   SettingOutlined,
   SwapOutlined,
   TagOutlined,
-  PlusOutlined
+  PlusOutlined,
+  FilterOutlined
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
@@ -22,6 +23,7 @@ import { processFeedIcons } from '../utils/iconUtils';
 import styles from './FeedList.module.css';
 import EditFeedModal from './EditFeedModal';
 import AddTopicModal from './AddTopicModal';
+import { getIconByName } from '../utils/topicIconUtils';
 
 interface FeedListProps {
   collapsed: boolean;
@@ -51,6 +53,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
   const [isAddTopicModalVisible, setIsAddTopicModalVisible] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
+  const [initialActiveTab, setInitialActiveTab] = useState('1'); // 新增状态，用于控制AddTopicModal的初始标签页
 
   // Modals State
   const [isRenameGroupModalVisible, setIsRenameGroupModalVisible] = useState(false);
@@ -262,11 +265,13 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   // 主题相关处理函数
   const handleAddTopic = () => {
     setEditingTopic(null);
+    setInitialActiveTab('1'); // 默认打开第一个标签页
     setIsAddTopicModalVisible(true);
   };
   
-  const handleEditTopic = (topic: Topic) => {
+  const handleEditTopic = (topic: Topic, initialTab?: string) => {
     setEditingTopic(topic);
+    setInitialActiveTab(initialTab || '1');
     setIsAddTopicModalVisible(true);
   };
   
@@ -535,13 +540,28 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   };
 
   const createTopicMenuItems = (topic: Topic, hasUnreads: boolean): MenuProps['items'] => {
-    const items: MenuProps['items'] = [
-      { key: 'mark-all-read', label: '标记已读', icon: <CheckCircleOutlined />, disabled: !hasUnreads, onClick: () => topic.id && handleMarkAllAsReadForTopic(topic.id, topic.name) },
-      { key: 'edit', label: '编辑', icon: <EditOutlined />, onClick: () => topic.id && handleEditTopic(topic) },
+    return [
+      {
+        key: 'edit',
+        label: '编辑主题',
+        icon: <EditOutlined />,
+        onClick: (e) => {
+          e.domEvent.stopPropagation();
+          handleEditTopic(topic);
+        }
+      },
+      {
+        key: 'rules',
+        label: '阅读偏好',
+        icon: <FilterOutlined />,
+        onClick: (e) => {
+          e.domEvent.stopPropagation();
+          handleEditTopic(topic, '2'); // 直接打开第二个标签页
+        }
+      },
       { type: 'divider' },
       { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true, onClick: () => topic.id && handleDeleteTopic(topic.id, topic.name) },
     ];
-    return items;
   };
 
   // 处理主题下所有文章标记为已读
@@ -721,6 +741,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         const topicKey = `topic-${topic.id}`;
         const count = topicCounts.get(topic.id) ?? 0;
         const hasUnreads = count > 0;
+        const TopicIcon = getIconByName(topic.iconName);
         
         return (
           <Dropdown key={topicKey} menu={{ items: createTopicMenuItems(topic, hasUnreads) }} trigger={['contextMenu']}>
@@ -728,7 +749,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
               className={`${styles.topicItem} ${selectedKeys.includes(topicKey) ? styles.selected : ''}`}
               onClick={() => handleSelect(topicKey)}
             >
-              <TagOutlined className={styles.topicIcon} />
+              <TopicIcon className={styles.topicIcon} />
               <span className={styles.title}>{topic.name}</span>
               {hasUnreads && <span className={styles.count}>{count}</span>}
             </div>
@@ -768,6 +789,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         onClose={() => setIsAddTopicModalVisible(false)}
         onSuccess={handleTopicSuccess}
         editingTopic={editingTopic}
+        initialActiveTab={initialActiveTab}
       />
     </div>
   );

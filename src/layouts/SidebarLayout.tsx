@@ -847,6 +847,8 @@ const SidebarLayout: React.FC = () => {
                         }
                     }}
                     trigger={['click']}
+                    getPopupContainer={(triggerNode) => triggerNode.parentNode as HTMLElement}
+                    overlayStyle={{ zIndex: 1050 }}
                 >
                     <Button
                         type="text"

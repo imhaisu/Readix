@@ -1,27 +1,34 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Form, Input, Select, Button, message } from 'antd';
+import { Modal, Form, Input, Select, Button, message, Tabs, Space } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
-import { FeedSource, Topic, TopicFeed } from '../db/database';
+import { FeedSource, Topic, TopicFeed, TopicFilterRule } from '../db/database';
 import { useDatabase } from '../contexts/DatabaseContext';
+import TopicFilterRulesEditor from './TopicFilterRulesEditor';
+import { topicIcons } from '../utils/topicIconUtils';
 
 interface AddTopicModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess: (topic: Topic) => void;
   editingTopic?: Topic | null;
+  initialActiveTab?: string;
 }
 
 const AddTopicModal: React.FC<AddTopicModalProps> = ({ 
   visible, 
   onClose, 
   onSuccess,
-  editingTopic 
+  editingTopic,
+  initialActiveTab = '1'
 }) => {
   const [form] = Form.useForm();
   const { db } = useDatabase();
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [selectedFeedIds, setSelectedFeedIds] = useState<string[]>([]);
+  const [filterRules, setFilterRules] = useState<TopicFilterRule[]>([]);
+  const [selectedIcon, setSelectedIcon] = useState<string>('tag');
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
 
   const isEditMode = !!editingTopic;
 
@@ -41,11 +48,27 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
           const feedIds = topicFeeds.map(tf => tf.feedId);
           setSelectedFeedIds(feedIds);
           
+          // 加载过滤规则
+          setFilterRules(editingTopic.filterRules || []);
+          
+          // 设置选择的图标
+          if (editingTopic.iconName) {
+            setSelectedIcon(editingTopic.iconName);
+          }
+          
           // 设置表单的初始值
           form.setFieldsValue({
             name: editingTopic.name,
             description: editingTopic.description || '',
-            feedIds: feedIds
+            feedIds: feedIds,
+            iconName: editingTopic.iconName || 'tag'
+          });
+        } else {
+          // 新建模式，重置过滤规则
+          setFilterRules([]);
+          setSelectedIcon('tag');
+          form.setFieldsValue({
+            iconName: 'tag'
           });
         }
       } catch (error) {
@@ -62,6 +85,9 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
   const handleCancel = () => {
     form.resetFields();
     setSelectedFeedIds([]);
+    setFilterRules([]);
+    setActiveTab('1');
+    setSelectedIcon('tag');
     onClose();
   };
 
@@ -82,6 +108,8 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
         await db.topics.update(topicId, {
           name,
           description,
+          filterRules, // 保存过滤规则
+          iconName: selectedIcon, // 保存选择的图标
           // 保留原有的创建时间
         });
       } else {
@@ -90,6 +118,8 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
           id: topicId,
           name,
           description,
+          filterRules, // 保存过滤规则
+          iconName: selectedIcon, // 保存选择的图标
           createdAt: Date.now(),
           order: 0 // 可以后续调整排序
         });
@@ -102,7 +132,7 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
       }
       
       // 添加新的关联
-      const topicFeeds = (feedIds as string[]).map((feedId: string) => ({
+      const topicFeeds = feedIds.map((feedId: string) => ({
         id: uuidv4(),
         topicId,
         feedId
@@ -126,6 +156,96 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
     }
   };
 
+  const handleFilterRulesChange = (newRules: TopicFilterRule[]) => {
+    setFilterRules(newRules);
+  };
+
+  const handleIconSelect = (iconName: string) => {
+    setSelectedIcon(iconName);
+    form.setFieldsValue({ iconName });
+  };
+
+  // 渲染基本信息tab
+  const renderBasicInfo = () => (
+    <Form
+      form={form}
+      layout="vertical"
+    >
+      <Form.Item
+        name="name"
+        label="主题名称"
+        rules={[{ required: true, message: '请输入主题名称' }]}
+      >
+        <Input placeholder="输入主题名称" maxLength={50} />
+      </Form.Item>
+      
+      <Form.Item
+        name="description"
+        label="主题描述"
+      >
+        <Input.TextArea placeholder="简要描述该主题" maxLength={200} />
+      </Form.Item>
+
+      <Form.Item
+        name="iconName"
+        label="主题图标"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+            {topicIcons.map(icon => (
+              <div key={icon.name}>
+                <Button
+                  type={selectedIcon === icon.name ? "primary" : "default"}
+                  onClick={() => handleIconSelect(icon.name)}
+                  style={{ 
+                    width: 80, 
+                    height: 80,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '8px 0'
+                  }}
+                >
+                  <icon.component style={{ fontSize: 24, marginBottom: 4 }} />
+                  <span style={{ fontSize: 12 }}>{icon.label}</span>
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Form.Item>
+      
+      <Form.Item
+        name="feedIds"
+        label="选择订阅源"
+        rules={[{ required: true, message: '请至少选择一个订阅源' }]}
+      >
+        <Select
+          mode="multiple"
+          placeholder="选择包含在此主题的订阅源"
+          onChange={(values: string[]) => setSelectedFeedIds(values)}
+          style={{ width: '100%' }}
+        >
+          {feeds.map(feed => (
+            <Select.Option key={feed.id} value={feed.id!}>
+              {feed.title}
+            </Select.Option>
+          ))}
+        </Select>
+      </Form.Item>
+    </Form>
+  );
+
+  // 渲染过滤规则tab
+  const renderFilterRules = () => (
+    <TopicFilterRulesEditor 
+      rules={filterRules}
+      onChange={handleFilterRulesChange}
+      onIconChange={(iconName) => setSelectedIcon(iconName)}
+    />
+  );
+
   return (
     <Modal
       title={isEditMode ? "编辑主题" : "创建主题"}
@@ -137,45 +257,28 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
           {isEditMode ? '更新' : '创建'}
         </Button>
       ]}
+      width={700}
+      styles={{
+        body: { padding: '16px 24px', maxHeight: '70vh', overflowY: 'auto' }
+      }}
     >
-      <Form
-        form={form}
-        layout="vertical"
-      >
-        <Form.Item
-          name="name"
-          label="主题名称"
-          rules={[{ required: true, message: '请输入主题名称' }]}
-        >
-          <Input placeholder="输入主题名称" maxLength={50} />
-        </Form.Item>
-        
-        <Form.Item
-          name="description"
-          label="主题描述"
-        >
-          <Input.TextArea placeholder="简要描述该主题" maxLength={200} />
-        </Form.Item>
-        
-        <Form.Item
-          name="feedIds"
-          label="选择订阅源"
-          rules={[{ required: true, message: '请至少选择一个订阅源' }]}
-        >
-          <Select
-            mode="multiple"
-            placeholder="选择包含在此主题的订阅源"
-            onChange={(values: string[]) => setSelectedFeedIds(values)}
-            style={{ width: '100%' }}
-          >
-            {feeds.map(feed => (
-              <Select.Option key={feed.id} value={feed.id!}>
-                {feed.title}
-              </Select.Option>
-            ))}
-          </Select>
-        </Form.Item>
-      </Form>
+      <Tabs 
+        activeKey={activeTab} 
+        onChange={setActiveTab} 
+        items={[
+          {
+            key: '1',
+            label: '基本信息',
+            children: renderBasicInfo()
+          },
+          {
+            key: '2',
+            label: '阅读偏好',
+            children: renderFilterRules()
+          }
+        ]} 
+        style={{ marginBottom: 0 }}
+      />
     </Modal>
   );
 };

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
-import { Article, FeedSource, FilterRule } from '../db/database';
+import { Article, FeedSource, FilterRule, TopicFilterRule, Topic } from '../db/database';
 import { processIconUrl } from '../utils/iconUtils';
 import Dexie from 'dexie';
 import { usePrevious } from './usePrevious';
 import { shouldArticleBeHidden } from '../utils/filterUtils';
 import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useLayout } from '../contexts/LayoutContext';
+import { applyTopicFilterRules } from '../utils/filterApplier';
 
 export interface UseArticleListManagerProps {
   filter: any;
@@ -260,6 +261,9 @@ export const useArticleListManager = ({
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
 
+        // 主题相关数据
+        let currentTopic: Topic | undefined;
+        
         // Filter by Feed, Group, or Topic (DB-side)
         let feedsInScope: FeedSource[] = [];
         if (currentFeedId) {
@@ -282,6 +286,9 @@ export const useArticleListManager = ({
           // 获取主题下所有的订阅源ID
           const topicFeeds = await db.topicFeeds.where('topicId').equals(currentTopicId).toArray();
           const feedIdsInTopic = topicFeeds.map(tf => tf.feedId);
+          
+          // 加载主题信息，用于后续应用过滤规则
+          currentTopic = await db.topics.get(currentTopicId);
           
           // 获取主题下所有的订阅源
           if (feedIdsInTopic.length > 0) {
@@ -314,18 +321,30 @@ export const useArticleListManager = ({
         
         // 按发布日期排序
         fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
-        setAllArticles(fetchedArticles);
+        
+        // 如果是主题视图并且有过滤规则，应用主题特定的过滤
+        let filteredArticles = fetchedArticles;
+        if (currentTopic && currentTopic.filterRules && currentTopic.filterRules.length > 0) {
+          filteredArticles = fetchedArticles.filter(article => 
+            applyTopicFilterRules(article, currentTopic!.filterRules || [])
+          );
+        }
+        
+        setAllArticles(filteredArticles);
 
         // 如果当前有选中的文章，确保它在列表中
         if (selectedArticleIdRef.current) {
-          const selectedArticle = fetchedArticles.find(a => a.id === selectedArticleIdRef.current);
+          const selectedArticle = filteredArticles.find(a => a.id === selectedArticleIdRef.current);
           if (!selectedArticle) {
             // 如果选中的文章不在获取的文章列表中，尝试单独获取它
             try {
               const article = await db.articles.get(selectedArticleIdRef.current);
               if (article) {
-                // 将选中的文章添加到文章列表中
-                setAllArticles(prev => [article, ...prev]);
+                // 只有当文章符合当前主题的过滤规则时，才添加到列表
+                if (!currentTopic || !currentTopic.filterRules || !currentTopic.filterRules.length || 
+                    applyTopicFilterRules(article, currentTopic.filterRules)) {
+                  setAllArticles(prev => [article, ...prev]);
+                }
               }
             } catch (err) {
               console.error("Failed to fetch selected article:", err);

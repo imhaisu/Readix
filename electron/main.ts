@@ -137,7 +137,7 @@ const createWindow = () => {
       "default-src 'self'",
       `script-src ${scriptSrc.join(' ')}`,
       "style-src 'self' 'unsafe-inline'", // antd 等UI库需要 'unsafe-inline'
-      "img-src 'self' data: https:",
+      "img-src 'self' data: https: http:", // 添加http:允许加载http协议的图片
       `connect-src ${connectSrc.join(' ')}`,
       "object-src 'self'",
       "frame-src https://player.youku.com",
@@ -1050,40 +1050,40 @@ ipcMain.handle('shell-open-external', async (_, url) => {
   }
 });
 
-// 设置图片代理功能
-ipcMain.handle('proxy-image', async (event, imageUrl) => {
+// 添加图片代理处理程序
+ipcMain.handle('proxy-image', async (_, imageUrl) => {
   try {
-    // 从URL中提取域名作为referer
-    const url = new URL(imageUrl);
-    const referer = url.origin;
-    
-    console.log(`[Image Proxy] 代理请求图片: ${imageUrl}`);
-    console.log(`[Image Proxy] 使用Referer: ${referer}`);
-    
-    // 请求图片并传递合适的请求头
-    const response = await fetch(imageUrl, {
+    console.log(`[Main Process] 代理图片请求: ${imageUrl}`);
+    const response = await axios.get(imageUrl, {
+      responseType: 'arraybuffer',
+      timeout: 10000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': referer,
-        'Origin': referer
+        'Referer': new URL(imageUrl).origin
       }
     });
     
-    if (!response.ok) {
-      throw new Error(`图片请求失败: ${response.status} ${response.statusText}`);
+    // 确定MIME类型
+    let mimeType = 'image/jpeg'; // 默认MIME类型
+    const contentType = response.headers['content-type'];
+    if (contentType) {
+      mimeType = contentType;
+    } else {
+      // 根据URL后缀尝试确定MIME类型
+      if (imageUrl.endsWith('.png')) mimeType = 'image/png';
+      else if (imageUrl.endsWith('.gif')) mimeType = 'image/gif';
+      else if (imageUrl.endsWith('.webp')) mimeType = 'image/webp';
+      else if (imageUrl.endsWith('.svg')) mimeType = 'image/svg+xml';
     }
+
+    // 转换为base64
+    const base64Data = Buffer.from(response.data, 'binary').toString('base64');
+    const dataUrl = `data:${mimeType};base64,${base64Data}`;
     
-    // 获取图片数据和类型
-    const buffer = await response.buffer();
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    
-    // 将图片转换为Data URL
-    const base64 = buffer.toString('base64');
-    const dataUrl = `data:${contentType};base64,${base64}`;
-    
+    console.log(`[Main Process] 图片代理成功: ${imageUrl}`);
     return dataUrl;
   } catch (error) {
-    console.error('[Image Proxy] 代理图片失败:', error);
+    console.error(`[Main Process] 图片代理失败: ${imageUrl}`, error);
     return null;
   }
 });

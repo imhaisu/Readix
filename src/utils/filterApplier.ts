@@ -1,4 +1,4 @@
-import { Article, FilterRule } from '../db/database';
+import { Article, FilterRule, TopicFilterRule } from '../db/database';
 import { shouldArticleBeHidden, recalculateFeedUnreadCount } from './filterUtils';
 import { logInfo, logDebug, logWarn, logError } from './filterLogger';
 
@@ -139,4 +139,163 @@ export const applyAllRulesToAllArticles = async (db: any): Promise<number> => {
     logError('[FilterApplier] 执行全局过滤管道时出错:', error);
     return 0;
   }
+}; 
+
+// 计算阅读时间（粗略估计：按照300字/分钟的阅读速度）
+export const estimateReadingTime = (content: string): number => {
+  if (!content) return 0;
+  
+  // 去除HTML标签
+  const textContent = content.replace(/<[^>]*>/g, '');
+  // 中文字符按字数计算，英文单词按单词数计算
+  const chineseChars = textContent.match(/[\u4e00-\u9fa5]/g) || [];
+  const words = textContent.match(/[a-zA-Z]+/g) || [];
+  
+  // 中文字符数 + 英文单词数
+  const totalUnits = chineseChars.length + words.length;
+  
+  // 按照300字/分钟计算
+  return Math.ceil(totalUnits / 300);
+};
+
+// 提取文章的域名
+export const extractDomain = (url: string): string => {
+  try {
+    const domainMatch = url.match(/^(?:https?:\/\/)?(?:[^@\n]+@)?(?:www\.)?([^:\/\n]+)/im);
+    return domainMatch ? domainMatch[1] : '';
+  } catch (error) {
+    console.error('URL解析错误', error);
+    return '';
+  }
+};
+
+// 检查文章是否包含图片
+export const hasImages = (content: string): boolean => {
+  return /<img[^>]*>/i.test(content);
+};
+
+// 应用单个过滤规则
+export const applyTopicFilterRule = (article: Article, rule: TopicFilterRule): boolean => {
+  if (!rule.isActive) return true; // 规则未启用，默认通过
+  
+  const { field, operation, value } = rule;
+  
+  switch (field) {
+    case 'title':
+      return applyStringRule(article.title, operation, value as string);
+      
+    case 'content':
+      return applyStringRule(article.content, operation, value as string);
+      
+    case 'summary':
+      return applyStringRule(article.summary || '', operation, value as string);
+      
+    case 'author':
+      return applyStringRule(article.author || '', operation, value as string);
+      
+    case 'publishDate':
+      const pubDate = new Date(article.publishDate).getTime();
+      if (operation === 'between' && Array.isArray(value)) {
+        const now = Date.now();
+        // 将天数转换为毫秒
+        const [min, max] = value as [number, number];
+        const minDate = now - max * 24 * 60 * 60 * 1000; // 较早的日期
+        const maxDate = now - min * 24 * 60 * 60 * 1000; // 较晚的日期
+        return pubDate >= minDate && pubDate <= maxDate;
+      }
+      return applyNumberRule(pubDate, operation, value as number);
+      
+    case 'readingTime':
+      const readingTime = estimateReadingTime(article.content);
+      return applyNumberRule(readingTime, operation, value as number);
+      
+    case 'hasImages':
+      const articleHasImages = hasImages(article.content);
+      return operation === 'exists' ? articleHasImages : !articleHasImages;
+      
+    case 'domain':
+      const domain = extractDomain(article.url);
+      return applyStringRule(domain, operation, value as string);
+      
+    case 'tags':
+      if (!article.tags || article.tags.length === 0) return operation === 'not_contains';
+      return applyArrayStringRule(article.tags, operation, value as string);
+      
+    default:
+      return true;
+  }
+};
+
+// 应用字符串规则
+const applyStringRule = (text: string, operation: string, value: string): boolean => {
+  const lowerText = text.toLowerCase();
+  const lowerValue = value.toLowerCase();
+  
+  // 处理多个关键词（逗号分隔）
+  if (operation === 'contains' || operation === 'not_contains') {
+    const keywords = lowerValue.split(',').map(k => k.trim()).filter(Boolean);
+    const containsAny = keywords.some(keyword => lowerText.includes(keyword));
+    return operation === 'contains' ? containsAny : !containsAny;
+  }
+  
+  // 精确匹配
+  if (operation === 'equals') return lowerText === lowerValue;
+  if (operation === 'not_equals') return lowerText !== lowerValue;
+  
+  return true;
+};
+
+// 应用数字规则
+const applyNumberRule = (num: number, operation: string, value: number): boolean => {
+  if (operation === 'greater_than') return num > value;
+  if (operation === 'less_than') return num < value;
+  return true;
+};
+
+// 应用字符串数组规则
+const applyArrayStringRule = (arr: string[], operation: string, value: string): boolean => {
+  const keywords = value.toLowerCase().split(',').map(k => k.trim()).filter(Boolean);
+  
+  if (operation === 'contains') {
+    return keywords.some(keyword => 
+      arr.some(tag => tag.toLowerCase().includes(keyword))
+    );
+  }
+  
+  if (operation === 'not_contains') {
+    return !keywords.some(keyword => 
+      arr.some(tag => tag.toLowerCase().includes(keyword))
+    );
+  }
+  
+  if (operation === 'equals') {
+    return arr.some(tag => keywords.includes(tag.toLowerCase()));
+  }
+  
+  if (operation === 'not_equals') {
+    return !arr.some(tag => keywords.includes(tag.toLowerCase()));
+  }
+  
+  return true;
+};
+
+// 应用主题的所有过滤规则
+export const applyTopicFilterRules = (article: Article, rules: TopicFilterRule[]): boolean => {
+  if (!rules || rules.length === 0) return true;
+  
+  // 分为AND和OR两组规则
+  const andRules = rules.filter(rule => rule.isActive && rule.logic === 'AND');
+  const orRules = rules.filter(rule => rule.isActive && rule.logic === 'OR');
+  
+  // AND规则必须全部通过
+  const passAnd = andRules.every(rule => applyTopicFilterRule(article, rule));
+  if (!passAnd) return false;
+  
+  // OR规则至少要有一个通过（如果有OR规则的话）
+  if (orRules.length > 0) {
+    const passOr = orRules.some(rule => applyTopicFilterRule(article, rule));
+    return passOr;
+  }
+  
+  return true;
 }; 

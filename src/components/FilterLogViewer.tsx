@@ -298,6 +298,9 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
       open={isOpen}
       onCancel={onClose}
       width={800}
+      styles={{
+        body: { padding: '16px 24px' }
+      }}
       footer={[
         <Button key="close" type="primary" onClick={onClose}>
           关闭

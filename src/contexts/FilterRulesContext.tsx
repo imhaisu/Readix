@@ -73,16 +73,16 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
     const loadGlobalRules = () => {
       try {
         const savedRules = localStorage.getItem(GLOBAL_FILTER_RULES_KEY);
-        LogConfig.info('FILTER', '从本地存储加载全局过滤规则:', savedRules);
+        LogConfig.info('FILTER', '从本地存储加载全局阅读偏好:', savedRules);
         if (savedRules) {
           const parsedRules = JSON.parse(savedRules) as FilterRule[];
-          LogConfig.info('FILTER', '解析后的全局过滤规则:', JSON.stringify(parsedRules));
+          LogConfig.info('FILTER', '解析后的全局阅读偏好:', JSON.stringify(parsedRules));
           setGlobalFilterRules(parsedRules);
         } else {
-          LogConfig.info('FILTER', '本地存储中没有找到全局过滤规则');
+          LogConfig.info('FILTER', '本地存储中没有找到全局阅读偏好');
         }
       } catch (error) {
-        LogConfig.error('FILTER', '加载全局过滤规则失败:', error);
+        LogConfig.error('FILTER', '加载全局阅读偏好失败:', error);
         // 如果加载失败，重置为空数组
         setGlobalFilterRules([]);
       }
@@ -136,10 +136,10 @@ export const FilterRulesProvider: React.FC<FilterRulesProviderProps> = ({ childr
   // 保存全局过滤规则到本地存储
   const saveGlobalRules = (rules: FilterRule[]) => {
     try {
-      LogConfig.info('FILTER', '保存全局过滤规则到本地存储:', JSON.stringify(rules));
+      LogConfig.info('FILTER', '保存全局阅读偏好到本地存储:', JSON.stringify(rules));
       localStorage.setItem(GLOBAL_FILTER_RULES_KEY, JSON.stringify(rules));
     } catch (error) {
-      LogConfig.error('FILTER', '保存全局过滤规则失败:', error);
+      LogConfig.error('FILTER', '保存全局阅读偏好失败:', error);
     }
   };
 

@@ -76,6 +76,9 @@ const MindMapModal: React.FC<MindMapModalProps> = ({ open, markdown, onCancel })
       centered
       destroyOnHidden
       zIndex={1002}
+      styles={{
+        body: { padding: '16px 24px' }
+      }}
       afterOpenChange={(visible) => {
         if (visible) {
           // 在Modal完全打开后再渲染，增加一个微小的延迟确保DOM尺寸可用
