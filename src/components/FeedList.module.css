@@ -20,6 +20,58 @@
   margin: 8px 0;
 }
 
+/* 主题阅读部分样式 */
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  margin: 8px 0 4px 0;
+}
+
+.sectionTitle {
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+}
+
+.addButton {
+  padding: 0 4px;
+  font-size: 12px;
+  height: 22px;
+  line-height: 22px;
+}
+
+.topicItem {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.topicItem:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.topicItem.selected {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.topicItem.selected:hover {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+.topicIcon {
+  font-size: 14px;
+  margin-right: 8px;
+  color: #888;
+}
+
 /* Base styles for all rows (groups and feeds) */
 .groupItem, .feedItem {
   display: flex;
@@ -47,17 +99,17 @@
 }
 
 /* 确保悬浮时文字颜色清晰可见 */
-.groupItem:hover .title, .feedItemWrapper:hover .title {
+.groupItem:hover .title, .feedItemWrapper:hover .title, .topicItem:hover .title {
   color: var(--text-primary);
 }
 
-.groupItem.selected .title, .feedItemWrapper.selected .title {
+.groupItem.selected .title, .feedItemWrapper.selected .title, .topicItem.selected .title {
   color: var(--text-primary);
   font-weight: 400;
 }
 
 /* 确保整行都能被选中，包括空白区域 */
-.groupItem, .feedItem {
+.groupItem, .feedItem, .topicItem {
   position: relative;
   width: 100%;
   min-height: 32px;

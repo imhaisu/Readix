@@ -519,6 +519,13 @@ const SidebarLayout: React.FC = () => {
         return true;
       }
       
+      // 检查主题路径
+      if (path.startsWith('/topic/')) {
+        const topicId = path.split('/topic/')[1];
+        // 暂时认为主题路径有效，因为我们还没有在组件状态中保存topics列表
+        return true;
+      }
+      
       // 其他情况认为无效
       return false;
     };

@@ -135,6 +135,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   
   // 添加一个ref来跟踪滚动位置是否已经恢复
   const scrollPositionRestored = useRef(false);
+  // 添加一个ref来追踪组件是否已挂载
+  const isMountedRef = useRef(true);
+  // 添加一个ref来追踪当前文章ID，用于解决竞态问题
+  const currentArticleIdRef = useRef<string | null>(null);
 
   const iconButtonStyle: React.CSSProperties = {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -175,13 +179,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     handleAutoEditApplied,
   } = useAnnotations({ articleId, scrollableContentRef });
 
-  const handleNextArticle = () => {
+  // 使用useCallback包装处理函数，避免不必要的重新创建
+  const handleNextArticle = useCallback(() => {
     if (onNavigate) {
       onNavigate('next');
     }
-  };
-
-  const handleCloseDetail = () => {
+  }, [onNavigate]);
+  
+  const handleCloseDetail = useCallback(() => {
     if (onClose) {
       // 检查是否需要返回笔记中心
       if (isFromNotesPage) {
@@ -193,22 +198,27 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         console.log('[ArticleDetail] 直接导航到笔记页面');
         navigate('/notes');
       } else {
-      onClose();
+        onClose();
       }
     }
-  };
+  }, [onClose, isFromNotesPage, navigate]);
 
   const isAiDisabled = !settings.advanced.doubaoApiKey;
 
   // 保存AI摘要到数据库
   const saveAiSummary = async (summary: string) => {
-    if (!db || !articleId) return;
+    if (!db || !articleId || !isMountedRef.current || articleId !== currentArticleIdRef.current) return;
     try {
       await db.articles.update(articleId, { aiSummary: summary });
-      setArticle(prev => (prev ? { ...prev, aiSummary: summary } : null));
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (isMountedRef.current && articleId === currentArticleIdRef.current) {
+        setArticle(prev => (prev ? { ...prev, aiSummary: summary } : null));
+      }
     } catch (error) {
       console.error('保存AI摘要失败:', error);
-      message.error('保存摘要失败');
+      if (isMountedRef.current) {
+        message.error('保存摘要失败');
+      }
     }
   };
 
@@ -223,8 +233,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     setIsSummaryVisible(false); // 新文章默认不显示摘要
 
     let summaryAccumulator = '';
+    // 保存当前处理的文章ID，用于竞态检查
+    const processingArticleId = articleId;
 
     const unsubscribe = window.electron.onAiSummaryUpdate((type, data) => {
+      // 检查组件是否仍然挂载以及当前文章是否仍然是开始处理的那篇
+      if (!isMountedRef.current || processingArticleId !== currentArticleIdRef.current) return;
+      
       if (type === 'chunk') {
         setIsSummaryLoading(false); // 收到第一个chunk后就停止loading动画
         const chunk = data.data;
@@ -251,7 +266,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     if (!article || isSummaryLoading) return;
   
     // 如果已有摘要，直接切换可见性
-    if (article.aiSummary) {
+    if (article.aiSummary && article.aiSummary.trim().length > 0) {
       setIsSummaryVisible(!isSummaryVisible);
       return;
     }
@@ -285,24 +300,30 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     return text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   };
 
+  // 修改saveAiMindMap函数
   const saveAiMindMap = async (markdown: string) => {
-    if (!db || !articleId) return;
+    if (!db || !articleId || !isMountedRef.current || articleId !== currentArticleIdRef.current) return;
     try {
       await db.articles.update(articleId, { aiMindMap: markdown });
-      const updatedArticle = { ...article!, aiMindMap: markdown };
-      setArticle(updatedArticle);
-      setMindMapMarkdown(markdown);
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (isMountedRef.current && articleId === currentArticleIdRef.current) {
+        setArticle(prev => prev ? { ...prev, aiMindMap: markdown } : null);
+        setMindMapMarkdown(markdown);
+      }
     } catch (error) {
       console.error('保存AI导图失败:', error);
-      message.error('保存导图失败');
+      if (isMountedRef.current) {
+        message.error('保存导图失败');
+      }
     }
   };
 
+  // 修改handleToggleMindmap函数
   const handleToggleMindmap = async () => {
     if (!article || isMindmapLoading) return;
 
     // 如果已有导图数据，直接显示
-    if (article.aiMindMap) {
+    if (article.aiMindMap && article.aiMindMap.trim().length > 0) {
       setMindMapMarkdown(article.aiMindMap);
       setIsMindmapModalVisible(true);
       return;
@@ -315,9 +336,17 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = article.content;
     const contentText = tempDiv.textContent || tempDiv.innerText || '';
+    // 保存当前处理的文章ID
+    const processingArticleId = article.id;
 
     try {
       const result = await window.electron.invokeAI('mindmap', article.content, contentText);
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (!isMountedRef.current || processingArticleId !== currentArticleIdRef.current) {
+        console.log('文章已切换或组件已卸载，放弃AI导图结果');
+        return;
+      }
+      
       if (result && result.success) {
         await saveAiMindMap(result.data);
         setIsMindmapModalVisible(true);
@@ -326,33 +355,41 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         message.error({ content: errorMsg });
       }
     } catch (e: any) {
-      message.error({ content: `发生未知错误: ${e.message}`});
+      if (isMountedRef.current) {
+        message.error({ content: `发生未知错误: ${e.message}`});
+      }
     } finally {
-      setIsMindmapLoading(false);
+      if (isMountedRef.current) {
+        setIsMindmapLoading(false);
+      }
     }
   };
 
+  // 修改saveAiHighlightedContent函数
   const saveAiHighlightedContent = async (newContent: string) => {
-    if (!db || !articleId) return;
+    if (!db || !articleId || !isMountedRef.current || articleId !== currentArticleIdRef.current) return;
     try {
       await db.articles.update(articleId, { aiHighlightedContent: newContent });
-      const updatedArticle = { ...article!, aiHighlightedContent: newContent };
-      setArticle(updatedArticle);
-      
-      const contentWithAllHighlights = applyHighlights(newContent, annotations);
-      setProcessedContent(contentWithAllHighlights);
-
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (isMountedRef.current && articleId === currentArticleIdRef.current) {
+        setArticle(prev => prev ? { ...prev, aiHighlightedContent: newContent } : null);
+        const contentWithAllHighlights = applyHighlights(newContent, annotations);
+        setProcessedContent(contentWithAllHighlights);
+      }
     } catch (error) {
       console.error('保存AI高亮失败:', error);
-      message.error('保存高亮失败');
+      if (isMountedRef.current) {
+        message.error('保存高亮失败');
+      }
     }
   };
 
+  // 修改handleToggleAiHighlight函数
   const handleToggleAiHighlight = async () => {
     if (!article || isHighlightLoading) return;
 
     // 如果AI高亮内容已存在，直接切换可见性
-    if (article.aiHighlightedContent) {
+    if (article.aiHighlightedContent && article.aiHighlightedContent.trim().length > 0) {
       setIsAiHighlightsVisible(!isAiHighlightsVisible);
       return;
     }
@@ -364,9 +401,17 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = article.content;
     const contentText = tempDiv.textContent || tempDiv.innerText || '';
+    // 保存当前处理的文章ID
+    const processingArticleId = article.id;
 
     try {
       const result = await window.electron.invokeAI('highlight', article.content, contentText);
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (!isMountedRef.current || processingArticleId !== currentArticleIdRef.current) {
+        console.log('文章已切换或组件已卸载，放弃AI高亮结果');
+        return;
+      }
+      
       if (result && result.success) {
         const sentences = result.data as string[];
         // 在原文基础上进行高亮
@@ -385,15 +430,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         setIsAiHighlightsVisible(true); // 生成后自动显示
       } else {
         const errorMsg = result?.error || 'AI高亮失败';
-        message.error({ content: errorMsg });
+        if (isMountedRef.current) {
+          message.error({ content: errorMsg });
+        }
       }
     } catch (e: any) {
-      message.error({ content: `发生未知错误: ${e.message}` });
+      if (isMountedRef.current) {
+        message.error({ content: `发生未知错误: ${e.message}` });
+      }
     } finally {
-      setIsHighlightLoading(false);
+      if (isMountedRef.current) {
+        setIsHighlightLoading(false);
+      }
     }
   };
 
+  // 修改handleAiAction函数
   const handleAiAction = async (type: 'mindmap' | 'highlight') => {
     if (!article || !article.content) return;
 
@@ -401,6 +453,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = article.content;
     const contentText = tempDiv.textContent || tempDiv.innerText || '';
+    // 保存当前处理的文章ID
+    const processingArticleId = article.id;
 
     if (type === 'mindmap') setIsMindmapLoading(true);
     if (type === 'highlight') setIsHighlightLoading(true);
@@ -408,6 +462,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     try {
       // 对于非摘要类，继续使用旧的 invokeAI
       const result = await window.electron.invokeAI(type, article.content, contentText);
+      
+      // 检查组件是否仍然挂载以及文章是否仍然相同
+      if (!isMountedRef.current || processingArticleId !== currentArticleIdRef.current) {
+        console.log(`文章已切换或组件已卸载，放弃AI ${type}结果`);
+        return;
+      }
       
       if (result && result.success) {
         if (type === 'highlight') {
@@ -438,14 +498,20 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         // 如果 result 不存在或 success 为 false
         const errorMsg = result?.error || '调用AI服务失败，请检查网络或API Key。';
         console.error(`AI ${type} error:`, errorMsg);
-        message.error({ content: errorMsg, key: 'ai-action' });
+        if (isMountedRef.current) {
+          message.error({ content: errorMsg, key: 'ai-action' });
+        }
       }
     } catch (e: any) {
       console.error(`AI ${type} uncaught error:`, e.message);
-      message.error({ content: `发生未知错误: ${e.message}`, key: 'ai-action' });
+      if (isMountedRef.current) {
+        message.error({ content: `发生未知错误: ${e.message}`, key: 'ai-action' });
+      }
     } finally {
-      if (type === 'mindmap') setIsMindmapLoading(false);
-      if (type === 'highlight') setIsHighlightLoading(false);
+      if (isMountedRef.current) {
+        if (type === 'mindmap') setIsMindmapLoading(false);
+        if (type === 'highlight') setIsHighlightLoading(false);
+      }
     }
   };
 
@@ -489,6 +555,98 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     setIsMounted(true);
   }, []);
 
+  // 组件挂载/卸载时更新isMountedRef
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    // 只在组件挂载时执行一次会话存储检查
+    const shouldOpenSidebar = sessionStorage.getItem('openAnnotationSidebar') === 'true';
+    const highlightAnnotationId = sessionStorage.getItem('highlightAnnotationId');
+    const shouldEditAnnotation = sessionStorage.getItem('editAnnotation') === 'true';
+    const annotationObjectStr = sessionStorage.getItem('annotationObject');
+    const fromNotesPage = sessionStorage.getItem('fromNotesPage') === 'true';
+
+    console.log(`[ArticleDetail] 检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
+
+    // 设置是否从笔记中心跳转过来的标志
+    if (fromNotesPage) {
+      setIsFromNotesPage(true);
+      // 不要在这里清除fromNotesPage标记，而是在组件卸载时清除
+    }
+
+    // 立即清除会话存储中的跳转标记，防止其他组件实例读取到
+    if (shouldOpenSidebar || highlightAnnotationId || shouldEditAnnotation || annotationObjectStr) {
+      console.log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
+      sessionStorage.removeItem('openAnnotationSidebar');
+      sessionStorage.removeItem('highlightAnnotationId');
+      sessionStorage.removeItem('editAnnotation');
+      sessionStorage.removeItem('annotationObject');
+      // 注意：不要在这里清除fromNotesPage，因为我们需要它来判断返回逻辑
+    }
+
+    // 只有当明确设置了这些值时才执行后续操作
+    if ((shouldOpenSidebar && highlightAnnotationId) || fromNotesPage) {
+      console.log(`[ArticleDetail] 检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
+      
+      // 注意：在useEffect第一次运行时isSidebarVisible和handleToggleSidebar可能还没有从useAnnotations中获取
+      // 所以将相关逻辑延迟到下一个事件循环执行
+      setTimeout(() => {
+        // 立即打开侧边栏
+        if (isSidebarVisible === false) {
+          console.log('[ArticleDetail] 正在立即打开侧边栏');
+          handleToggleSidebar();
+        } else {
+          console.log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
+        }
+
+        // 如果有高亮ID，则处理高亮和编辑
+        if (highlightAnnotationId) {
+          // 修复：确保使用正确的元素ID格式
+          const cleanAnnotationId = highlightAnnotationId.replace(/^annotation-/, '');
+          console.log(`[ArticleDetail] 处理后的注释ID: ${cleanAnnotationId}`);
+
+          // 滚动到对应的高亮
+          console.log(`[ArticleDetail] 正在滚动到高亮: ${cleanAnnotationId}`);
+          handleScrollToAnnotation(cleanAnnotationId);
+
+          // 如果需要编辑，通过设置自动编辑ID来触发编辑模式
+          if (shouldEditAnnotation) {
+            console.log(`[ArticleDetail] 正在触发编辑模式: ${cleanAnnotationId}`);
+            
+            // 增加延迟，确保笔记数据已经加载完成
+            setTimeout(() => {
+              // 触发编辑笔记事件
+              document.dispatchEvent(new CustomEvent('edit-annotation', {
+                detail: { annotationId: cleanAnnotationId }
+              }));
+            }, 300);
+          }
+        }
+      }, 0);
+    }
+    
+    return () => {
+      isMountedRef.current = false;
+      
+      // 组件卸载时清除fromNotesPage标记
+      if (isFromNotesPage) {
+        console.log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
+        sessionStorage.removeItem('fromNotesPage');
+      }
+    };
+  }, []);
+
+  // 当articleId变化时更新currentArticleIdRef
+  useEffect(() => {
+    currentArticleIdRef.current = articleId;
+    
+    // 移除尝试设置isSidebarVisible的代码，因为它是从useAnnotations钩子中获取的
+    // 在useAnnotations中已经处理了侧边栏可见性的变化
+  }, [articleId]);
+  
+  // 删除之前的useEffect，将其合并到组件挂载效果中
+  // 删除之前的componentWillUnmount效果，将其合并到主useEffect中
+  
   const loadArticleRef = useRef<((forceReload?: boolean) => Promise<void>) | null>(null);
 
   const performUpgrade = useCallback(async (articleToUpgrade: Article) => {
@@ -897,7 +1055,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   useEffect(() => {
     if (!articleId) return;
     
-    // 检查是否有从笔记中心跳转过来的信息
     const shouldOpenSidebar = sessionStorage.getItem('openAnnotationSidebar') === 'true';
     const highlightAnnotationId = sessionStorage.getItem('highlightAnnotationId');
     const shouldEditAnnotation = sessionStorage.getItem('editAnnotation') === 'true';
@@ -959,14 +1116,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             }, 500);
           }
         }, 300); // 使用更短的延迟，只是为了确保DOM已经更新
-
-        return () => {
-          console.log('[ArticleDetail] 清除定时器，防止内存泄漏');
-          clearTimeout(timer);
-        };
       }
     }
-  }, [articleId, isSidebarVisible, handleToggleSidebar, handleScrollToAnnotation]);
+  }, [articleId, isSidebarVisible]);
 
   // 组件卸载时清除fromNotesPage标记
   useEffect(() => {

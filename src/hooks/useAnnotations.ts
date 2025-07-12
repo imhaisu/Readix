@@ -1,7 +1,16 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { message } from 'antd';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { Annotation } from '../db/database';
+
+// 定义全局类型
+declare global {
+  interface Window {
+    __annotationLoadTracker?: {
+      [key: string]: number;
+    };
+  }
+}
 
 // a helper function that might be moved to utils later
 const applyHighlights = (content: string, annotationsToApply: Annotation[]): string => {
@@ -406,16 +415,75 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       return [];
     }
     
+    // 添加一个标记，避免短时间内重复调用
+    const annotationLoadKey = `annotation-load-${articleId}`;
+    if (window.__annotationLoadTracker?.[annotationLoadKey] && 
+        Date.now() - window.__annotationLoadTracker[annotationLoadKey] < 500) {
+      console.log(`[useAnnotations] 短时间内重复加载，跳过: ${articleId}`);
+      return annotations; // 直接返回当前状态中的标注
+    }
+    
+    // 记录最后加载时间
+    if (!window.__annotationLoadTracker) window.__annotationLoadTracker = {};
+    window.__annotationLoadTracker[annotationLoadKey] = Date.now();
+    
     console.log(`[useAnnotations] 开始加载文章 ${articleId} 的笔记和高亮`);
     
     // 加载当前文章的笔记和高亮
     const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
     console.log(`[useAnnotations] 加载了 ${annos.length} 条笔记和高亮`);
-    setAnnotations(annos);
+    
+    // 只有当articleId匹配时才更新状态，避免竞态条件
+    if (articleId === currentArticleId.current) {
+      setAnnotations(annos);
+    }
     return annos;
-  }, [db, articleId]);
+  }, [db, articleId, annotations]);
   
-  const handleToggleSidebar = () => {
+  // 使用Ref跟踪当前文章ID，避免竞态条件
+  const currentArticleId = useRef<string | null>(null);
+  
+  // 更新currentArticleId Ref
+  useEffect(() => {
+    currentArticleId.current = articleId;
+  }, [articleId]);
+  
+  // 使用Ref跟踪事件监听器注册状态，避免重复添加
+  const eventListenerAdded = useRef(false);
+  
+  // 添加监听自定义事件，用于从笔记中心跳转过来时触发编辑模式
+  useEffect(() => {
+    // 如果已经添加过监听器，则跳过
+    if (eventListenerAdded.current) return;
+    
+    const handleEditAnnotation = (event: Event) => {
+      const customEvent = event as CustomEvent<{ annotationId: string }>;
+      if (customEvent.detail && customEvent.detail.annotationId) {
+        const annotationId = customEvent.detail.annotationId;
+        console.log(`[useAnnotations] 收到编辑笔记事件，笔记ID: ${annotationId}`);
+        setAutoEditNoteId(annotationId);
+      }
+    };
+
+    console.log('[useAnnotations] 添加编辑笔记事件监听器');
+    document.addEventListener('edit-annotation', handleEditAnnotation);
+    eventListenerAdded.current = true;
+
+    return () => {
+      console.log('[useAnnotations] 移除编辑笔记事件监听器');
+      document.removeEventListener('edit-annotation', handleEditAnnotation);
+      eventListenerAdded.current = false;
+    };
+  }, []);
+  
+  // 使用useMemo缓存处理后的内容，避免重复计算
+  const memoizedProcessedContent = useMemo(() => {
+    if (!processedContent || annotations.length === 0) return processedContent;
+    return applyHighlights(processedContent, annotations);
+  }, [processedContent, annotations, applyHighlights]);
+  
+  // 存储原始的handleToggleSidebar函数，用于在memoizedHandleToggleSidebar中引用
+  const handleToggleSidebar = useCallback(() => {
     const newVisibility = !isSidebarVisible;
     console.log(`[useAnnotations] 切换侧边栏可见性: ${newVisibility}`);
     setIsSidebarVisible(newVisibility);
@@ -451,8 +519,8 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         }
       }, 300);
     }
-  };
-
+  }, [isSidebarVisible, annotations]);
+  
   const handleScrollToAnnotation = (annotationId: string) => {
     console.log(`[useAnnotations] 尝试滚动到笔记: ${annotationId}`);
     
@@ -1104,29 +1172,17 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [selectionPopup.visible]);
 
-  // 添加监听自定义事件，用于从笔记中心跳转过来时触发编辑模式
+  // 初始加载笔记数据
   useEffect(() => {
-    const handleEditAnnotation = (event: Event) => {
-      const customEvent = event as CustomEvent<{ annotationId: string }>;
-      if (customEvent.detail && customEvent.detail.annotationId) {
-        const annotationId = customEvent.detail.annotationId;
-        console.log(`[useAnnotations] 收到编辑笔记事件，笔记ID: ${annotationId}`);
-        setAutoEditNoteId(annotationId);
-      }
-    };
-
-    console.log('[useAnnotations] 添加编辑笔记事件监听器');
-    document.addEventListener('edit-annotation', handleEditAnnotation);
-
-    return () => {
-      console.log('[useAnnotations] 移除编辑笔记事件监听器');
-      document.removeEventListener('edit-annotation', handleEditAnnotation);
-    };
-  }, []);
-
+    if (articleId && db) {
+      loadAnnotations();
+    }
+  }, [articleId, db, loadAnnotations]);
+  
+  // 暴露优化后的接口
   return {
     annotations,
-    processedContent,
+    processedContent: memoizedProcessedContent, // 使用缓存的处理内容
     setProcessedContent,
     isSidebarVisible,
     pendingAnnotation,
@@ -1135,7 +1191,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     popupRef,
     loadAnnotations,
     applyHighlights,
-    handleToggleSidebar,
+    handleToggleSidebar, // 使用缓存的事件处理函数
     handleScrollToAnnotation,
     handleSelection,
     handleHighlightClick,

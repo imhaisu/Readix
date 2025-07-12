@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Key as ReactKey, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input } from 'antd';
+import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input, Button } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   LinkOutlined,
@@ -12,13 +12,16 @@ import {
   DeleteOutlined,
   SettingOutlined,
   SwapOutlined,
+  TagOutlined,
+  PlusOutlined
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
-import { FeedSource, Group } from '../db/database';
+import { FeedSource, Group, Topic, TopicFeed } from '../db/database';
 import { processFeedIcons } from '../utils/iconUtils';
 import styles from './FeedList.module.css';
 import EditFeedModal from './EditFeedModal';
+import AddTopicModal from './AddTopicModal';
 
 interface FeedListProps {
   collapsed: boolean;
@@ -32,7 +35,7 @@ const iconErrorCache = new Map<string, boolean>();
 
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
-  const { feedId, groupId: currentRouteGroupId } = useParams<{ feedId?: string; groupId?: string }>();
+  const { feedId, groupId: currentRouteGroupId, topicId: currentRouteTopicId } = useParams<{ feedId?: string; groupId?: string; topicId?: string }>();
   const { db, triggerArticleListRefresh, feedCountRefreshTrigger } = useDatabase();
   const { filter } = useFilter();
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,13 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
   const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
   const [dynamicCounts, setDynamicCounts] = useState<Map<string, number>>(new Map());
+
+  // 主题相关状态
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [topicFeeds, setTopicFeeds] = useState<Map<string, string[]>>(new Map());
+  const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
+  const [isAddTopicModalVisible, setIsAddTopicModalVisible] = useState(false);
+  const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
 
   // Modals State
   const [isRenameGroupModalVisible, setIsRenameGroupModalVisible] = useState(false);
@@ -83,6 +93,86 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     calculateCounts();
   }, [db, filter, feedsFromProps, feedCountRefreshTrigger, refreshKey]);
 
+  // 加载主题数据
+  useEffect(() => {
+    const loadTopics = async () => {
+      if (!db) return;
+      
+      try {
+        // 获取所有主题
+        const allTopics = await db.topics.toArray();
+        setTopics(allTopics.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+        
+        // 获取所有主题-订阅源关联
+        const allTopicFeeds = await db.topicFeeds.toArray();
+        
+        // 构建主题->订阅源ID映射
+        const topicFeedMap = new Map<string, string[]>();
+        allTopicFeeds.forEach(tf => {
+          if (!topicFeedMap.has(tf.topicId)) {
+            topicFeedMap.set(tf.topicId, []);
+          }
+          topicFeedMap.get(tf.topicId)?.push(tf.feedId);
+        });
+        setTopicFeeds(topicFeedMap);
+        
+        // 计算每个主题的未读文章数
+        const topicCountMap = new Map<string, number>();
+        for (const topic of allTopics) {
+          if (!topic.id) continue;
+          
+          const feedIds = topicFeedMap.get(topic.id) || [];
+          if (feedIds.length === 0) {
+            topicCountMap.set(topic.id, 0);
+            continue;
+          }
+          
+          // 针对每个主题，直接查询数据库获取未读文章数
+          let totalCount = 0;
+          for (const feedId of feedIds) {
+            if (filter === 'all') {
+              // 获取所有未隐藏文章数
+              const count = await db.articles
+                .where('sourceId').equals(feedId)
+                .filter(article => article.isHidden !== true)
+                .count();
+              totalCount += count;
+            } else if (filter === 'unread') {
+              // 获取未读未隐藏文章数
+              const count = await db.articles
+                .where({ sourceId: feedId, isRead: 'false' })
+                .filter(article => article.isHidden !== true)
+                .count();
+              totalCount += count;
+            } else if (filter === 'starred') {
+              // 获取已收藏未隐藏文章数
+              const count = await db.articles
+                .where({ sourceId: feedId, isStarred: 'true' })
+                .filter(article => article.isHidden !== true)
+                .count();
+              totalCount += count;
+            } else {
+              // 默认获取未读未隐藏文章数
+              const count = await db.articles
+                .where({ sourceId: feedId, isRead: 'false' })
+                .filter(article => article.isHidden !== true)
+                .count();
+              totalCount += count;
+            }
+          }
+          
+          topicCountMap.set(topic.id, totalCount);
+        }
+        setTopicCounts(topicCountMap);
+        
+      } catch (error) {
+        console.error('加载主题数据失败:', error);
+      }
+    };
+    
+    loadTopics();
+  }, [db, dynamicCounts, refreshKey, filter]);
+
   useEffect(() => {
     if (groupsFromProps) {
       const defaultExpanded = groupsFromProps
@@ -118,10 +208,12 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       setSelectedKeys([`feed-${feedId}`]);
     } else if (currentRouteGroupId) {
       setSelectedKeys([`group-${currentRouteGroupId}`]);
+    } else if (currentRouteTopicId) {
+      setSelectedKeys([`topic-${currentRouteTopicId}`]);
     } else {
       setSelectedKeys([]);
     }
-  }, [feedId, currentRouteGroupId]);
+  }, [feedId, currentRouteGroupId, currentRouteTopicId]);
 
   const handleGroupExpanderClick = useCallback(async (e: React.MouseEvent, groupKey: ReactKey) => {
     e.stopPropagation();
@@ -157,7 +249,66 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       } else {
         navigate(`/group/${newGroupId}`);
       }
+    } else if (key.startsWith('topic-')) {
+      const newTopicId = key.replace('topic-', '');
+      if (newTopicId === currentRouteTopicId) {
+        document.dispatchEvent(new CustomEvent('request-list-refresh'));
+      } else {
+        navigate(`/topic/${newTopicId}`);
+      }
     }
+  };
+  
+  // 主题相关处理函数
+  const handleAddTopic = () => {
+    setEditingTopic(null);
+    setIsAddTopicModalVisible(true);
+  };
+  
+  const handleEditTopic = (topic: Topic) => {
+    setEditingTopic(topic);
+    setIsAddTopicModalVisible(true);
+  };
+  
+  const handleTopicSuccess = (topic: Topic) => {
+    triggerArticleListRefresh();
+    setIsAddTopicModalVisible(false);
+    setEditingTopic(null);
+    setRefreshKey(prev => prev + 1);
+  };
+  
+  const handleDeleteTopic = (topicId: string, topicName: string) => {
+    if (!db) return;
+    Modal.confirm({
+      title: `确认删除主题 "${topicName}"?`,
+      icon: <ExclamationCircleOutlined />,
+      content: '此操作只会删除主题，不会影响订阅源和文章。',
+      okText: '确认删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await db.transaction('rw', db.topics, db.topicFeeds, async () => {
+            // 删除主题与订阅源的关联
+            await db.topicFeeds.where('topicId').equals(topicId).delete();
+            
+            // 删除主题
+            await db.topics.delete(topicId);
+          });
+          
+          setRefreshKey(prev => prev + 1);
+          
+          if (selectedKeys[0] === `topic-${topicId}`) {
+            navigate('/');
+          }
+          
+          message.success(`主题 "${topicName}" 已删除。`);
+        } catch (error) {
+          console.error('删除主题失败:', error);
+          Modal.error({ title: '删除失败', content: '删除主题时发生错误。' });
+        }
+      },
+    });
   };
 
   const handleRefreshFeed = async (feedIdToRefresh: string) => {
@@ -383,6 +534,72 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     return items;
   };
 
+  const createTopicMenuItems = (topic: Topic, hasUnreads: boolean): MenuProps['items'] => {
+    const items: MenuProps['items'] = [
+      { key: 'mark-all-read', label: '标记已读', icon: <CheckCircleOutlined />, disabled: !hasUnreads, onClick: () => topic.id && handleMarkAllAsReadForTopic(topic.id, topic.name) },
+      { key: 'edit', label: '编辑', icon: <EditOutlined />, onClick: () => topic.id && handleEditTopic(topic) },
+      { type: 'divider' },
+      { key: 'delete', label: '删除', icon: <DeleteOutlined />, danger: true, onClick: () => topic.id && handleDeleteTopic(topic.id, topic.name) },
+    ];
+    return items;
+  };
+
+  // 处理主题下所有文章标记为已读
+  const handleMarkAllAsReadForTopic = async (tId: string, tName: string) => {
+    if(!db) return;
+    
+    // 获取与该主题关联的所有订阅源ID
+    const feedIds = topicFeeds.get(tId) || [];
+    if (feedIds.length === 0) {
+      message.info(`主题 "${tName}" 下没有订阅源。`);
+      return;
+    }
+    
+    Modal.confirm({
+      title: `将主题 "${tName}" 下所有文章标为已读?`,
+      icon: <CheckCircleOutlined />,
+      content: '此操作会影响该主题下所有订阅源的未读计数。',
+      okText: '全部标为已读',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          let totalMarked = 0;
+          
+          // 遍历该主题下的所有订阅源
+          for (const feedId of feedIds) {
+            const articlesToUpdate = await db.articles.where({ sourceId: feedId, isRead: 'false' }).toArray();
+            if (articlesToUpdate.length > 0) {
+              const idsToUpdate = articlesToUpdate.map(a => a.id);
+              await db.articles.where('id').anyOf(idsToUpdate).modify({ isRead: 'true' });
+              
+              // 使用精确查询获取真实的未读数量
+              const actualUnreadCount = await db.articles
+                .where({ sourceId: feedId, isRead: 'false' })
+                .filter(article => article.isHidden !== true)
+                .count();
+                
+              await db.feeds.update(feedId, { unreadCount: actualUnreadCount });
+              totalMarked += articlesToUpdate.length;
+            }
+          }
+          
+          // 强制刷新计数和文章列表
+          triggerArticleListRefresh();
+          setRefreshKey(prev => prev + 1);
+          
+          if (totalMarked > 0) {
+            message.success(`主题 "${tName}" 下 ${totalMarked} 篇文章已标为已读。`);
+          } else {
+            message.info(`主题 "${tName}" 没有未读文章。`);
+          }
+        } catch (error) {
+          console.error('标记主题全部已读失败:', error);
+          message.error('操作失败，请重试。');
+        }
+      },
+    });
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
@@ -397,6 +614,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   
   const sortedGroups = [...groupsFromProps].sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
   const feedsWithoutGroup = processedFeeds.filter(f => !f.groupId).sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+  const sortedTopics = [...topics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const renderFeeds = (feedList: FeedSource[], isGrouped: boolean) => {
     return feedList.map(feed => {
@@ -444,6 +662,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
   return (
     <div className={styles.feedListContainer}>
+      {/* 订阅分组 */}
       {sortedGroups.map((group, index) => {
         const groupKey = `group-${group.id}`;
         const isExpanded = expandedKeys.includes(groupKey);
@@ -481,6 +700,41 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           </Dropdown>
         );
       })}
+      
+      {(feedsWithoutGroup.length > 0 || sortedGroups.length > 0) && 
+        sortedTopics.length > 0 && <div className={styles.separator} />}
+      
+      {/* 主题阅读部分 */}
+      <div className={styles.sectionHeader}>
+        <span className={styles.sectionTitle}>主题阅读</span>
+        <Button 
+          type="text" 
+          size="small" 
+          className={styles.addButton}
+          icon={<PlusOutlined />} 
+          onClick={handleAddTopic}
+        />
+      </div>
+      
+      {sortedTopics.map(topic => {
+        if (!topic.id) return null;
+        const topicKey = `topic-${topic.id}`;
+        const count = topicCounts.get(topic.id) ?? 0;
+        const hasUnreads = count > 0;
+        
+        return (
+          <Dropdown key={topicKey} menu={{ items: createTopicMenuItems(topic, hasUnreads) }} trigger={['contextMenu']}>
+            <div
+              className={`${styles.topicItem} ${selectedKeys.includes(topicKey) ? styles.selected : ''}`}
+              onClick={() => handleSelect(topicKey)}
+            >
+              <TagOutlined className={styles.topicIcon} />
+              <span className={styles.title}>{topic.name}</span>
+              {hasUnreads && <span className={styles.count}>{count}</span>}
+            </div>
+          </Dropdown>
+        );
+      })}
 
       {feedsWithoutGroup.length > 0 && sortedGroups.length > 0 && <div className={styles.separator} />}
 
@@ -508,6 +762,13 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           onCancel={handleEditFeedCancel}
         />
       )}
+      
+      <AddTopicModal
+        visible={isAddTopicModalVisible}
+        onClose={() => setIsAddTopicModalVisible(false)}
+        onSuccess={handleTopicSuccess}
+        editingTopic={editingTopic}
+      />
     </div>
   );
 };

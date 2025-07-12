@@ -7,6 +7,8 @@ export class RssDatabase extends Dexie {
   groups!: Dexie.Table<Group, string>;
   savedLinks!: Dexie.Table<SavedLink, string>;
   annotations!: Dexie.Table<Annotation, string>;
+  topics!: Dexie.Table<Topic, string>; // 新增：主题表
+  topicFeeds!: Dexie.Table<TopicFeed, string>; // 新增：主题与订阅源关联表
 
   constructor() {
     super('RssDatabase');
@@ -69,12 +71,23 @@ export class RssDatabase extends Dexie {
       });
     });
     
+    // 添加版本14，支持主题阅读功能
+    this.version(14).stores({
+      articles: 'id, sourceId, publishDate, fetchDate, isRead, isStarred, url, title, scrollPosition, isReadLater, isFullText, aiSummary, aiMindMap, aiHighlightedContent, [sourceId+isRead], [sourceId+isStarred]',
+      topics: 'id, name, createdAt, order',
+      topicFeeds: 'id, topicId, feedId, [topicId+feedId]'
+    }).upgrade(async (tx) => {
+      console.log("数据库从版本13升级到版本14，添加主题阅读功能");
+    });
+    
     // 定义类型
     this.feeds = this.table('feeds');
     this.articles = this.table('articles');
     this.groups = this.table('groups');
     this.savedLinks = this.table('savedLinks');
     this.annotations = this.table('annotations');
+    this.topics = this.table('topics'); // 新增：主题表
+    this.topicFeeds = this.table('topicFeeds'); // 新增：主题与订阅源关联表
   }
 
   async getUnreadCount(): Promise<Record<string, number>> {
@@ -166,6 +179,22 @@ export interface Annotation {
   suffix: string; // 高亮内容的后20个字符上下文
   noteContent?: string; // 笔记内容 (如果是笔记类型)
   createdAt: number; // 创建时间戳，用于排序
+}
+
+// 新增：主题接口
+export interface Topic {
+  id?: string;
+  name: string;
+  description?: string;
+  createdAt: number;
+  order?: number;
+}
+
+// 新增：主题与订阅源关联接口
+export interface TopicFeed {
+  id?: string;
+  topicId: string;
+  feedId: string;
 }
 
 // --- 单例模式实现 ---

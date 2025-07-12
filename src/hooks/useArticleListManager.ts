@@ -15,6 +15,7 @@ export interface UseArticleListManagerProps {
   selectedArticleId: string | null;
   currentFeedId?: string;
   currentGroupId?: string;
+  currentTopicId?: string;
   lastUpdatedArticleInfo?: { id: string; changes: Partial<Article> } | null;
   listRefreshKey?: number;
   onSelectArticle: (articleId: string | null) => void;
@@ -27,6 +28,7 @@ export const useArticleListManager = ({
   selectedArticleId,
   currentFeedId,
   currentGroupId,
+  currentTopicId,
   lastUpdatedArticleInfo,
   listRefreshKey,
   onSelectArticle,
@@ -179,20 +181,33 @@ export const useArticleListManager = ({
       if (lastUpdatedArticleInfo?.id === articleId) {
         onLastUpdatedArticleInfoChangeRef.current(null);
       }
+      
+      // 更新订阅源的未读计数
       if (sourceId) {
+        // 使用精确查询获取真实的未读数量，而不是简单地加减1
+        const actualUnreadCount = await db.articles
+          .where({ sourceId: sourceId, isRead: 'false' })
+          .filter(article => article.isHidden !== true)
+          .count();
+        
         const feed = feedInfoMap.get(sourceId) || await db.feeds.get(sourceId);
         if (feed?.id) {
-          const change = newStatus === 'true' ? -1 : 1;
-          await db.feeds.where('id').equals(feed.id).modify((f) => {
-            f.unreadCount = (f.unreadCount || 0) + change;
-          });
-          triggerFeedCountRefresh();
+          await db.feeds.update(feed.id, { unreadCount: actualUnreadCount });
+          
+          // 在主题视图中，需要确保主题的计数也能更新
+          if (currentTopicId) {
+            // 主题视图的计数会通过刷新全局计数得到更新
+            triggerFeedCountRefresh();
+          }
         }
+        
+        // 不管是哪种情况，都触发计数刷新
+        triggerFeedCountRefresh();
       }
     } catch (error) {
       console.error("Error toggling article read status:", error);
     }
-  }, [db, feedInfoMap, triggerFeedCountRefresh, lastUpdatedArticleInfo, currentFeedId]);
+  }, [db, feedInfoMap, triggerFeedCountRefresh, lastUpdatedArticleInfo, currentFeedId, currentTopicId]);
 
   const toggleFnRef = useRef(toggleArticleReadStatus);
   toggleFnRef.current = toggleArticleReadStatus;
@@ -220,7 +235,7 @@ export const useArticleListManager = ({
     }
   }, [lastUpdatedArticleInfo]);
 
-  // Effect 1: Fetch articles from DB when context changes (feed, group, or forced refresh)
+  // Effect 1: Fetch articles from DB when context changes (feed, group, topic, or forced refresh)
   useEffect(() => {
     if (!isInitialized || !db) {
       return;
@@ -237,7 +252,7 @@ export const useArticleListManager = ({
       }
       setError(null);
       
-      // 当订阅源或分组变化时，清空豁免列表和持久豁免列表
+      // 当订阅源、分组或主题变化时，清空豁免列表和持久豁免列表
       // 这样在切换上下文时不会保留不属于当前上下文的文章
       setExemptedArticleIds(new Set());
       setPersistentlyExemptedIds(new Set());
@@ -245,7 +260,7 @@ export const useArticleListManager = ({
       try {
         let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
 
-        // Filter by Feed or Group (DB-side)
+        // Filter by Feed, Group, or Topic (DB-side)
         let feedsInScope: FeedSource[] = [];
         if (currentFeedId) {
           const feed = await db.feeds.get(currentFeedId);
@@ -257,6 +272,24 @@ export const useArticleListManager = ({
           if (feedIdsInGroup.size > 0) {
             collection = collection.filter(article => article.sourceId ? feedIdsInGroup.has(article.sourceId) : false);
           } else {
+            setAllArticles([]);
+            setLoading(false);
+            setIsRefreshing(false);
+            setHasInitialLoaded(true);
+            return;
+          }
+        } else if (currentTopicId) {
+          // 获取主题下所有的订阅源ID
+          const topicFeeds = await db.topicFeeds.where('topicId').equals(currentTopicId).toArray();
+          const feedIdsInTopic = topicFeeds.map(tf => tf.feedId);
+          
+          // 获取主题下所有的订阅源
+          if (feedIdsInTopic.length > 0) {
+            feedsInScope = await db.feeds.where('id').anyOf(feedIdsInTopic).toArray();
+            // 过滤文章，只显示属于主题内订阅源的文章
+            collection = collection.filter(article => article.sourceId ? feedIdsInTopic.includes(article.sourceId) : false);
+          } else {
+            // 如果主题下没有订阅源，则返回空数组
             setAllArticles([]);
             setLoading(false);
             setIsRefreshing(false);
@@ -348,7 +381,7 @@ export const useArticleListManager = ({
 
     loadArticlesForContext();
     
-  }, [db, isInitialized, currentFeedId, currentGroupId, listRefreshKey, articleListRefreshTrigger]);
+  }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, listRefreshKey, articleListRefreshTrigger]);
 
   // Effect 2: Filter and sort articles for display when data or filters change
   const displayedArticlesResult = useMemo(() => {

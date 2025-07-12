@@ -38,6 +38,7 @@ const router = createBrowserRouter(
             { index: true, element: <HomePage filter="all" /> },
             { path: 'feed/:feedId', element: <HomePage /> },
             { path: 'group/:groupId', element: <HomePage /> },
+            { path: 'topic/:topicId', element: <HomePage /> }, // 新增：主题路由
             { path: 'starred', element: <HomePage filter="starred" /> },
             { path: 'unread', element: <HomePage filter="unread" /> },
             { path: 'all', element: <HomePage filter="all" /> },

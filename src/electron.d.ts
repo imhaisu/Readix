@@ -34,6 +34,7 @@ declare global {
       saveFilterRules: (rules: any) => Promise<void>;
       updateArticles: (feedId: string) => Promise<void>;
       refreshFeed: (feedId: string) => Promise<void>;
+      fetchArticleContent: (url: string) => Promise<any>;
       getArticleContent: (url: string) => Promise<any>;
       getSystemFonts: () => Promise<string[]>;
       getDarkMode: () => Promise<boolean>;
@@ -44,6 +45,13 @@ declare global {
       importOPML: () => Promise<any>;
       exportOPML: () => Promise<any>;
       refreshAllFeeds: (feeds: any[]) => Promise<any>;
+      // AI 功能
+      invokeAI: (type: 'mindmap' | 'highlight' | 'summary', content: string, contentText: string) => Promise<any>;
+      streamAiSummary: (contentText: string) => void;
+      onAiSummaryUpdate: (callback: (type: 'chunk' | 'end' | 'error', data?: any) => void) => () => void;
+      testDoubaoApi: (apiKey: string) => Promise<any>;
+      // 外部链接
+      shellOpenExternal: (url: string) => Promise<void>;
       ipcRenderer: {
         on: (channel: string, listener: (...args: any[]) => void) => void;
         once: (channel: string, listener: (...args: any[]) => void) => void;

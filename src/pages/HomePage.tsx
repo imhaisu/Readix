@@ -20,7 +20,7 @@ import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
-import { FeedSource, Article } from '../db/database';
+import { FeedSource, Article, Topic } from '../db/database';
 import { getTodayRange, debounce, updateUnreadCountOptimized, formatDate, logDateIssue } from '../utils/helpers';
 import { debugFeedFilterRules, forceApplyAllFeedRules, checkAndFixAllFeedRules } from '../utils/filterUtils';
 import { debugGlobalFilterRules } from '../contexts/FilterRulesContext';
@@ -68,7 +68,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { feedId, groupId } = useParams<{ feedId?: string; groupId?: string }>();
+  const { feedId, groupId, topicId } = useParams<{ feedId?: string; groupId?: string; topicId?: string }>();
 
   const [feeds, setFeeds] = useState<FeedSource[]>([]);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -258,6 +258,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       } else if (groupId) {
         const group = await db.groups.get(groupId);
         setPageTitle(group?.name || '分组');
+      } else if (topicId) {
+        const topic = await db.topics.get(topicId);
+        setPageTitle(topic?.name || '主题');
       } else if (filter === 'starred') {
         setPageTitle('我的收藏');
       } else if (filter === 'unread') {
@@ -266,7 +269,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         setPageTitle('所有文章');
       } else if (window.location.pathname === '/today') {
         setPageTitle('今日文章');
-      } else if (filter === undefined && !feedId && !groupId) {
+      } else if (filter === undefined && !feedId && !groupId && !topicId) {
         // 如果没有明确的筛选条件，使用通用标题
         if (isTodayView) {
           setPageTitle('今日文章');
@@ -279,7 +282,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     };
 
     updateTitle();
-  }, [db, feedId, groupId, filter, isTodayView]);
+  }, [db, feedId, groupId, topicId, filter, isTodayView]);
 
   const loadFeeds = async () => {
     if (!db) return;
@@ -569,6 +572,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       conditions.sourceId = feedId;
     } else if (groupId) {
       conditions.groupId = groupId; // Pass to consumers like ArticleList and handleMarkAllReadLocal
+    } else if (topicId) {
+      conditions.topicId = topicId; // 添加主题ID条件
     } else if (filter === 'starred') {
       conditions.isStarred = 'true';
     } else if (filter === 'unread') {
@@ -600,7 +605,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
     
     return conditions;
-  }, [feedId, groupId, activeListFilter, filter, isTodayView]);
+  }, [feedId, groupId, topicId, activeListFilter, filter, isTodayView]);
 
   const handleAddFirstFeed = (feed: FeedSource) => {
     navigate(`/feed/${feed.id}`);
@@ -628,6 +633,17 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       }
       articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => feedIdsInGroup.includes(a.sourceId));
       delete currentFilter.groupId; // Remove so it's not processed below
+    }
+
+    // Special handling for topicId, as articles don't have it directly.
+    if (currentFilter.topicId) {
+      const topicFeeds = await db.topicFeeds.where('topicId').equals(currentFilter.topicId).toArray();
+      const feedIdsInTopic = topicFeeds.map(tf => tf.feedId);
+      if (feedIdsInTopic.length === 0) {
+        return; // 如果没有关联的订阅源，直接返回
+      }
+      articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => feedIdsInTopic.includes(a.sourceId));
+      delete currentFilter.topicId; // 移除已处理的条件
     }
 
     // Applying the rest of the dynamic filter
