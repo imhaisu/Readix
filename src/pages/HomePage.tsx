@@ -981,25 +981,89 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   // 定时更新文章数量显示
   useEffect(() => {
+    // 添加记忆化缓存，避免不必要的更新
+    const articleCountCache = {
+      count: 0,
+      lastUpdateTime: 0,
+      key: `${feedId}-${groupId}-${topicId}-${activeListFilter}-${listRefreshKey}`
+    };
+    
     // 文章数量更新函数
     const updateArticleCount = () => {
-      if (articleListRef.current) {
-        const articles = articleListRef.current.getArticles();
-        setArticleCount(articles.length);
-        // 移除日志输出，避免大量日志刷屏
-        // console.log(`文章数量更新: ${articles.length} 篇`);
+      if (!articleListRef.current) return;
+      
+      const now = Date.now();
+      const cacheKey = `${feedId}-${groupId}-${topicId}-${activeListFilter}-${listRefreshKey}`;
+      
+      // 如果缓存键变化或超过缓存时间，则更新数量
+      if (cacheKey !== articleCountCache.key || (now - articleCountCache.lastUpdateTime) > 5000) {
+        const newCount = articleListRef.current.getArticleCount();
+        
+        // 只有当数量变化时才更新状态，避免不必要的渲染
+        if (newCount !== articleCountCache.count) {
+          setArticleCount(newCount);
+          articleCountCache.count = newCount;
+        }
+        
+        articleCountCache.lastUpdateTime = now;
+        articleCountCache.key = cacheKey;
       }
     };
     
-    // 初始化和列表刷新时更新数量
+    // 初始化时立即更新一次
     updateArticleCount();
     
-    // 设置定时器，将间隔从1秒改为5秒，减少更新频率
-    const timer = setInterval(updateArticleCount, 5000);
+    // 使用 RAF 代替 setInterval，避免在后台标签页中不必要的更新
+    let animationFrameId: number;
+    let lastUpdateTime = 0;
     
-    // 清理定时器
-    return () => clearInterval(timer);
-  }, [listRefreshKey, articleListRefreshTrigger]);
+    const checkUpdate = () => {
+      const now = Date.now();
+      if (now - lastUpdateTime > 1000) { // 每秒检查一次
+        updateArticleCount();
+        lastUpdateTime = now;
+      }
+      animationFrameId = requestAnimationFrame(checkUpdate);
+    };
+    
+    animationFrameId = requestAnimationFrame(checkUpdate);
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [feedId, groupId, topicId, activeListFilter, listRefreshKey, articleListRefreshTrigger]);
+
+  // 监听文章数量变化事件，使数量更新更加及时
+  useEffect(() => {
+    const handleArticleCountChanged = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        count: number;
+        filter: string;
+        feedId?: string;
+        groupId?: string;
+        topicId?: string;
+      }>;
+      
+      if (!customEvent.detail) return;
+      
+      const { count, feedId: eventFeedId, groupId: eventGroupId, topicId: eventTopicId } = customEvent.detail;
+      
+      // 只有当事件相关的上下文匹配当前页面上下文时，才更新计数
+      if (
+        eventFeedId === feedId &&
+        eventGroupId === groupId &&
+        eventTopicId === topicId
+      ) {
+        setArticleCount(count);
+      }
+    };
+
+    window.addEventListener('articleCountChanged', handleArticleCountChanged);
+    
+    return () => {
+      window.removeEventListener('articleCountChanged', handleArticleCountChanged);
+    };
+  }, [feedId, groupId, topicId]);
 
   return (
     <div className={styles.homeLayout}>

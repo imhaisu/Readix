@@ -616,6 +616,26 @@ export const useArticleListManager = ({
     }
   }, [displayedArticlesResult, currentTopicId]);
 
+  // 添加一个文章数量变化的回调事件
+  useEffect(() => {
+    // 当显示的文章数量变化时，触发一个事件
+    if (typeof window !== 'undefined') {
+      // 创建一个自定义事件，包含文章数量信息
+      const event = new CustomEvent('articleCountChanged', {
+        detail: {
+          count: displayedArticles.length,
+          filter,
+          feedId: currentFeedId,
+          groupId: currentGroupId,
+          topicId: currentTopicId
+        }
+      });
+      
+      // 派发事件
+      window.dispatchEvent(event);
+    }
+  }, [displayedArticles.length, filter, currentFeedId, currentGroupId, currentTopicId]);
+
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;
     const article = articlesRef.current.find(a => a.id === articleId);

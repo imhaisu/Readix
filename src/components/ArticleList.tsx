@@ -55,6 +55,7 @@ export interface ArticleListHandle {
   scrollToTop: () => void;
   getScrollableElement: () => HTMLDivElement | null;
   getArticles: () => Article[];
+  getArticleCount: () => number; // 添加高效获取文章数量的方法
   scrollToArticle: (articleId: string) => void;
   getScrollPosition: () => number;
   setScrollPosition: (position: number) => void;
@@ -514,6 +515,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     },
     getScrollableElement: () => containerRef.current,
     getArticles: () => displayedArticles,
+    getArticleCount: () => displayedArticles.length, // 实现 getArticleCount
     scrollToArticle: scrollToArticle,
     getScrollPosition: () => containerRef.current?.scrollTop || 0,
     setScrollPosition: (position) => {

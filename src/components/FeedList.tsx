@@ -19,7 +19,7 @@ import {
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
-import { FeedSource, Group, Topic, TopicFeed } from '../db/database';
+import { FeedSource, Group, Topic, TopicFeed, Article } from '../db/database';
 import { processFeedIcons } from '../utils/iconUtils';
 import styles from './FeedList.module.css';
 import EditFeedModal from './EditFeedModal';
@@ -36,6 +36,10 @@ interface FeedListProps {
 // 创建一个记录图标加载错误的Map
 const iconErrorCache = new Map<string, boolean>();
 
+// 在组件顶部添加一个计数缓存和相关的更新时间
+const countCache = new Map<string, {count: number, timestamp: number}>();
+const CACHE_VALID_DURATION = 10000; // 缓存有效期10秒
+
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
   const { feedId, groupId: currentRouteGroupId, topicId: currentRouteTopicId } = useParams<{ feedId?: string; groupId?: string; topicId?: string }>();
@@ -47,6 +51,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
   const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
   const [dynamicCounts, setDynamicCounts] = useState<Map<string, number>>(new Map());
+  const countCacheRef = useRef(countCache);
 
   // 主题相关状态
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -120,29 +125,111 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         return;
       }
 
+      const now = Date.now();
       const counts = new Map<string, number>();
+      const feedsToQuery = [];
+      const cacheHits = [];
+      
+      // 首先尝试从缓存中获取计数
       for (const feed of feedsFromProps) {
         if (!feed.id) continue;
-        let query;
-        if (filter === 'all') {
-          query = db.articles.where('sourceId').equals(feed.id);
-        } else if (filter === 'unread') {
-          query = db.articles.where({ sourceId: feed.id, isRead: 'false' });
-        } else if (filter === 'starred') {
-          query = db.articles.where({ sourceId: feed.id, isStarred: 'true' });
+        
+        // 检查是否有有效的缓存数据
+        const cacheEntry = countCacheRef.current.get(`${feed.id}-${filter}`);
+        if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_VALID_DURATION) {
+          // 使用缓存的计数
+          counts.set(feed.id, cacheEntry.count);
+          cacheHits.push(feed.id);
         } else {
-          // Default to unread
-          query = db.articles.where({ sourceId: feed.id, isRead: 'false' });
+          // 需要查询数据库
+          feedsToQuery.push(feed);
         }
-        // 添加过滤条件，排除被隐藏的文章
-        const count = await query.filter(article => article.isHidden !== true).count();
-        counts.set(feed.id, count);
       }
+      
+      // 如果所有数据都在缓存中，直接返回
+      if (feedsToQuery.length === 0) {
+        setDynamicCounts(counts);
+        return;
+      }
+      
+      // 只有缓存未命中的订阅源才需要查询数据库
+      const feedIdsToQuery = feedsToQuery.map(feed => feed.id).filter(Boolean) as string[];
+      
+      if (feedIdsToQuery.length > 0) {
+        try {
+          let allArticles: Article[];
+          
+          if (filter === 'all') {
+            allArticles = await db.articles
+              .where('sourceId')
+              .anyOf(feedIdsToQuery)
+              .filter(article => article.isHidden !== true)
+              .toArray();
+          } else if (filter === 'unread') {
+            allArticles = await db.articles
+              .where('[sourceId+isRead]')
+              .anyOf(feedIdsToQuery.map(id => [id, 'false']))
+              .filter(article => article.isHidden !== true)
+              .toArray();
+          } else if (filter === 'starred') {
+            allArticles = await db.articles
+              .where('[sourceId+isStarred]')
+              .anyOf(feedIdsToQuery.map(id => [id, 'true']))
+              .filter(article => article.isHidden !== true)
+              .toArray();
+          } else {
+            // 默认为未读
+            allArticles = await db.articles
+              .where('[sourceId+isRead]')
+              .anyOf(feedIdsToQuery.map(id => [id, 'false']))
+              .filter(article => article.isHidden !== true)
+              .toArray();
+          }
+          
+          // 统计并缓存结果
+          const queryResults = new Map<string, number>();
+          
+          // 分组计数
+          for (const article of allArticles) {
+            if (article.sourceId) {
+              queryResults.set(article.sourceId, (queryResults.get(article.sourceId) || 0) + 1);
+            }
+          }
+          
+          // 更新缓存和结果
+          for (const feedId of feedIdsToQuery) {
+            const count = queryResults.get(feedId) || 0;
+            counts.set(feedId, count);
+            
+            // 更新缓存
+            countCacheRef.current.set(`${feedId}-${filter}`, {
+              count,
+              timestamp: now
+            });
+          }
+        } catch (error) {
+          console.error('计算文章数量出错:', error);
+        }
+      }
+      
       setDynamicCounts(counts);
     };
 
     calculateCounts();
   }, [db, filter, feedsFromProps, feedCountRefreshTrigger, refreshKey]);
+
+  // 添加主题计数缓存
+  const topicCountCache = new Map<string, {count: number, timestamp: number}>();
+  const topicCountCacheRef = useRef(topicCountCache);
+  
+  // 添加缓存清除功能
+  useEffect(() => {
+    // 当feedCountRefreshTrigger更新时，清除缓存
+    // 这通常发生在文章被标记为已读或未读，或者添加、删除文章时
+    countCacheRef.current.clear();
+    topicCountCacheRef.current.clear();
+    // 不需要立即触发重新计算，calculateCounts和loadTopics会在依赖项变化时自动执行
+  }, [feedCountRefreshTrigger]);
 
   // 加载主题数据
   useEffect(() => {
@@ -169,70 +256,138 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         
         // 计算每个主题的未读文章数 - 考虑主题过滤规则
         const topicCountMap = new Map<string, number>();
+        const now = Date.now();
         
-        // 加载来自其他模块的过滤函数
-        const { applyTopicFilterRules } = await import('../utils/filterApplier');
+        // 检查哪些主题需要重新计算计数
+        const topicsToUpdate: Topic[] = [];
         
         for (const topic of allTopics) {
           if (!topic.id) continue;
           
-          const feedIds = topicFeedMap.get(topic.id) || [];
-          if (feedIds.length === 0) {
-            topicCountMap.set(topic.id, 0);
-            continue;
+          // 检查缓存
+          const cacheKey = `${topic.id}-${filter}`;
+          const cacheEntry = topicCountCacheRef.current.get(cacheKey);
+          
+          if (cacheEntry && (now - cacheEntry.timestamp) < CACHE_VALID_DURATION) {
+            // 使用缓存数据
+            topicCountMap.set(topic.id, cacheEntry.count);
+          } else {
+            // 需要重新计算
+            topicsToUpdate.push(topic);
           }
-          
-          // 获取主题过滤规则
-          const topicFilterRules = topic.filterRules || [];
-          
-          // 获取符合条件的文章
-          let articlesToCheck: any[] = [];
-          let query;
-          
+        }
+        
+        if (topicsToUpdate.length === 0) {
+          // 所有数据都在缓存中
+          setTopicCounts(topicCountMap);
+          return;
+        }
+        
+        // 加载来自其他模块的过滤函数
+        const { applyTopicFilterRules } = await import('../utils/filterApplier');
+        
+        // 收集所有需要查询的订阅源ID
+        const allFeedIdsToQuery = new Set<string>();
+        for (const topic of topicsToUpdate) {
+          if (topic.id) {
+            const feedIds = topicFeedMap.get(topic.id) || [];
+            feedIds.forEach(id => allFeedIdsToQuery.add(id));
+          }
+        }
+        
+        if (allFeedIdsToQuery.size === 0) {
+          // 更新主题没有关联的订阅源
+          for (const topic of topicsToUpdate) {
+            if (topic.id) {
+              topicCountMap.set(topic.id, 0);
+              topicCountCacheRef.current.set(`${topic.id}-${filter}`, {
+                count: 0,
+                timestamp: now
+              });
+            }
+          }
+          setTopicCounts(topicCountMap);
+          return;
+        }
+        
+        // 获取所有符合条件的文章
+        let allRelevantArticles: Article[] = [];
+        
+        try {
           // 创建一个事务，确保查询过程中不会有变化
           await db.transaction('r', db.articles, async () => {
-            // 为每个订阅源创建一个查询
-          for (const feedId of feedIds) {
+            const feedIdsArray = Array.from(allFeedIdsToQuery);
+            
             if (filter === 'all') {
-                query = db.articles.where('sourceId').equals(feedId);
+              allRelevantArticles = await db.articles
+                .where('sourceId')
+                .anyOf(feedIdsArray)
+                .filter(article => article.isHidden !== true)
+                .toArray();
             } else if (filter === 'unread') {
-                query = db.articles.where({ sourceId: feedId, isRead: 'false' });
+              allRelevantArticles = await db.articles
+                .where('[sourceId+isRead]')
+                .anyOf(feedIdsArray.map(id => [id, 'false']))
+                .filter(article => article.isHidden !== true)
+                .toArray();
             } else if (filter === 'starred') {
-                query = db.articles.where({ sourceId: feedId, isStarred: 'true' });
+              allRelevantArticles = await db.articles
+                .where('[sourceId+isStarred]')
+                .anyOf(feedIdsArray.map(id => [id, 'true']))
+                .filter(article => article.isHidden !== true)
+                .toArray();
             } else {
-                // 默认为未读
-                query = db.articles.where({ sourceId: feedId, isRead: 'false' });
-              }
-              
-              // 过滤已隐藏的文章
-              const articles = await query.filter(article => article.isHidden !== true).toArray();
-              articlesToCheck = articlesToCheck.concat(articles);
-            }
-            
-            // 如果有主题过滤规则，应用过滤规则
-            let topicArticleCount = 0;
-            
-            // 添加调试日志 - 只在开发环境下输出
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`主题 "${topic.name}" 过滤前文章数: ${articlesToCheck.length}`);
-            }
-            
-            // 遍历所有文章，对每一篇应用过滤规则
-            for (const article of articlesToCheck) {
-              const passed = applyTopicFilterRules(article, topicFilterRules);
-              if (passed) {
-                topicArticleCount++;
-              }
+              // 默认为未读
+              allRelevantArticles = await db.articles
+                .where('[sourceId+isRead]')
+                .anyOf(feedIdsArray.map(id => [id, 'false']))
+                .filter(article => article.isHidden !== true)
+                .toArray();
             }
           
-            // 添加调试日志 - 只在开发环境下输出
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`主题 "${topic.name}" 过滤后文章数: ${topicArticleCount}`);
+            // 遍历所有需要更新的主题，根据文章列表计算计数
+            for (const topic of topicsToUpdate) {
+              if (!topic.id) continue;
+              
+              const feedIds = topicFeedMap.get(topic.id) || [];
+              if (feedIds.length === 0) {
+                topicCountMap.set(topic.id, 0);
+                topicCountCacheRef.current.set(`${topic.id}-${filter}`, {
+                  count: 0,
+                  timestamp: now
+                });
+                continue;
+              }
+              
+              // 获取主题过滤规则
+              const topicFilterRules = topic.filterRules || [];
+              
+              // 过滤出属于当前主题的文章
+              const topicArticles = allRelevantArticles.filter(
+                article => feedIds.includes(article.sourceId)
+              );
+              
+              // 如果有主题过滤规则，应用过滤规则
+              let passedCount = 0;
+              
+              // 遍历所有文章，检查是否通过过滤规则
+              for (const article of topicArticles) {
+                const passed = applyTopicFilterRules(article, topicFilterRules);
+                if (passed) {
+                  passedCount++;
+                }
+              }
+              
+              // 设置主题文章数量并更新缓存
+              topicCountMap.set(topic.id, passedCount);
+              topicCountCacheRef.current.set(`${topic.id}-${filter}`, {
+                count: passedCount,
+                timestamp: now
+              });
             }
-            
-            // 设置主题文章数量
-            topicCountMap.set(topic.id, topicArticleCount);
           });
+        } catch (error) {
+          console.error('获取主题文章数量失败:', error);
         }
         
         setTopicCounts(topicCountMap);
@@ -243,7 +398,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
     
     loadTopics();
-  }, [db, dynamicCounts, refreshKey, filter]);
+  }, [db, refreshKey, filter]);
 
   useEffect(() => {
     if (groupsFromProps) {
