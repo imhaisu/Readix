@@ -14,7 +14,8 @@ import {
   SwapOutlined,
   TagOutlined,
   PlusOutlined,
-  FilterOutlined
+  FilterOutlined,
+  GlobalOutlined
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
@@ -54,6 +55,9 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [isAddTopicModalVisible, setIsAddTopicModalVisible] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [initialActiveTab, setInitialActiveTab] = useState('1'); // 新增状态，用于控制AddTopicModal的初始标签页
+  
+  // 记录已经处理过的图标URL，防止重复处理
+  const processedIconUrls = useRef<Map<string, string | undefined>>(new Map());
 
   // Modals State
   const [isRenameGroupModalVisible, setIsRenameGroupModalVisible] = useState(false);
@@ -64,6 +68,50 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [editingFeedData, setEditingFeedData] = useState<FeedSource | null>(null);
 
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // 处理单个图标URL的函数
+  const processSingleIconUrl = useCallback(async (iconUrl: string | undefined): Promise<string | undefined> => {
+    if (!iconUrl) return undefined;
+    
+    // 检查缓存中是否已有处理结果
+    if (processedIconUrls.current.has(iconUrl)) {
+      return processedIconUrls.current.get(iconUrl);
+    }
+    
+    try {
+      // 处理不同类型的URL
+      let result: string | undefined = iconUrl;
+      
+      // 如果是 file:// 协议，使用electron API处理
+      if (iconUrl.startsWith('file://') && window.electron?.getLocalIconBase64) {
+        const response = await window.electron.getLocalIconBase64(iconUrl);
+        if (response.success && response.data) {
+          result = response.data;
+        } else {
+          console.warn('处理本地图标失败:', response.error);
+          result = undefined;
+        }
+      }
+      
+      // 将结果存入缓存
+      processedIconUrls.current.set(iconUrl, result);
+      return result;
+    } catch (error) {
+      console.error('处理图标URL出错:', error);
+      processedIconUrls.current.set(iconUrl, undefined);
+      return undefined;
+    }
+  }, []);
+  
+  // 批量处理订阅源图标
+  const processAllFeedIcons = useCallback(async (feeds: FeedSource[]): Promise<FeedSource[]> => {
+    return Promise.all(feeds.map(async (feed) => {
+      if (!feed.iconUrl) return feed;
+      
+      const processedUrl = await processSingleIconUrl(feed.iconUrl);
+      return { ...feed, iconUrl: processedUrl };
+    }));
+  }, [processSingleIconUrl]);
 
   useEffect(() => {
     const calculateCounts = async () => {
@@ -119,8 +167,12 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         });
         setTopicFeeds(topicFeedMap);
         
-        // 计算每个主题的未读文章数
+        // 计算每个主题的未读文章数 - 考虑主题过滤规则
         const topicCountMap = new Map<string, number>();
+        
+        // 加载来自其他模块的过滤函数
+        const { applyTopicFilterRules } = await import('../utils/filterApplier');
+        
         for (const topic of allTopics) {
           if (!topic.id) continue;
           
@@ -130,42 +182,59 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             continue;
           }
           
-          // 针对每个主题，直接查询数据库获取未读文章数
-          let totalCount = 0;
+          // 获取主题过滤规则
+          const topicFilterRules = topic.filterRules || [];
+          
+          // 获取符合条件的文章
+          let articlesToCheck: any[] = [];
+          let query;
+          
+          // 创建一个事务，确保查询过程中不会有变化
+          await db.transaction('r', db.articles, async () => {
+            // 为每个订阅源创建一个查询
           for (const feedId of feedIds) {
             if (filter === 'all') {
-              // 获取所有未隐藏文章数
-              const count = await db.articles
-                .where('sourceId').equals(feedId)
-                .filter(article => article.isHidden !== true)
-                .count();
-              totalCount += count;
+                query = db.articles.where('sourceId').equals(feedId);
             } else if (filter === 'unread') {
-              // 获取未读未隐藏文章数
-              const count = await db.articles
-                .where({ sourceId: feedId, isRead: 'false' })
-                .filter(article => article.isHidden !== true)
-                .count();
-              totalCount += count;
+                query = db.articles.where({ sourceId: feedId, isRead: 'false' });
             } else if (filter === 'starred') {
-              // 获取已收藏未隐藏文章数
-              const count = await db.articles
-                .where({ sourceId: feedId, isStarred: 'true' })
-                .filter(article => article.isHidden !== true)
-                .count();
-              totalCount += count;
+                query = db.articles.where({ sourceId: feedId, isStarred: 'true' });
             } else {
-              // 默认获取未读未隐藏文章数
-              const count = await db.articles
-                .where({ sourceId: feedId, isRead: 'false' })
-                .filter(article => article.isHidden !== true)
-                .count();
-              totalCount += count;
+                // 默认为未读
+                query = db.articles.where({ sourceId: feedId, isRead: 'false' });
+              }
+              
+              // 过滤已隐藏的文章
+              const articles = await query.filter(article => article.isHidden !== true).toArray();
+              articlesToCheck = articlesToCheck.concat(articles);
             }
-          }
+            
+            // 如果有主题过滤规则，应用过滤规则
+            let topicArticleCount = 0;
+            
+            // 添加调试日志 - 只在开发环境下输出
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`主题 "${topic.name}" 过滤前文章数: ${articlesToCheck.length}`);
+            }
+            
+            // 遍历所有文章，对每一篇应用过滤规则
+            for (const article of articlesToCheck) {
+              const passed = applyTopicFilterRules(article, topicFilterRules);
+              if (passed) {
+                topicArticleCount++;
+              }
+            }
           
-          topicCountMap.set(topic.id, totalCount);
+            // 添加调试日志 - 只在开发环境下输出
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`主题 "${topic.name}" 过滤后文章数: ${topicArticleCount}`);
+            }
+            
+            // 设置主题文章数量
+            topicCountMap.set(topic.id, topicArticleCount);
+          });
         }
+        
         setTopicCounts(topicCountMap);
         
       } catch (error) {
@@ -188,14 +257,16 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     }
   }, [groupsFromProps]);
 
+  // 处理图标
   useEffect(() => {
     const processIcons = async () => {
       if (feedsFromProps.length > 0) {
         try {
-          const processed = await processFeedIcons(feedsFromProps);
+          // 使用自定义函数处理图标
+          const processed = await processAllFeedIcons(feedsFromProps);
           setProcessedFeeds(processed);
         } catch (error) {
-          console.error('Error processing feed icons:', error);
+          console.error('处理订阅源图标出错:', error);
           setProcessedFeeds(feedsFromProps);
         }
       } else {
@@ -204,7 +275,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
 
     processIcons();
-  }, [feedsFromProps]);
+  }, [feedsFromProps, processAllFeedIcons]);
 
   useEffect(() => {
     if (feedId) {
@@ -652,7 +723,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           // 强制重新渲染
           setRefreshKey(prev => prev + 1);
         }
-        return false;
+        return false; // 防止默认错误处理
       };
       
       return (
@@ -666,10 +737,16 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
               className={styles.feedItem}
               onContextMenu={(e) => e.stopPropagation()}
             >
-              {hasIconError ? (
-                <Avatar size={16} icon={<LinkOutlined />} className={styles.feedIcon} />
+              {hasIconError || !feed.iconUrl ? (
+                <Avatar size={16} icon={<GlobalOutlined />} className={styles.feedIcon} />
               ) : (
-                <Avatar src={feed.iconUrl} size={16} icon={<LinkOutlined />} className={styles.feedIcon} onError={handleIconError} />
+                <Avatar 
+                  src={feed.iconUrl} 
+                  size={16} 
+                  icon={<GlobalOutlined />} 
+                  className={styles.feedIcon} 
+                  onError={handleIconError} 
+                />
               )}
               <span className={styles.title}>{feed.title}</span>
               {count > 0 && <span className={styles.count}>{count}</span>}

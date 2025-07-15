@@ -219,37 +219,91 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
   const tabItems: TabsProps['items'] = [
     {
       key: 'logs',
-      label: '过滤规则日志',
+      label: '全部日志',
       children: (
-        <Space direction="vertical" style={{ width: '100%', marginBottom: 16 }}>
+        <div style={{ height: 'calc(100vh - 300px)', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <Space>
-            <Text>控制台日志:</Text>
-            <Switch 
-              checked={consoleLoggingEnabled} 
-              onChange={handleToggleConsoleLogging}
-              size="small"
-            />
-            <Button icon={<ReloadOutlined />} onClick={loadLogs} size="small">
+              <Button 
+                onClick={loadLogs}
+                icon={<ReloadOutlined />}
+              >
               刷新
             </Button>
-            <Button icon={<DownloadOutlined />} onClick={handleExportLogs} size="small" type="primary">
+              <Button 
+                onClick={handleClearLogs}
+                icon={<ClearOutlined />}
+              >
+                清空日志
+              </Button>
+            </Space>
+            <Space>
+              <Button 
+                onClick={handleExportLogs}
+                icon={<DownloadOutlined />}
+                type="link"
+              >
               导出日志
             </Button>
-            <Button danger icon={<ClearOutlined />} onClick={handleClearLogs} size="small">
-              清除日志
-            </Button>
           </Space>
-          <Text>共有 {logs.length} 条日志记录</Text>
+          </div>
           <Table
             dataSource={logs}
             columns={columns}
-            rowKey={(record) => `${record.timestamp}-${Math.random()}`}
-            pagination={{ pageSize: 10 }}
             size="small"
-            scroll={{ x: 'max-content' }}
+            rowKey={record => record.timestamp}
+            pagination={{
+              defaultPageSize: 20,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }}
           />
+        </div>
+      ),
+    },
+    {
+      key: 'topic_logs',
+      label: '主题过滤日志',
+      children: (
+        <div style={{ height: 'calc(100vh - 300px)', overflow: 'auto' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+            <Space>
+              <Button 
+                onClick={loadLogs}
+                icon={<ReloadOutlined />}
+              >
+                刷新
+              </Button>
+              <Button 
+                onClick={handleClearLogs}
+                icon={<ClearOutlined />}
+              >
+                清空日志
+              </Button>
+            </Space>
+            <Space>
+              <Button 
+                onClick={handleExportLogs}
+                icon={<DownloadOutlined />}
+                type="link"
+              >
+                导出日志
+              </Button>
         </Space>
-      )
+          </div>
+          <Table 
+            dataSource={logs.filter(log => log.message.includes('主题'))}
+            columns={columns}
+            size="small"
+            rowKey={record => record.timestamp}
+            pagination={{
+              defaultPageSize: 20,
+              showSizeChanger: true,
+              pageSizeOptions: ['10', '20', '50', '100'],
+            }}
+          />
+        </div>
+      ),
     },
     {
       key: 'settings',
@@ -292,20 +346,28 @@ const FilterLogViewer: React.FC<FilterLogViewerProps> = ({ isOpen, onClose }) =>
     }
   ];
   
+  // 主要渲染
   return (
     <Modal
-      title="日志管理"
+      title={
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <span>过滤规则日志查看器</span>
+          <div style={{ marginLeft: 16 }}>
+            <Switch
+              checkedChildren="日志已启用"
+              unCheckedChildren="日志已禁用"
+              checked={consoleLoggingEnabled}
+              onChange={handleToggleConsoleLogging}
+              size="small"
+            />
+          </div>
+        </div>
+      }
       open={isOpen}
       onCancel={onClose}
-      width={800}
-      styles={{
-        body: { padding: '16px 24px' }
-      }}
-      footer={[
-        <Button key="close" type="primary" onClick={onClose}>
-          关闭
-        </Button>,
-      ]}
+      footer={null}
+      width={900}
+      bodyStyle={{ padding: '12px' }}
     >
       <Tabs activeKey={activeTab} onChange={setActiveTab} items={tabItems} />
     </Modal>

@@ -24,8 +24,8 @@ let logEntries: LogEntry[] = [];
 // 本地存储键
 const FILTER_LOG_KEY = 'filter_rules_log';
 
-// 控制台日志开关（默认关闭）
-let CONSOLE_LOGGING_ENABLED = false;
+// 控制台日志开关（默认开启）
+let CONSOLE_LOGGING_ENABLED = true;
 
 /**
  * 设置控制台日志开关
@@ -34,7 +34,10 @@ let CONSOLE_LOGGING_ENABLED = false;
 export const setConsoleLogging = (enabled: boolean): void => {
   CONSOLE_LOGGING_ENABLED = enabled;
   LogConfig.setModuleEnabled('FILTER', enabled);
-  console.log(`[FilterLog] 控制台日志已${enabled ? '启用' : '禁用'}`);
+  
+  if (process.env.NODE_ENV === 'development') {
+    console.log(`[FilterLog] 控制台日志已${enabled ? '启用' : '禁用'}`);
+  }
 };
 
 /**
@@ -120,7 +123,39 @@ export const logInfo = (message: string, data?: any): void => addLog('info', mes
 export const logWarn = (message: string, data?: any): void => addLog('warn', message, data);
 export const logError = (message: string, data?: any): void => addLog('error', message, data);
 
+/**
+ * 记录主题过滤规则应用日志
+ * 专门用于记录主题过滤规则的应用情况
+ * @param topicId 主题ID
+ * @param topicTitle 主题标题
+ * @param article 文章对象
+ * @param rules 应用的规则
+ * @param passed 是否通过规则
+ */
+export const logTopicFilterApplied = (
+  topicId: string, 
+  topicTitle: string, 
+  articleId: string,
+  articleTitle: string,
+  rules: any[], 
+  passed: boolean
+): void => {
+  addLog(
+    'debug', 
+    `主题 "${topicTitle}" (ID: ${topicId}) 过滤规则应用于文章 "${articleTitle.substring(0, 30)}..." 结果: ${passed ? '通过' : '未通过'}`,
+    { 
+      topicId, 
+      topicTitle,
+      articleId,
+      articleTitle,
+      rulesCount: rules.length, 
+      activeRulesCount: rules.filter((r: any) => r.isActive).length,
+      passed 
+    }
+  );
+};
+
 // 初始化时加载日志并设置默认配置
 loadLogs();
-// 默认禁用过滤日志的控制台输出
-setConsoleLogging(false); 
+// 默认启用过滤日志的控制台输出
+setConsoleLogging(true); 

@@ -45,6 +45,9 @@ declare global {
       importOPML: () => Promise<any>;
       exportOPML: () => Promise<any>;
       refreshAllFeeds: (feeds: any[]) => Promise<any>;
+      parseRssFeed: (url: string) => Promise<any>;
+      // 图标处理
+      getLocalIconBase64: (iconUrl: string) => Promise<{ success: boolean; data?: string; error?: string }>;
       // AI 功能
       invokeAI: (type: 'mindmap' | 'highlight' | 'summary', content: string, contentText: string) => Promise<any>;
       streamAiSummary: (contentText: string) => void;

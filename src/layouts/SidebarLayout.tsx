@@ -419,7 +419,7 @@ const SidebarLayout: React.FC = () => {
   useEffect(() => {
     // 确保数据库和设置都已初始化，且导航尚未执行
     if (!dbInitialized || !settingsInitialized || navigationExecutedRef.current) {
-      if (!dbInitialized || !settingsInitialized) {
+      if ((!dbInitialized || !settingsInitialized) && process.env.NODE_ENV === 'development') {
         console.log('[SidebarLayout] 等待数据库和设置初始化完成...');
       }
       return;
@@ -428,14 +428,18 @@ const SidebarLayout: React.FC = () => {
     // 标记导航已执行，防止重复执行
     navigationExecutedRef.current = true;
     
-    console.log('[SidebarLayout] 数据库和设置已初始化，开始恢复浏览状态...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[SidebarLayout] 数据库和设置已初始化，开始恢复浏览状态...');
+    }
     
     // 优先尝试使用完整的浏览状态
     const savedStateJson = localStorage.getItem('lastBrowsingState');
     if (savedStateJson) {
       try {
         const savedState = JSON.parse(savedStateJson);
-        console.log('[SidebarLayout] 找到保存的浏览状态:', savedState);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[SidebarLayout] 找到保存的浏览状态:', savedState);
+        }
         
         // 如果有保存的路径，使用它
         if (savedState.path && savedState.path !== '/') {
@@ -443,10 +447,14 @@ const SidebarLayout: React.FC = () => {
           if (savedState.selectedArticleId) {
             // 使用encodeURIComponent处理文章ID中的特殊字符
             const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
-            console.log(`[SidebarLayout] 恢复到路径和文章: ${savedState.path}?articleId=${encodedArticleId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到路径和文章: ${savedState.path}?articleId=${encodedArticleId}`);
+            }
             navigate(`${savedState.path}?articleId=${encodedArticleId}`, { replace: true });
           } else {
-            console.log(`[SidebarLayout] 恢复到路径: ${savedState.path}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到路径: ${savedState.path}`);
+            }
             navigate(savedState.path, { replace: true });
           }
           return; // 导航后退出
@@ -457,10 +465,14 @@ const SidebarLayout: React.FC = () => {
           if (savedState.selectedArticleId) {
             // 使用encodeURIComponent处理文章ID中的特殊字符
             const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
-            console.log(`[SidebarLayout] 恢复到订阅源和文章: /feed/${savedState.feedId}?articleId=${encodedArticleId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到订阅源和文章: /feed/${savedState.feedId}?articleId=${encodedArticleId}`);
+            }
             navigate(`/feed/${savedState.feedId}?articleId=${encodedArticleId}`, { replace: true });
           } else {
-            console.log(`[SidebarLayout] 恢复到订阅源: /feed/${savedState.feedId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到订阅源: /feed/${savedState.feedId}`);
+            }
             navigate(`/feed/${savedState.feedId}`, { replace: true });
           }
           return; // 导航后退出
@@ -471,10 +483,14 @@ const SidebarLayout: React.FC = () => {
           if (savedState.selectedArticleId) {
             // 使用encodeURIComponent处理文章ID中的特殊字符
             const encodedArticleId = encodeURIComponent(savedState.selectedArticleId);
-            console.log(`[SidebarLayout] 恢复到分组和文章: /group/${savedState.groupId}?articleId=${encodedArticleId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到分组和文章: /group/${savedState.groupId}?articleId=${encodedArticleId}`);
+            }
             navigate(`/group/${savedState.groupId}?articleId=${encodedArticleId}`, { replace: true });
           } else {
-            console.log(`[SidebarLayout] 恢复到分组: /group/${savedState.groupId}`);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`[SidebarLayout] 恢复到分组: /group/${savedState.groupId}`);
+            }
             navigate(`/group/${savedState.groupId}`, { replace: true });
           }
           return; // 导航后退出
@@ -482,13 +498,15 @@ const SidebarLayout: React.FC = () => {
       } catch (error) {
         console.error('[SidebarLayout] 恢复浏览状态失败:', error);
       }
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       console.log('[SidebarLayout] 未找到保存的浏览状态，尝试使用lastPath');
     }
     
     // 如果没有完整的浏览状态，回退到使用lastPath
     const lastPath = localStorage.getItem('lastPath');
-    console.log(`[SidebarLayout] lastPath = ${lastPath}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[SidebarLayout] lastPath = ${lastPath}`);
+    }
     
     // 验证路径是否有效的函数
     const isValidPath = (path: string) => {
@@ -531,10 +549,14 @@ const SidebarLayout: React.FC = () => {
     };
 
     if (lastPath && lastPath !== '/' && isValidPath(lastPath)) {
-      console.log(`[SidebarLayout] 导航到上次的路径: ${lastPath}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[SidebarLayout] 导航到上次的路径: ${lastPath}`);
+      }
       navigate(lastPath, { replace: true });
     } else {
-      console.log('[SidebarLayout] 导航到默认视图: /all');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[SidebarLayout] 导航到默认视图: /all');
+      }
       navigate('/all', { replace: true });
     }
   }, [navigate, feeds, groups, dbInitialized, settingsInitialized]);

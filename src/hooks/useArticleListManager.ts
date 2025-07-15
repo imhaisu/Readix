@@ -9,6 +9,7 @@ import { shouldArticleBeHidden } from '../utils/filterUtils';
 import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { applyTopicFilterRules } from '../utils/filterApplier';
+import { LogConfig } from '../utils/logConfig';
 
 export interface UseArticleListManagerProps {
   filter: any;
@@ -325,9 +326,24 @@ export const useArticleListManager = ({
         // 如果是主题视图并且有过滤规则，应用主题特定的过滤
         let filteredArticles = fetchedArticles;
         if (currentTopic && currentTopic.filterRules && currentTopic.filterRules.length > 0) {
-          filteredArticles = fetchedArticles.filter(article => 
-            applyTopicFilterRules(article, currentTopic!.filterRules || [])
-          );
+          // 确保过滤规则被应用 - 修复过滤逻辑
+          const articlesBeforeFilter = filteredArticles.length;
+          const tempArticles = [];
+          
+          // 遍历所有文章，应用过滤规则
+          for (const article of filteredArticles) {
+            if (applyTopicFilterRules(article, currentTopic.filterRules || [])) {
+              tempArticles.push(article);
+            }
+          }
+          
+          // 替换为过滤后的文章列表
+          filteredArticles = tempArticles;
+          
+          // 只在开发环境下输出日志
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`主题过滤: ${articlesBeforeFilter} -> ${filteredArticles.length} 篇文章`);
+          }
         }
         
         setAllArticles(filteredArticles);
@@ -402,10 +418,90 @@ export const useArticleListManager = ({
     
   }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, listRefreshKey, articleListRefreshTrigger]);
 
+  // 存储当前主题对象及其过滤规则
+  const [currentTopic, setCurrentTopic] = useState<Topic | null>(null);
+  
+  // Effect: 当主题ID变化时，加载主题数据
+  useEffect(() => {
+    if (currentTopicId && db) {
+      db.topics.get(currentTopicId)
+        .then(topic => {
+          if (topic) {
+            setCurrentTopic(topic);
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`已加载主题 "${topic.name}" 的过滤规则，共 ${topic.filterRules?.length || 0} 条规则`);
+            }
+          } else {
+            setCurrentTopic(null);
+          }
+        })
+        .catch(error => {
+          console.error('加载主题失败:', error);
+          setCurrentTopic(null);
+        });
+    } else {
+      setCurrentTopic(null);
+    }
+  }, [currentTopicId, db]);
+
+  // 存储主题关联的订阅源ID
+  const [topicFeedIds, setTopicFeedIds] = useState<string[]>([]);
+  
+  // 当主题ID变化时，加载该主题关联的订阅源
+  useEffect(() => {
+    if (!db || !currentTopicId) {
+      setTopicFeedIds([]);
+      return;
+    }
+    
+    db.topicFeeds.where('topicId').equals(currentTopicId).toArray()
+      .then(topicFeeds => {
+        const feedIds = topicFeeds.map(tf => tf.feedId);
+        setTopicFeedIds(feedIds);
+        if (feedIds.length > 0 && process.env.NODE_ENV === 'development') {
+          console.log(`主题关联了 ${feedIds.length} 个订阅源: ${feedIds.join(', ')}`);
+        } else if (process.env.NODE_ENV === 'development') {
+          console.log(`主题未关联任何订阅源`);
+        }
+      })
+      .catch(error => {
+        console.error('获取主题关联的订阅源失败:', error);
+        setTopicFeedIds([]);
+      });
+  }, [db, currentTopicId]);
+
   // Effect 2: Filter and sort articles for display when data or filters change
   const displayedArticlesResult = useMemo(() => {
     let filtered = [...allArticles];
     // 过滤开始
+
+    // 如果是主题视图，先过滤出属于该主题关联订阅源的文章
+    if (currentTopicId && topicFeedIds.length > 0) {
+      const beforeFilter = filtered.length;
+      // 只保留属于主题关联订阅源的文章
+      filtered = filtered.filter(article => topicFeedIds.includes(article.sourceId));
+    }
+    
+    // 然后应用主题过滤规则
+    if (currentTopicId && currentTopic) {
+      // 创建一个临时数组，只包含通过过滤规则的文章
+      const passedArticles = [];
+      
+      // 遍历所有文章，检查是否通过过滤规则
+      for (const article of filtered) {
+        // 对于主题视图，我们需要严格应用过滤规则，除非文章是当前选中的
+        const isCurrentSelection = article.id === selectedArticleIdRef.current;
+        
+        // 只有当前选中的文章可以豁免过滤规则，其他文章必须通过过滤
+        if ((isCurrentSelection && exemptedArticleIds.has(article.id)) || 
+            applyTopicFilterRules(article, currentTopic.filterRules || [])) {
+          passedArticles.push(article);
+        }
+      }
+      
+      // 替换过滤后的文章列表
+      filtered = passedArticles;
+    }
 
     // 应用过滤规则（动态过滤，不依赖于数据库中的isHidden字段）
     filtered = filtered.filter(article => {
@@ -508,12 +604,17 @@ export const useArticleListManager = ({
       total: allArticles.length,
       filtered: filtered.length,
     };
-  }, [allArticles, searchTerm, filter, exemptedArticleIds, persistentlyExemptedIds, feedRulesMap, globalFilterRules, currentFeedId]);
+  }, [allArticles, searchTerm, filter, exemptedArticleIds, persistentlyExemptedIds, feedRulesMap, globalFilterRules, currentFeedId, currentTopic, currentTopicId, topicFeedIds]);
 
   // Update displayed articles when the result changes
   useEffect(() => {
     setDisplayedArticles(displayedArticlesResult.articles);
-  }, [displayedArticlesResult]);
+    
+    // 添加调试信息 - 只在开发环境下输出
+    if (currentTopicId && process.env.NODE_ENV === 'development') {
+      console.log(`主题视图最终显示文章数量: ${displayedArticlesResult.articles.length} 篇`);
+    }
+  }, [displayedArticlesResult, currentTopicId]);
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;

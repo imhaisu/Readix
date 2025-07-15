@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
@@ -8,12 +8,23 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { DatabaseProvider } from './contexts/DatabaseContext';
 import App from './App';
+import { LogConfig, LogLevel } from './utils/logConfig';
+import { setConsoleLogging } from './utils/filterLogger';
 
 import SidebarLayout from './layouts/SidebarLayout';
 import HomePage from './pages/HomePage';
 import ReadLaterPage from './pages/ReadLaterPage';
 import SettingsPage from './pages/SettingsPage';
 import NotesPage from './pages/NotesPage';
+
+// 初始化日志设置
+LogConfig.setLevel(process.env.NODE_ENV === 'development' ? LogLevel.DEBUG : LogLevel.WARN); // 生产环境只显示警告及以上级别
+LogConfig.setModuleEnabled('FILTER', process.env.NODE_ENV === 'development');
+setConsoleLogging(process.env.NODE_ENV === 'development');
+
+if (process.env.NODE_ENV === 'development') {
+  console.log('[初始化] 日志系统已配置，日志级别：DEBUG，过滤器日志已启用');
+}
 
 // 全局错误处理
 window.addEventListener('error', (event) => {

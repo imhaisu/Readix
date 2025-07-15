@@ -728,6 +728,7 @@ ipcMain.handle('get-local-icon-base64', async (_, iconPath: string) => {
         const dataUrl = `data:${mimeType};base64,${base64Data}`;
         return { success: true, data: dataUrl };
       } else {
+        console.error(`[Main Process] Icon file not found: ${localPath}`);
         return { success: false, error: 'File not found' };
       }
     } else {

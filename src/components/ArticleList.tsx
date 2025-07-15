@@ -32,6 +32,7 @@ interface ArticleListProps {
   isTodayView?: boolean; 
   currentFeedId?: string;
   currentGroupId?: string;
+  currentTopicId?: string;
   lastUpdatedArticleInfo?: { id: string, changes: Partial<Article> } | null;
   listRefreshKey?: number;
   onLastUpdatedArticleInfoChange: (info: { id: string, changes: Partial<Article> } | null) => void;
@@ -71,6 +72,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   isTodayView,
   currentFeedId,
   currentGroupId,
+  currentTopicId,
   lastUpdatedArticleInfo,
   listRefreshKey,
   onLastUpdatedArticleInfoChange,
@@ -99,6 +101,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     selectedArticleId,
     currentFeedId,
     currentGroupId,
+    currentTopicId,
     lastUpdatedArticleInfo,
     listRefreshKey,
     onSelectArticle: selectArticleRef.current,
@@ -372,10 +375,9 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     const hasIconError = article.sourceId ? iconErrorCache.get(article.sourceId) : false;
 
     // 图标加载错误处理函数
-    const handleIconError = () => {
-      if (article.sourceId) {
-        iconErrorCache.set(article.sourceId, true);
-        // 强制重新渲染
+    const handleIconError = (articleSourceId: string) => {
+      if (articleSourceId) {
+        iconErrorCache.set(articleSourceId, true);
         setForceRefreshKey(prev => prev + 1);
       }
       return false;
@@ -417,9 +419,15 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
         <div className={styles.metaHeaderV5}>
           <div className={styles.sourceInfoV5}>
             {hasIconError || !articleSourceIconUrl ? (
-              <Avatar shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} />
+              <Avatar size={18} icon={<GlobalOutlined />} className={styles.sourceIcon} />
             ) : (
-              <Avatar src={articleSourceIconUrl} shape="square" size={14} className={styles.sourceIconV5} icon={<GlobalOutlined />} onError={handleIconError} />
+              <Avatar 
+                src={articleSourceIconUrl} 
+                size={18} 
+                icon={<GlobalOutlined />} 
+                className={styles.sourceIcon} 
+                onError={() => handleIconError(article.sourceId)} 
+              />
             )}
             <span className={styles.sourceNameV5}>{articleSourceTitle}</span>
           </div>

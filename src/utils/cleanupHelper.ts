@@ -4,11 +4,15 @@ import { RssDatabase } from '../db/database';
 
 export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number): Promise<void> => {
   if (!db || !db.isOpen()) {
-    console.log('Article cleanup skipped: DB not available or not open.');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Article cleanup skipped: DB not available or not open.');
+    }
     return;
   }
   if (retentionDays === 0) { // 0 means keep indefinitely
-    console.log('Article cleanup skipped: Retention period is set to indefinite.');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Article cleanup skipped: Retention period is set to indefinite.');
+    }
     return;
   }
 
@@ -25,7 +29,9 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
     if (articlesToDelete.length > 0) {
       const idsToDelete = articlesToDelete.map(article => article.id as string);
       await db.articles.bulkDelete(idsToDelete);
-      console.log(`[Cleanup] Successfully deleted ${articlesToDelete.length} old (non-starred) articles older than ${retentionDays} days.`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cleanup] Successfully deleted ${articlesToDelete.length} old (non-starred) articles older than ${retentionDays} days.`);
+      }
       
       // 更新相关 feed 的未读计数
       const feedIdsAffected = new Set<string>();
@@ -39,11 +45,11 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
         const unreadCount = await db.articles.where({ sourceId: feedId, isRead: 'false' }).count();
         await db.feeds.update(feedId, { unreadCount });
       }
-      if(feedIdsAffected.size > 0){
+      if(feedIdsAffected.size > 0 && process.env.NODE_ENV === 'development'){
         console.log(`[Cleanup] Updated unread counts for ${feedIdsAffected.size} affected feeds.`);
       }
 
-    } else {
+    } else if (process.env.NODE_ENV === 'development') {
       console.log('[Cleanup] No old (non-starred) articles found to delete.');
     }
   }
@@ -59,12 +65,16 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
  */
 export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> => {
   if (!db || !db.isOpen()) {
-    console.log('[Cleanup] 清理孤儿文章跳过: 数据库不可用或未打开。');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cleanup] 清理孤儿文章跳过: 数据库不可用或未打开。');
+    }
     return 0;
   }
 
   try {
-    console.log('[Cleanup] 开始清理没有对应订阅源的文章...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cleanup] 开始清理没有对应订阅源的文章...');
+    }
     
     // 获取所有订阅源ID
     const feeds = await db.feeds.toArray();
@@ -80,7 +90,9 @@ export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> 
     });
     
     if (orphanedArticles.length > 0) {
-      console.log(`[Cleanup] 找到 ${orphanedArticles.length} 篇没有对应订阅源的文章，准备清理...`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cleanup] 找到 ${orphanedArticles.length} 篇没有对应订阅源的文章，准备清理...`);
+      }
       
       // 获取要删除的文章ID
       const idsToDelete = orphanedArticles.map(article => article.id);
@@ -88,10 +100,14 @@ export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> 
       // 批量删除这些文章
       await db.articles.bulkDelete(idsToDelete);
       
-      console.log(`[Cleanup] 成功清理 ${orphanedArticles.length} 篇孤儿文章。`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cleanup] 成功清理 ${orphanedArticles.length} 篇孤儿文章。`);
+      }
       return orphanedArticles.length;
     } else {
-      console.log('[Cleanup] 没有找到孤儿文章，无需清理。');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Cleanup] 没有找到孤儿文章，无需清理。');
+      }
       return 0;
     }
   } catch (error) {
@@ -106,7 +122,9 @@ export const cleanupOrphanedArticles = async (db: RssDatabase): Promise<number> 
  * @returns 清理的文章数量
  */
 export const detectAndCleanupDuplicateArticles = async (db: RssDatabase): Promise<number> => {
-  console.log('[Cleanup] 开始智能检测与清理重复文章...');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Cleanup] 开始智能检测与清理重复文章...');
+  }
   
   try {
     // 获取所有文章
@@ -169,7 +187,9 @@ export const detectAndCleanupDuplicateArticles = async (db: RssDatabase): Promis
     // 批量删除重复文章
     if (articlesToDelete.length > 0) {
       await db.articles.bulkDelete(articlesToDelete);
-      console.log(`[Cleanup] 已成功清理 ${articlesToDelete.length} 篇重复文章`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cleanup] 已成功清理 ${articlesToDelete.length} 篇重复文章`);
+      }
       
       // 更新受影响的订阅源计数
       await updateAffectedFeedCounts(db);
@@ -177,7 +197,9 @@ export const detectAndCleanupDuplicateArticles = async (db: RssDatabase): Promis
       return articlesToDelete.length;
     }
     
-    console.log('[Cleanup] 未发现需要清理的重复文章');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cleanup] 未发现需要清理的重复文章');
+    }
     return 0;
   } catch (error) {
     console.error('[Cleanup] 检测和清理重复文章失败:', error);
@@ -202,5 +224,7 @@ async function updateAffectedFeedCounts(db: RssDatabase): Promise<void> {
       await db.feeds.update(feed.id, { unreadCount });
     }
   }
-  console.log('[Cleanup] 已更新所有受影响订阅源的未读计数');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Cleanup] 已更新所有受影响订阅源的未读计数');
+  }
 } 

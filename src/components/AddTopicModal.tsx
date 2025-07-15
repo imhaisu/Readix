@@ -105,6 +105,14 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
       // 创建或更新主题
       if (isEditMode && editingTopic?.id) {
         topicId = editingTopic.id;
+        console.log('更新主题:', {
+          id: topicId,
+          name,
+          description,
+          filterRules,
+          iconName: selectedIcon,
+          feedIds
+        });
         await db.topics.update(topicId, {
           name,
           description,
@@ -114,6 +122,14 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
         });
       } else {
         topicId = uuidv4();
+        console.log('创建主题:', {
+          id: topicId,
+          name,
+          description,
+          filterRules,
+          iconName: selectedIcon,
+          feedIds
+        });
         await db.topics.add({
           id: topicId,
           name,
@@ -156,8 +172,10 @@ const AddTopicModal: React.FC<AddTopicModalProps> = ({
     }
   };
 
-  const handleFilterRulesChange = (newRules: TopicFilterRule[]) => {
-    setFilterRules(newRules);
+  // 处理规则变更
+  const handleFilterRulesChange = (updatedRules: TopicFilterRule[]) => {
+    console.log('主题过滤规则更新:', updatedRules);
+    setFilterRules(updatedRules);
   };
 
   const handleIconSelect = (iconName: string) => {

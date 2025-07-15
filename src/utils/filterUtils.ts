@@ -1,6 +1,9 @@
-import { Article, FilterRule, FeedSource } from '../db/database';
+import { Article, FilterRule, FeedSource, TopicFilterRule } from '../db/database';
 import { v4 as uuidv4 } from 'uuid';
 import { logInfo, logDebug, logWarn, logError } from './filterLogger';
+import { LogConfig, LogLevel } from '../utils/logConfig';
+import { applyTopicFilterRules } from './filterApplier';
+import { Topic } from '../db/database';
 
 /**
  * 检查文章是否应该被过滤（隐藏）
@@ -565,5 +568,202 @@ export const applyAllRulesToAllArticles = async (db: any, globalRules: FilterRul
     logInfo(`所有过滤规则已应用完成`);
   } catch (error) {
     logError(`应用所有规则时出错:`, error);
+  }
+};
+
+/**
+ * 主题过滤诊断工具 - 在控制台检查主题和相关规则的状态
+ * @param db 数据库实例
+ * @param topicId 主题ID（可选）
+ */
+export const diagnoseTopicFilters = async (db: any, topicId?: string) => {
+  console.group('=== 主题过滤诊断 ===');
+  try {
+    // 检查日志配置状态
+    console.log('📋 日志配置状态:');
+    console.log(`- 日志级别: ${LogLevel[LogConfig.currentLevel]}`);
+    console.log(`- 过滤器日志启用: ${LogConfig.isModuleEnabled('FILTER')}`);
+    
+    // 加载所有主题
+    const topics = await db.topics.toArray();
+    console.log(`📚 主题总数: ${topics.length}`);
+    
+    // 如果指定了主题ID，只检查该主题
+    if (topicId) {
+      const topic = topics.find((t: any) => t.id === topicId);
+      if (!topic) {
+        console.error(`❌ 未找到ID为 ${topicId} 的主题`);
+        return;
+      }
+      await diagnoseOneTopic(db, topic);
+    } else {
+      // 检查所有主题
+      for (const topic of topics) {
+        await diagnoseOneTopic(db, topic);
+      }
+    }
+  } catch (error) {
+    console.error('诊断过程中出错:', error);
+  }
+  console.groupEnd();
+};
+
+/**
+ * 诊断单个主题
+ */
+async function diagnoseOneTopic(db: any, topic: any) {
+  console.group(`📌 主题: ${topic.name} (ID: ${topic.id})`);
+  
+  // 检查主题过滤规则
+  const rules = topic.filterRules || [];
+  console.log(`- 过滤规则数量: ${rules.length}`);
+  console.log(`- 激活规则数量: ${rules.filter((r: any) => r.isActive).length}`);
+  
+  // 详细输出每条规则
+  if (rules.length > 0) {
+    console.group('规则详情:');
+    rules.forEach((rule: any, index: number) => {
+      console.log(`[${index+1}] ${rule.isActive ? '✅' : '❌'} ${rule.field} ${rule.operation} ${rule.value} (${rule.logic})`);
+    });
+    console.groupEnd();
+  } else {
+    console.log('⚠️ 该主题没有设置过滤规则');
+  }
+  
+  // 获取主题的订阅源
+  const topicFeeds = await db.topicFeeds.where('topicId').equals(topic.id).toArray();
+  console.log(`- 包含订阅源数量: ${topicFeeds.length}`);
+  
+  if (topicFeeds.length > 0) {
+    // 获取所有订阅源ID
+    const feedIds = topicFeeds.map((tf: any) => tf.feedId);
+    
+    // 查找相关文章
+    let allArticles: Article[] = [];
+    for (const feedId of feedIds) {
+      const articles = await db.articles.where('sourceId').equals(feedId).toArray();
+      allArticles = allArticles.concat(articles);
+    }
+    console.log(`- 相关文章总数: ${allArticles.length}`);
+    
+    // 应用过滤规则
+    if (rules.length > 0 && allArticles.length > 0) {
+      const passedArticles = allArticles.filter((article: any) => 
+        applyTopicFilterRules(article, rules, topic.id, topic.name)
+      );
+      console.log(`- 过滤后文章数量: ${passedArticles.length}/${allArticles.length}`);
+      
+      // 如果有差异，输出几篇示例
+      if (passedArticles.length < allArticles.length) {
+        console.group('示例 - 未通过过滤的文章:');
+        const failedArticles = allArticles.filter(a => !passedArticles.includes(a));
+        failedArticles.slice(0, 3).forEach((article: any) => {
+          console.log(`* "${article.title}" (ID: ${article.id})`);
+        });
+        console.groupEnd();
+      }
+    }
+  } else {
+    console.log('⚠️ 该主题没有关联任何订阅源');
+  }
+  
+  console.groupEnd();
+}
+
+/**
+ * 诊断文章的主题过滤规则应用情况
+ * @param db 数据库实例
+ * @param topicId 主题ID
+ * @param articleId 文章ID
+ */
+export const diagnoseArticleTopicFilter = async (db: any, topicId: string, articleId: string) => {
+  if (!db) {
+    console.error('数据库未初始化');
+    return;
+  }
+
+  console.group(`=== 诊断文章的主题过滤应用 ===`);
+  try {
+    const topic = await db.topics.get(topicId);
+    if (!topic) {
+      console.error(`未找到主题 (ID: ${topicId})`);
+      console.groupEnd();
+      return;
+    }
+    
+    const article = await db.articles.get(articleId);
+    if (!article) {
+      console.error(`未找到文章 (ID: ${articleId})`);
+      console.groupEnd();
+      return;
+    }
+    
+    console.log(`主题: ${topic.name}`);
+    console.log(`文章: ${article.title}`);
+    
+    // 检查主题规则
+    const rules = topic.filterRules || [];
+    if (rules.length === 0) {
+      console.log('主题没有设置过滤规则，默认通过所有文章');
+      console.groupEnd();
+      return;
+    }
+    
+    console.log(`主题有 ${rules.length} 条规则，其中 ${rules.filter((r: TopicFilterRule) => r.isActive).length} 条激活`);
+    
+    // 应用过滤规则
+    const result = applyTopicFilterRules(article, rules);
+    
+    console.log(`结论: 文章${result ? '通过' : '不通过'}主题过滤规则`);
+    
+  } catch (error) {
+    console.error('诊断过程中出错:', error);
+  }
+  console.groupEnd();
+};
+
+/**
+ * 强制刷新主题视图过滤
+ * 该函数会强制对指定主题的所有文章重新应用过滤规则
+ * @param db 数据库实例 
+ * @param topicId 主题ID
+ */
+export const forceRefreshTopicFilter = async (db: any, topicId: string): Promise<number> => {
+  if (!db || !topicId) return 0;
+
+  try {
+    // 1. 获取主题数据
+    const topic = await db.topics.get(topicId);
+    if (!topic) {
+      console.error(`主题 ${topicId} 不存在`);
+      return 0;
+    }
+
+    // 2. 获取主题关联的订阅源
+    const topicFeeds = await db.topicFeeds.where('topicId').equals(topicId).toArray();
+    const feedIds = topicFeeds.map((tf: any) => tf.feedId);
+    
+    if (feedIds.length === 0) {
+      console.log(`主题 "${topic.name}" 没有关联任何订阅源`);
+      return 0;
+    }
+
+    // 3. 获取所有相关文章
+    let articles: any[] = [];
+    for (const feedId of feedIds) {
+      const feedArticles = await db.articles.where('sourceId').equals(feedId).toArray();
+      articles = articles.concat(feedArticles);
+    }
+    
+    console.log(`强制刷新主题 "${topic.name}" 过滤: 共 ${articles.length} 篇文章待处理`);
+    
+    // 4. 触发全局刷新
+    window.dispatchEvent(new CustomEvent('refresh-article-list'));
+    
+    // 5. 返回处理的文章数量
+    return articles.length;
+  } catch (error) {
+    console.error('强制刷新主题视图过滤失败:', error);
+    return 0;
   }
 };

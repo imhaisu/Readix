@@ -11,7 +11,8 @@ import {
   ExclamationCircleOutlined,
   SyncOutlined,
   CloseOutlined,
-  MenuOutlined
+  MenuOutlined,
+  BugOutlined
 } from '@ant-design/icons';
 import ArticleList, { ArticleListHandle } from '../components/ArticleList';
 import ArticleDetail from '../components/ArticleDetail';
@@ -41,6 +42,7 @@ import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
 import MindMapModal from '../components/MindMapModal';
 import PulsingLoader from '../components/PulsingLoader';
 import { LogConfig } from '../utils/logConfig';
+import { diagnoseTopicFilters } from '../utils/filterUtils';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
@@ -85,6 +87,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [lastUpdatedArticleInfo, setLastUpdatedArticleInfo] = useState<{ id: string, changes: Partial<Article> } | null>(null);
   const [listRefreshKey, setListRefreshKey] = useState(0);
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [articleCount, setArticleCount] = useState(0);
   
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [pullDownProgress, setPullDownProgress] = useState(0); 
@@ -733,6 +736,22 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       setSelectedArticleId(decodedArticleId);
     }
   }, [searchParams, feedId, groupId]);
+  
+  // 监听全局刷新事件
+  useEffect(() => {
+    const handleRefreshEvent = () => {
+      console.log('收到全局刷新事件，正在刷新文章列表...');
+      triggerArticleListRefresh();
+      // 强制重新加载文章列表
+      setListRefreshKey(prev => prev + 1);
+    };
+    
+    window.addEventListener('refresh-article-list', handleRefreshEvent);
+    
+    return () => {
+      window.removeEventListener('refresh-article-list', handleRefreshEvent);
+    };
+  }, []);
 
   // 添加一个函数，用于清理数据库中的重复文章
   const cleanupDuplicateArticles = useCallback(async () => {
@@ -938,6 +957,50 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     LogConfig.info('HOMEPAGE', `activeListFilter状态变化: ${activeListFilter}`);
   }, [activeListFilter]);
 
+  // 调试按钮组件
+  const DebugButton: React.FC<{topicId?: string}> = ({ topicId }) => {
+    const { db } = useDatabase();
+    
+    const handleClick = async () => {
+      console.clear(); // 清空控制台
+      console.log('执行诊断...');
+      await diagnoseTopicFilters(db, topicId);
+      
+      // 强制刷新文章列表，确保过滤规则被正确应用
+      setTimeout(() => {
+        setListRefreshKey(prev => prev + 1);
+        
+        // 显示刷新提示
+        message.success('已强制刷新文章列表');
+      }, 500);
+    };
+    
+    // 永远不显示调试按钮
+    return null;
+  };
+
+  // 定时更新文章数量显示
+  useEffect(() => {
+    // 文章数量更新函数
+    const updateArticleCount = () => {
+      if (articleListRef.current) {
+        const articles = articleListRef.current.getArticles();
+        setArticleCount(articles.length);
+        // 移除日志输出，避免大量日志刷屏
+        // console.log(`文章数量更新: ${articles.length} 篇`);
+      }
+    };
+    
+    // 初始化和列表刷新时更新数量
+    updateArticleCount();
+    
+    // 设置定时器，将间隔从1秒改为5秒，减少更新频率
+    const timer = setInterval(updateArticleCount, 5000);
+    
+    // 清理定时器
+    return () => clearInterval(timer);
+  }, [listRefreshKey, articleListRefreshTrigger]);
+
   return (
     <div className={styles.homeLayout}>
       {shouldShowWelcomePage ? (
@@ -981,6 +1044,9 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       <div className={styles.listTitle}>
                         <Title level={4} className={styles.panelHeaderTitle} ellipsis>
                           {pageTitle}
+                          <span style={{ fontSize: '14px', fontWeight: 'normal', marginLeft: '8px', color: 'var(--text-secondary)' }}>
+                            ({articleCount})
+                          </span>
                         </Title>
                         <Space className={styles.panelHeaderControls}>
                           {isPullRefreshing && (
@@ -1033,7 +1099,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       {feeds.length > 0 || groupId || feedId ? (
                         <ArticleList
                           ref={articleListRef}
-                          key={`${feedId}-${groupId}-${activeListFilter}-${listRefreshKey}`}
+                          key={`${feedId}-${groupId}-${topicId}-${activeListFilter}-${listRefreshKey}`}
                           filter={articleFilterForList}
                           searchTerm={searchTerm}
                           onSelectArticle={handleArticleSelect}
@@ -1041,6 +1107,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                           isTodayView={isTodayView}
                           currentFeedId={feedId}
                           currentGroupId={groupId}
+                          currentTopicId={topicId}
                           lastUpdatedArticleInfo={lastUpdatedArticleInfo}
                           onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
                           isPullingDown={pullDownProgress > 0}
@@ -1115,6 +1182,8 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
           </PanelGroup>
         </div>
       )}
+      {/* 添加调试按钮 */}
+      <DebugButton topicId={topicId} />
     </div>
   );
 };

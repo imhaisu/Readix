@@ -113,6 +113,12 @@ const TopicFilterRulesEditor: React.FC<TopicFilterRulesEditorProps> = ({ rules, 
       updatedRules = rules.map(r => r.id === editingRule.id ? editingRule : r);
     }
 
+    console.log('保存主题过滤规则:', {
+      ruleCount: updatedRules.length,
+      rules: updatedRules,
+      editedRule: editingRule
+    });
+
     onChange(updatedRules);
     setEditingRule(null);
   };
