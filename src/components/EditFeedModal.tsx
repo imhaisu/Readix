@@ -56,7 +56,7 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
         title: feed.title,
         url: feed.url,
         groupId: feed.groupId,
-        defaultViewMode: feed.defaultViewMode || 'summary',
+        defaultViewMode: feed.defaultViewMode || 'fulltext',
         iconUrlInput: feed.iconUrl || '',
       });
       setCurrentIconUrl(feed.iconUrl || '');
@@ -111,6 +111,19 @@ const EditFeedModal: React.FC<EditFeedModalProps> = ({ feed, open, groups, onCan
         iconUrl: finalIconUrl,
         defaultViewMode: values.defaultViewMode,
       };
+      
+      // 如果defaultViewMode发生变化，同时更新viewMode以保持一致
+      if (feed.defaultViewMode !== values.defaultViewMode) {
+        updates.viewMode = values.defaultViewMode === 'fulltext' ? 'full' : 'original';
+        console.log(`[EditFeedModal] 更新订阅源视图模式: defaultViewMode=${values.defaultViewMode}, viewMode=${updates.viewMode}`);
+      }
+
+      // 确保defaultViewMode和viewMode有值
+      if (!updates.defaultViewMode) {
+        updates.defaultViewMode = 'fulltext'; // 默认使用全文模式
+        updates.viewMode = 'full';
+        console.log(`[EditFeedModal] 设置默认视图模式: defaultViewMode=fulltext, viewMode=full`);
+      }
 
       await db.feeds.update(feed.id, updates);
       

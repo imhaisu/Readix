@@ -516,8 +516,40 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     const selectedArticle = articleListRef.current?.getArticles().find(a => a.id === articleId);
 
     if (selectedArticle) {
-      const mode = selectedArticle.isFullText ? 'full' : 'original';
-      setArticleDetailViewMode(mode);
+      // 异步获取订阅源信息，并根据defaultViewMode设置视图模式
+      if (db && selectedArticle.sourceId) {
+        db.feeds.get(selectedArticle.sourceId).then(feed => {
+          if (feed) {
+            // 确保defaultViewMode存在且为'fulltext'，否则使用默认值'summary'
+            const feedDefaultViewMode = feed.defaultViewMode || 'summary';
+            
+            // 如果文章已经是全文，则直接使用全文模式
+            if (selectedArticle.isFullText) {
+              setArticleDetailViewMode('full');
+            } 
+            // 否则根据订阅源的defaultViewMode设置
+            else if (feedDefaultViewMode === 'fulltext') {
+              setArticleDetailViewMode('full'); // 使用全文模式
+            } else {
+              setArticleDetailViewMode('original'); // 使用原始模式
+            }
+            console.log(`[HomePage] 文章视图模式: ${selectedArticle.isFullText ? '全文(已缓存)' : (feedDefaultViewMode === 'fulltext' ? '全文(需获取)' : '原始')}`);
+          } else {
+            // 如果找不到订阅源，则根据文章的isFullText属性决定
+            const mode = selectedArticle.isFullText ? 'full' : 'original';
+            setArticleDetailViewMode(mode);
+          }
+        }).catch(err => {
+          console.error('获取订阅源信息失败:', err);
+          // 出错时使用默认逻辑
+          const mode = selectedArticle.isFullText ? 'full' : 'original';
+          setArticleDetailViewMode(mode);
+        });
+      } else {
+        // 如果没有db或sourceId，则使用默认逻辑
+        const mode = selectedArticle.isFullText ? 'full' : 'original';
+        setArticleDetailViewMode(mode);
+      }
     }
     
     setSelectedArticleId(articleId);

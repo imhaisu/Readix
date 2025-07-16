@@ -40,6 +40,18 @@ import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import MindMapModal from './MindMapModal';
 import { useArticleListManager } from '../hooks/useArticleListManager';
 import { useNavigate } from 'react-router-dom';
+import { LogConfig, LogLevel } from '../utils/logConfig';
+
+// 添加日志函数，使用LogConfig控制输出
+const log = (message: string, ...args: any[]) => {
+  LogConfig.debug('ARTICLE_DETAIL', message, ...args);
+};
+
+// 添加一个控制日志级别的辅助函数
+const setArticleDetailLogLevel = (enable: boolean) => {
+  LogConfig.setModuleEnabled('ARTICLE_DETAIL', enable);
+  console.log(`[ArticleDetail] 日志${enable ? '启用' : '禁用'}`);
+};
 
 // 添加处理图片加载错误的函数
 const handleImageError = async (event: React.SyntheticEvent<HTMLImageElement>) => {
@@ -48,12 +60,12 @@ const handleImageError = async (event: React.SyntheticEvent<HTMLImageElement>) =
   
   // 防止重复处理同一图片
   if (img.dataset.tried === 'true') {
-    console.log(`[图片代理] 已尝试修复，但仍然失败: ${src}`);
+    LogConfig.debug('IMAGE_PROXY', `已尝试修复，但仍然失败: ${src}`);
     img.style.display = 'none';
     return;
   }
   
-  console.log(`[图片代理] 图片加载失败，尝试代理请求: ${src}`);
+  LogConfig.info('IMAGE_PROXY', `图片加载失败，尝试代理请求: ${src}`);
   img.dataset.tried = 'true';
   
   try {
@@ -61,7 +73,7 @@ const handleImageError = async (event: React.SyntheticEvent<HTMLImageElement>) =
     if (src.includes('cdnfile.sspai.com')) {
       // 尝试移除缩放参数
       const cleanSrc = src.replace(/\?imageView2.*$/, '');
-      console.log(`[图片代理] 尝试清理URL参数: ${cleanSrc}`);
+      LogConfig.debug('IMAGE_PROXY', `尝试清理URL参数: ${cleanSrc}`);
       img.src = cleanSrc;
       return;
     }
@@ -70,17 +82,17 @@ const handleImageError = async (event: React.SyntheticEvent<HTMLImageElement>) =
     if (window.electron && window.electron.ipcRenderer) {
       const dataUrl = await window.electron.ipcRenderer.invoke('proxy-image', src);
       if (dataUrl) {
-        console.log(`[图片代理] 成功获取代理图片`);
+        LogConfig.debug('IMAGE_PROXY', `成功获取代理图片`);
         img.src = dataUrl;
         return;
       }
     }
     
     // 如果代理失败，隐藏图片
-    console.log(`[图片代理] 代理请求失败，隐藏图片`);
+    LogConfig.info('IMAGE_PROXY', `代理请求失败，隐藏图片`);
     img.style.display = 'none';
   } catch (error) {
-    console.error(`[图片代理] 处理图片错误:`, error);
+    LogConfig.error('IMAGE_PROXY', `处理图片错误:`, error);
     img.style.display = 'none';
   }
 };
@@ -93,6 +105,34 @@ interface ArticleDetailProps {
   onArticleModified: (articleId: string, changes: Partial<Article>) => void;
   onNavigate?: (direction: 'next' | 'prev') => void;
 }
+
+const useContentCache = (articleId: string | null, content: string | undefined) => {
+  // 用于缓存已渲染的内容，防止内容切换时闪烁
+  const contentCacheRef = useRef<Map<string, string>>(new Map());
+  const [cachedContent, setCachedContent] = useState<string>('');
+  
+  // 当文章ID和内容变化时，更新缓存
+  useEffect(() => {
+    if (!articleId || !content) {
+      setCachedContent('');
+      return;
+    }
+    
+    // 更新缓存
+    contentCacheRef.current.set(articleId, content);
+    setCachedContent(content);
+    
+    // 如果缓存太大，清理旧的缓存项
+    if (contentCacheRef.current.size > 10) {
+      // 保留最近访问的10个文章内容
+      const keys = Array.from(contentCacheRef.current.keys());
+      const oldestKey = keys[0]; // 删除最早加入的项
+      contentCacheRef.current.delete(oldestKey);
+    }
+  }, [articleId, content]);
+  
+  return { cachedContent };
+};
 
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified, onNavigate }) => {
   const { db } = useDatabase();
@@ -190,12 +230,12 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     if (onClose) {
       // 检查是否需要返回笔记中心
       if (isFromNotesPage) {
-        console.log('[ArticleDetail] 从笔记中心跳转过来的，返回笔记中心');
+        log('[ArticleDetail] 从笔记中心跳转过来的，返回笔记中心');
         // 清除标记，防止后续误用
         sessionStorage.removeItem('fromNotesPage');
         
         // 直接导航到笔记页面，不经过首页
-        console.log('[ArticleDetail] 直接导航到笔记页面');
+        log('[ArticleDetail] 直接导航到笔记页面');
         navigate('/notes');
       } else {
         onClose();
@@ -566,7 +606,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const annotationObjectStr = sessionStorage.getItem('annotationObject');
     const fromNotesPage = sessionStorage.getItem('fromNotesPage') === 'true';
 
-    console.log(`[ArticleDetail] 检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
+    log(`检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
 
     // 设置是否从笔记中心跳转过来的标志
     if (fromNotesPage) {
@@ -576,7 +616,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
     // 立即清除会话存储中的跳转标记，防止其他组件实例读取到
     if (shouldOpenSidebar || highlightAnnotationId || shouldEditAnnotation || annotationObjectStr) {
-      console.log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
+      log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
       sessionStorage.removeItem('openAnnotationSidebar');
       sessionStorage.removeItem('highlightAnnotationId');
       sessionStorage.removeItem('editAnnotation');
@@ -586,32 +626,32 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
     // 只有当明确设置了这些值时才执行后续操作
     if ((shouldOpenSidebar && highlightAnnotationId) || fromNotesPage) {
-      console.log(`[ArticleDetail] 检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
+      log(`检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
       
       // 注意：在useEffect第一次运行时isSidebarVisible和handleToggleSidebar可能还没有从useAnnotations中获取
       // 所以将相关逻辑延迟到下一个事件循环执行
       setTimeout(() => {
         // 立即打开侧边栏
         if (isSidebarVisible === false) {
-          console.log('[ArticleDetail] 正在立即打开侧边栏');
+          log('[ArticleDetail] 正在立即打开侧边栏');
           handleToggleSidebar();
         } else {
-          console.log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
+          log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
         }
 
         // 如果有高亮ID，则处理高亮和编辑
         if (highlightAnnotationId) {
           // 修复：确保使用正确的元素ID格式
           const cleanAnnotationId = highlightAnnotationId.replace(/^annotation-/, '');
-          console.log(`[ArticleDetail] 处理后的注释ID: ${cleanAnnotationId}`);
+          log(`处理后的注释ID: ${cleanAnnotationId}`);
 
           // 滚动到对应的高亮
-          console.log(`[ArticleDetail] 正在滚动到高亮: ${cleanAnnotationId}`);
+          log(`正在滚动到高亮: ${cleanAnnotationId}`);
           handleScrollToAnnotation(cleanAnnotationId);
 
           // 如果需要编辑，通过设置自动编辑ID来触发编辑模式
           if (shouldEditAnnotation) {
-            console.log(`[ArticleDetail] 正在触发编辑模式: ${cleanAnnotationId}`);
+            log(`正在触发编辑模式: ${cleanAnnotationId}`);
             
             // 增加延迟，确保笔记数据已经加载完成
             setTimeout(() => {
@@ -630,19 +670,51 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       
       // 组件卸载时清除fromNotesPage标记
       if (isFromNotesPage) {
-        console.log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
+        log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
         sessionStorage.removeItem('fromNotesPage');
       }
     };
   }, []);
 
-  // 当articleId变化时更新currentArticleIdRef
+  // 更新currentArticleId Ref
   useEffect(() => {
     currentArticleIdRef.current = articleId;
     
     // 移除尝试设置isSidebarVisible的代码，因为它是从useAnnotations钩子中获取的
     // 在useAnnotations中已经处理了侧边栏可见性的变化
   }, [articleId]);
+  
+  // 添加缓存清理函数
+  const cleanupOldCache = useCallback(() => {
+    try {
+      const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7天
+      const now = Date.now();
+      
+      // 遍历本地存储，删除过期的文章缓存
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('article_cache_')) {
+          try {
+            const cachedData = JSON.parse(localStorage.getItem(key) || '{}');
+            if (cachedData.timestamp && (now - cachedData.timestamp > MAX_CACHE_AGE)) {
+              localStorage.removeItem(key);
+              log(`清理过期缓存: ${key}`);
+            }
+          } catch (e) {
+            // 如果解析失败，直接删除
+            localStorage.removeItem(key);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('清理缓存时出错:', e);
+    }
+  }, []);
+  
+  // 组件挂载时清理过期缓存
+  useEffect(() => {
+    cleanupOldCache();
+  }, [cleanupOldCache]);
   
   // 删除之前的useEffect，将其合并到组件挂载效果中
   // 删除之前的componentWillUnmount效果，将其合并到主useEffect中
@@ -652,7 +724,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const performUpgrade = useCallback(async (articleToUpgrade: Article) => {
     if (!articleToUpgrade || !articleToUpgrade.url || !db || !isMounted) return;
 
-    setFetchingFullText(true);
+    // 注意：setFetchingFullText 现在在调用此函数前已设置为 true
+    
     try {
       const result = await window.electron.fetchArticleContent(articleToUpgrade.url);
       if (result && result.content) {
@@ -661,15 +734,76 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           title: result.title,
           isFullText: true,
         });
+        // 保存到本地缓存
+        try {
+          localStorage.setItem(`article_cache_${articleToUpgrade.id}`, JSON.stringify({
+            content: result.content,
+            title: result.title,
+            timestamp: Date.now()
+          }));
+        } catch (e) {
+          console.error('缓存文章失败:', e);
+        }
+        
         if (loadArticleRef.current) {
           await loadArticleRef.current(true);
         }
       } else {
-        message.error('无法获取文章全文，目标网站可能不支持。');
+        // 尝试从本地缓存加载
+        try {
+          const cachedArticle = localStorage.getItem(`article_cache_${articleToUpgrade.id}`);
+          if (cachedArticle) {
+            const parsed = JSON.parse(cachedArticle);
+            await db.articles.update(articleToUpgrade.id, {
+              content: parsed.content,
+              title: parsed.title,
+              isFullText: true,
+            });
+            if (loadArticleRef.current) {
+              await loadArticleRef.current(true);
+            }
+            return;
+          }
+        } catch (e) {
+          console.error('读取缓存文章失败:', e);
+        }
+        
+        // 静默记录错误，但不显示任何提示
+        console.warn('无法获取文章全文，目标网站可能不支持。');
+        
+        // 不显示提示，直接更新文章状态
+        if (isMounted) {
+          setFetchingFullText(false);
+        }
       }
     } catch (error: any) {
       console.error("获取全文失败:", error);
-      message.error(`获取全文时发生错误: ${error.message}`);
+      // 尝试从本地缓存加载
+      try {
+        const cachedArticle = localStorage.getItem(`article_cache_${articleToUpgrade.id}`);
+        if (cachedArticle) {
+          const parsed = JSON.parse(cachedArticle);
+          await db.articles.update(articleToUpgrade.id, {
+            content: parsed.content,
+            title: parsed.title,
+            isFullText: true,
+          });
+          if (loadArticleRef.current) {
+            await loadArticleRef.current(true);
+          }
+          return;
+        }
+      } catch (e) {
+        console.error('读取缓存文章失败:', e);
+      }
+      
+      // 静默记录错误，但不显示任何提示
+      console.error(`获取全文时发生错误: ${error.message}`);
+      
+      // 不显示提示，直接更新文章状态
+      if (isMounted) {
+        setFetchingFullText(false);
+      }
     } finally {
       if (isMounted) {
         setFetchingFullText(false);
@@ -680,7 +814,26 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const loadArticle = useCallback(async (forceReload = false) => {
     if (articleId && db) {
       if (forceReload || !article || article.id !== articleId) {
+        // 添加延迟设置加载状态，避免内容闪烁
+        let loadingTimer: NodeJS.Timeout | null = null;
+        
+        // 先设置加载状态，避免闪烁
         setLoading(true);
+        
+        // 在设置新文章前，保存当前文章的滚动位置（如果存在）
+        if (article && scrollableContentRef.current) {
+          const currentPosition = scrollableContentRef.current.scrollTop;
+          saveScrollPosition(article.id, currentPosition).catch(e => 
+            console.error('保存当前文章滚动位置失败:', e)
+          );
+        }
+        
+        // 在加载新内容前重置滚动位置，防止出现旧文章滚动位置问题
+        if (scrollableContentRef.current) {
+          scrollableContentRef.current.scrollTop = 0;
+        }
+        
+        // 先重置状态，避免显示旧内容
         setArticle(undefined);
         setSourceTitle(undefined);
         setProcessedContent('');
@@ -693,57 +846,172 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         setIsAiHighlightsVisible(false);
   
         try {
+          // 记录当前处理的文章ID，用于防止竞态条件
+          currentArticleIdRef.current = articleId;
+  
+          // 预先获取文章和订阅源信息，确定默认模式
           const currentArticleData = await db.articles.get(articleId);
-  
-          if (currentArticleData) {
-            // 始终重新获取最新的订阅源信息，以确保显示正确
-            const source = currentArticleData.sourceId ? 
-              await db.feeds.get(currentArticleData.sourceId) : undefined;
-            
-            // 更新订阅源标题
-            setSourceTitle(source?.title);
-
-            if (!currentArticleData.isFullText && source?.defaultViewMode === 'fulltext') {
-              await performUpgrade(currentArticleData);
-              return;
-            }
-            
-            const annos = await loadAnnotations();
-            
-            // 决定使用哪个内容版本
-            const contentToShow = 
-              currentArticleData.aiHighlightedContent && isAiHighlightsVisible
-                ? currentArticleData.aiHighlightedContent
-                : currentArticleData.content;
-
-            const contentWithHighlights = applyHighlights(contentToShow, annos);
-            setProcessedContent(contentWithHighlights);
-
-            setArticle(currentArticleData);
-  
-            if (currentArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
-              await db.articles.update(articleId, { isRead: 'true' });
-              console.log(`文章 ${articleId} 已自动标记为已读。`);
-            }
-
-            // 如果存在已保存的摘要，则加载它，但不立即显示
-            if (currentArticleData.aiSummary) {
-              setInlineSummaryContent(currentArticleData.aiSummary);
-            }
-            // 如果存在AI高亮内容，则将可见性设为true
-            if (currentArticleData.aiHighlightedContent) {
-              setIsAiHighlightsVisible(true);
-            }
-          } else {
+          if (!currentArticleData) {
             setArticle(null);
+            setLoading(false);
+            return;
+          }
+  
+          // 获取订阅源信息，确定默认模式
+          const source = currentArticleData.sourceId ? 
+            await db.feeds.get(currentArticleData.sourceId) : undefined;
+            
+          // 更新订阅源标题
+          setSourceTitle(source?.title);
+
+          // 判断是否需要自动获取全文
+          // 如果文章未标记为全文，但订阅源设置为全文模式，或当前视图模式为full，则获取全文
+          // 确保defaultViewMode存在且为'fulltext'，否则使用默认值'summary'
+          const sourceDefaultViewMode = source?.defaultViewMode || 'summary';
+          const needFullTextFetch = !currentArticleData.isFullText && 
+            ((sourceDefaultViewMode === 'fulltext') || viewMode === 'full');
+          
+          // 记录日志，便于调试
+          log(`文章: ${currentArticleData.title}`);
+          log(`是否已有全文: ${currentArticleData.isFullText}`);
+          log(`订阅源默认模式: ${sourceDefaultViewMode}`);
+          log(`当前视图模式: ${viewMode}`);
+          log(`是否需要获取全文: ${needFullTextFetch}`);
+          
+          // 创建一个临时变量来存储最终要显示的文章数据
+          let finalArticleData = {...currentArticleData};
+          
+          // 如果需要自动获取全文，先获取全文再显示
+          if (needFullTextFetch) {
+            // 保持loading状态，但暂不渲染任何内容，防止闪烁
+            setFetchingFullText(true);
+            
+            try {
+              log(`尝试获取全文: ${currentArticleData.url}`);
+              // 首先尝试从本地缓存获取
+              const cachedArticle = localStorage.getItem(`article_cache_${articleId}`);
+              let fullTextContent = null;
+              let fullTextTitle = null;
+              
+              if (cachedArticle) {
+                try {
+                  const parsed = JSON.parse(cachedArticle);
+                  if (parsed.content && parsed.timestamp) {
+                    log(`从本地缓存加载全文内容, 缓存时间: ${new Date(parsed.timestamp).toLocaleString()}`);
+                    fullTextContent = parsed.content;
+                    fullTextTitle = parsed.title || currentArticleData.title;
+                  }
+                } catch (e) {
+                  console.error('解析缓存文章失败:', e);
+                }
+              }
+              
+              // 如果没有缓存或缓存无效，尝试获取全文
+              if (!fullTextContent) {
+                log(`本地缓存未命中，正在从远程获取全文`);
+                // 尝试获取全文
+                const result = await window.electron.fetchArticleContent(currentArticleData.url);
+                if (result && result.content) {
+                  fullTextContent = result.content;
+                  fullTextTitle = result.title || currentArticleData.title;
+                  
+                  // 保存到本地缓存
+                  try {
+                    localStorage.setItem(`article_cache_${articleId}`, JSON.stringify({
+                      content: fullTextContent,
+                      title: fullTextTitle,
+                      timestamp: Date.now()
+                    }));
+                    log(`全文内容已保存到本地缓存`);
+                  } catch (e) {
+                    console.error('缓存文章失败:', e);
+                  }
+                }
+              }
+              
+              // 如果成功获取全文，更新数据库和显示
+              if (fullTextContent) {
+                // 更新数据库
+                await db.articles.update(articleId, {
+                  content: fullTextContent,
+                  title: fullTextTitle || currentArticleData.title,
+                  isFullText: true,
+                });
+                
+                // 检查文章ID是否发生变化（竞态问题检查）
+                if (articleId !== currentArticleIdRef.current) {
+                  console.log('[ArticleDetail] 文章ID已变化，停止加载当前文章');
+                  return;
+                }
+                
+                // 重新获取更新后的文章数据
+                const updatedArticle = await db.articles.get(articleId);
+                if (updatedArticle) {
+                  finalArticleData = updatedArticle;
+                  log(`全文获取成功并更新`);
+                }
+              } else {
+                // 全文获取失败，使用原始内容
+                log(`获取全文内容失败，使用原始内容显示`);
+              }
+            } catch (error) {
+              // 全文获取失败，使用原始内容
+              console.error('[ArticleDetail] 自动获取全文失败:', error);
+            } finally {
+              setFetchingFullText(false);
+            }
+          }
+          
+          // 如果需要标记为已读
+          if (finalArticleData.isRead === 'false' && readingSettings.autoMarkAsRead) {
+            await db.articles.update(articleId, { isRead: 'true' });
+            log(`文章 ${articleId} 已自动标记为已读`);
+            finalArticleData.isRead = 'true';
+          }
+          
+          // 检查文章ID是否发生变化（竞态问题检查）
+          if (articleId !== currentArticleIdRef.current) {
+            console.log('[ArticleDetail] 文章ID已变化，停止加载当前文章');
+            return;
+          }
+            
+          // 应用高亮和其他处理
+          const annos = await loadAnnotations();
+            
+          // 决定使用哪个内容版本
+          const contentToShow = 
+            finalArticleData.aiHighlightedContent && isAiHighlightsVisible
+              ? finalArticleData.aiHighlightedContent
+              : finalArticleData.content;
+
+          const contentWithHighlights = applyHighlights(contentToShow, annos);
+          setProcessedContent(contentWithHighlights);
+          setArticle(finalArticleData);
+
+          // 如果存在已保存的摘要，则加载它，但不立即显示
+          if (finalArticleData.aiSummary) {
+            setInlineSummaryContent(finalArticleData.aiSummary);
+          }
+          
+          // 如果存在AI高亮内容，则将可见性设为true
+          if (finalArticleData.aiHighlightedContent) {
+            setIsAiHighlightsVisible(true);
           }
         } catch (error) {
           console.error('加载文章详情失败:', error);
           setArticle(null);
         } finally {
+          // 清除加载计时器
+          if (loadingTimer) {
+            clearTimeout(loadingTimer);
+          }
+          
           if (isMounted) {
             setLoading(false);
           }
+          
+          // 重置滚动位置恢复标志，允许之后恢复滚动位置
+          scrollPositionRestored.current = false;
         }
       } else if (viewMode === 'web' && article && contentRef.current) {
         contentRef.current.scrollTop = 0;
@@ -762,7 +1030,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
       setArticle(null);
       setLoading(false);
     }
-  }, [articleId, db, article, isMounted, performUpgrade, loadAnnotations, applyHighlights, setProcessedContent, readingSettings, isAiHighlightsVisible, annotations]);
+  }, [articleId, db, article, isMounted, loadAnnotations, applyHighlights, setProcessedContent, readingSettings, isAiHighlightsVisible, annotations, saveScrollPosition, viewMode]);
   
   useEffect(() => {
     loadArticleRef.current = loadArticle;
@@ -781,12 +1049,42 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         content: '当前文章已有笔记或高亮。获取全文会替换内容，并可能导致笔记定位不准确。是否继续？',
         okText: '继续获取',
         cancelText: '取消',
-        onOk: () => performUpgrade(articleToUpgrade),
+        onOk: () => {
+          // 先将当前内容备份到一个临时状态
+          const originalContent = articleToUpgrade.content;
+          
+          // 在获取全文前先设置加载状态
+          setFetchingFullText(true);
+          
+          // 执行获取全文操作
+          performUpgrade(articleToUpgrade).catch(e => {
+            console.error('获取全文失败:', e);
+            // 发生错误时回滚到原始内容
+            if (db && isMounted) {
+              db.articles.update(articleToUpgrade.id, { content: originalContent })
+                .catch(err => console.error('回滚内容失败:', err));
+            }
+          });
+        }
       });
     } else {
-      performUpgrade(articleToUpgrade);
+      // 先将当前内容备份到一个临时状态
+      const originalContent = articleToUpgrade.content;
+      
+      // 在获取全文前先设置加载状态
+      setFetchingFullText(true);
+      
+      // 执行获取全文操作
+      performUpgrade(articleToUpgrade).catch(e => {
+        console.error('获取全文失败:', e);
+        // 发生错误时回滚到原始内容
+        if (db && isMounted) {
+          db.articles.update(articleToUpgrade.id, { content: originalContent })
+            .catch(err => console.error('回滚内容失败:', err));
+        }
+      });
     }
-  }, [annotations, performUpgrade]);
+  }, [annotations, performUpgrade, db, isMounted]);
 
   // 创建一个滚动处理函数，在滚动时保存位置
   const handleScroll = useCallback(
@@ -846,23 +1144,36 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const tempScroll = localStorage.getItem(`temp_scroll_${article.id}`);
     if (tempScroll) {
       localStorage.removeItem(`temp_scroll_${article.id}`); // 使用后删除
-      setTimeout(() => {
-        if (scrollableContentRef.current) {
-          scrollableContentRef.current.scrollTop = parseInt(tempScroll, 10);
+      
+      // 延迟执行滚动恢复，确保DOM完全更新且内容已渲染
+      const timer = setTimeout(() => {
+        if (scrollableContentRef.current && isMountedRef.current) {
+          // 立即滚动，不使用平滑效果
+          scrollableContentRef.current.scrollTo({
+            top: parseInt(tempScroll, 10),
+            behavior: 'auto' // 使用即时滚动而非平滑滚动
+          });
           scrollPositionRestored.current = true;
         }
-      }, 100);
-      return;
+      }, 150); // 增加延迟时间，确保内容已完全加载
+      
+      return () => clearTimeout(timer);
     }
     
     // 如果没有临时保存的位置，则使用数据库中的位置
     if (article.scrollPosition && article.scrollPosition > 0) {
-      setTimeout(() => {
-        if (scrollableContentRef.current) {
-          scrollableContentRef.current.scrollTop = article.scrollPosition || 0;
+      const timer = setTimeout(() => {
+        if (scrollableContentRef.current && isMountedRef.current) {
+          // 立即滚动，不使用平滑效果
+          scrollableContentRef.current.scrollTo({
+            top: article.scrollPosition || 0,
+            behavior: 'auto' // 使用即时滚动而非平滑滚动
+          });
           scrollPositionRestored.current = true;
         }
-      }, 100);
+      }, 150);
+      
+      return () => clearTimeout(timer);
     }
   }, [article?.id]); // 只依赖article.id而不是整个article对象
 
@@ -1032,6 +1343,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     setImageModalUrl('');
   };
 
+  const { cachedContent } = useContentCache(articleId, processedContent);
+
   const renderArticleContent = () => {
     if (!article) return null;
     if (article.content && (viewMode === 'full' || viewMode === 'original')) {
@@ -1061,7 +1374,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     const annotationObjectStr = sessionStorage.getItem('annotationObject');
     const fromNotesPage = sessionStorage.getItem('fromNotesPage') === 'true';
 
-    console.log(`[ArticleDetail] 检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
+    log(`检查会话存储: shouldOpenSidebar=${shouldOpenSidebar}, highlightAnnotationId=${highlightAnnotationId}, shouldEditAnnotation=${shouldEditAnnotation}, hasAnnotationObject=${!!annotationObjectStr}, fromNotesPage=${fromNotesPage}`);
 
     // 设置是否从笔记中心跳转过来的标志
     if (fromNotesPage) {
@@ -1071,7 +1384,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
     // 立即清除会话存储中的跳转标记，防止其他组件实例读取到
     if (shouldOpenSidebar || highlightAnnotationId || shouldEditAnnotation || annotationObjectStr) {
-      console.log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
+      log('[ArticleDetail] 立即清除会话存储中的跳转标记，防止其他组件实例读取');
       sessionStorage.removeItem('openAnnotationSidebar');
       sessionStorage.removeItem('highlightAnnotationId');
       sessionStorage.removeItem('editAnnotation');
@@ -1081,14 +1394,14 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
 
     // 只有当明确设置了这些值时才执行后续操作
     if ((shouldOpenSidebar && highlightAnnotationId) || fromNotesPage) {
-      console.log(`[ArticleDetail] 检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
+      log(`检测到从笔记中心跳转，将立即打开侧边栏${highlightAnnotationId ? `并高亮: ${highlightAnnotationId}` : ''}`);
       
       // 立即打开侧边栏
       if (!isSidebarVisible) {
-        console.log('[ArticleDetail] 正在立即打开侧边栏');
+        log('[ArticleDetail] 正在立即打开侧边栏');
         handleToggleSidebar();
       } else {
-        console.log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
+        log('[ArticleDetail] 侧边栏已经打开，无需再次打开');
       }
 
       // 如果有高亮ID，则处理高亮和编辑
@@ -1097,15 +1410,15 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
         const timer = setTimeout(() => {
           // 修复：确保使用正确的元素ID格式
           const cleanAnnotationId = highlightAnnotationId.replace(/^annotation-/, '');
-          console.log(`[ArticleDetail] 处理后的注释ID: ${cleanAnnotationId}`);
+          log(`处理后的注释ID: ${cleanAnnotationId}`);
 
           // 滚动到对应的高亮
-          console.log(`[ArticleDetail] 正在滚动到高亮: ${cleanAnnotationId}`);
+          log(`正在滚动到高亮: ${cleanAnnotationId}`);
           handleScrollToAnnotation(cleanAnnotationId);
 
           // 如果需要编辑，通过设置自动编辑ID来触发编辑模式
           if (shouldEditAnnotation) {
-            console.log(`[ArticleDetail] 正在触发编辑模式: ${cleanAnnotationId}`);
+            log(`正在触发编辑模式: ${cleanAnnotationId}`);
             
             // 增加延迟，确保笔记数据已经加载完成
             setTimeout(() => {
@@ -1124,7 +1437,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   useEffect(() => {
     return () => {
       if (isFromNotesPage) {
-        console.log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
+        log('[ArticleDetail] 组件卸载，清除fromNotesPage标记');
         sessionStorage.removeItem('fromNotesPage');
       }
     };
@@ -1181,7 +1494,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     '--article-title-font-size': `${readingSettings.titleFontSize}px`,
   } as React.CSSProperties;
 
-  if (loading) {
+  // 更新加载状态的显示，使用更友好的加载视图
+  if (loading || (!article && articleId) || fetchingFullText) {
     return (
       <div className={styles.articleDetailContainer} style={articleStyle}>
         <div className={styles.loadingContainer}>
@@ -1195,11 +1509,13 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     );
   }
 
-  if (!article) {
+  // 只有当明确没有文章时才显示错误状态
+  if (!articleId || article === null) {
     return (
       <div className={styles.articleDetailContainer} style={articleStyle}>
         <div className={styles.errorContainer}>
-          <Empty description="文章不存在或已被删除" className={styles.emptyState} />
+          <Empty description="选择文章开始阅读" className={styles.emptyState} />
+          {onClose && (
           <Button 
             type="primary" 
             onClick={handleCloseDetail} 
@@ -1207,6 +1523,22 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           >
             返回列表
           </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
+  // 在这里保证article不为undefined，解决类型错误
+  if (!article) {
+    return (
+      <div className={styles.articleDetailContainer} style={articleStyle}>
+        <div className={styles.loadingContainer}>
+          <div className={styles.reederLoader}>
+            <div className={styles.dot}></div>
+            <div className={styles.dot}></div>
+            <div className={styles.dot}></div>
+          </div>
         </div>
       </div>
     );
@@ -1435,7 +1767,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                 )}
 
                 <div ref={contentRef} className={styles.content}>
-                  {renderArticleContent()}
+                  {!loading && !fetchingFullText && renderArticleContent()}
                 </div>
               </article>
             </>

@@ -75,9 +75,11 @@ const AddFeedModal: React.FC<AddFeedModalProps> = ({ open, onOk, onCancel, group
         unreadCount: 0,
         active: true,
         bionicReading: false,
-        viewMode: 'full',
+        viewMode: values.defaultViewMode === 'fulltext' ? 'full' : 'original',
         defaultViewMode: values.defaultViewMode,
       };
+
+      console.log(`[AddFeedModal] 添加新订阅源: ${values.title}, defaultViewMode=${values.defaultViewMode}, viewMode=${newFeed.viewMode}`);
 
       if (db) {
         await db.feeds.add(newFeed);
@@ -103,7 +105,7 @@ const AddFeedModal: React.FC<AddFeedModalProps> = ({ open, onOk, onCancel, group
       destroyOnHidden
     >
       <Spin spinning={loading} tip="正在解析链接...">
-        <Form form={form} layout="vertical" name="add_feed_form" initialValues={{ defaultViewMode: 'summary' }}>
+        <Form form={form} layout="vertical" name="add_feed_form" initialValues={{ defaultViewMode: 'fulltext' }}>
           <Form.Item
             name="url"
             label="订阅源链接"

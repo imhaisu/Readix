@@ -12,6 +12,9 @@ declare global {
   }
 }
 
+// 创建一个空的日志函数，替换所有console.log
+const noop = (..._: any[]): void => {};
+
 // a helper function that might be moved to utils later
 const applyHighlights = (content: string, annotationsToApply: Annotation[]): string => {
   let newContent = content;
@@ -34,7 +37,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
     // 如果找到精确匹配，则应用高亮
     if (newContent.includes(searchString)) {
       newContent = newContent.replace(searchString, replacementString);
-        console.log(`[applyHighlights] 使用精确匹配成功应用高亮: ${anno.id}`);
+        // console.log(`[applyHighlights] 使用精确匹配成功应用高亮: ${anno.id}`);
         return; // 成功应用高亮后，跳过后续尝试
     } 
       
@@ -47,10 +50,13 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
         const beforeText = newContent.substring(0, textIndex);
         const afterText = newContent.substring(textIndex + anno.text.length);
         newContent = `${beforeText}${markTag}${anno.text}</mark>${afterText}`;
-          console.log(`[applyHighlights] 使用简单文本匹配成功应用高亮: ${anno.id}`);
+          // console.log(`[applyHighlights] 使用简单文本匹配成功应用高亮: ${anno.id}`);
           return; // 成功应用高亮后，跳过后续尝试
         }
       }
+
+      // 后续的代码保持不变，但所有console.log替换为注释
+      // 其余逻辑保持不变，仅移除日志输出
       
       // 如果上述方法都失败，尝试更复杂的匹配方法
       // 创建一个临时的DOM元素来解析HTML内容
@@ -83,7 +89,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
       // 在完整文本中查找目标文本
       const targetIndex = fullText.indexOf(anno.text);
       if (targetIndex === -1) {
-        console.log(`[applyHighlights] 在文档中未找到文本: "${anno.text.substring(0, 20)}..."`);
+        // console.log(`[applyHighlights] 在文档中未找到文本: "${anno.text.substring(0, 20)}..."`);
         return; // 如果找不到文本，跳过此注释
       }
       
@@ -111,7 +117,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
       }
       
       if (startNodeIndex === -1 || endNodeIndex === -1) {
-        console.error(`[applyHighlights] 无法确定节点范围: ${anno.id}`);
+        // console.error(`[applyHighlights] 无法确定节点范围: ${anno.id}`);
         return;
       }
       
@@ -131,14 +137,14 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
           
           range.surroundContents(mark);
           newContent = tempDiv.innerHTML;
-          console.log(`[applyHighlights] 使用DOM Range成功应用单节点高亮: ${anno.id}`);
+          // console.log(`[applyHighlights] 使用DOM Range成功应用单节点高亮: ${anno.id}`);
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : String(e);
-          console.error(`[applyHighlights] 应用单节点高亮失败: ${errorMessage}`);
+          // console.error(`[applyHighlights] 应用单节点高亮失败: ${errorMessage}`);
         }
       } else {
         // 处理跨越多个节点的情况 - 使用分段高亮
-        console.log(`[applyHighlights] 检测到跨节点高亮，使用分段高亮: ${anno.id}`);
+        // console.log(`[applyHighlights] 检测到跨节点高亮，使用分段高亮: ${anno.id}`);
         
         try {
           // 创建一个新的高亮ID前缀，用于关联分段高亮
@@ -165,7 +171,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
           
           // 如果所有节点都属于同一个父元素，且都是文本节点，尝试合并处理
           if (allSameParent && nodeTypes.every(type => type === 'text') && parentElements[0] !== null) {
-            console.log(`[applyHighlights] 检测到所有节点属于同一父元素，尝试整体处理`);
+            // console.log(`[applyHighlights] 检测到所有节点属于同一父元素，尝试整体处理`);
             
             try {
               // 获取共同父元素 (已确认不为null)
@@ -184,14 +190,14 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
               try {
                 fullRange.surroundContents(singleMark);
                 newContent = tempDiv.innerHTML;
-                console.log(`[applyHighlights] 成功使用整体高亮方式: ${anno.id}`);
+                // console.log(`[applyHighlights] 成功使用整体高亮方式: ${anno.id}`);
                 return; // 成功后直接返回
               } catch (e: unknown) {
                 // 如果整体包装失败，回退到分段处理
-                console.log(`[applyHighlights] 整体高亮失败，回退到分段处理: ${e instanceof Error ? e.message : String(e)}`);
+                // console.log(`[applyHighlights] 整体高亮失败，回退到分段处理: ${e instanceof Error ? e.message : String(e)}`);
               }
             } catch (e: unknown) {
-              console.log(`[applyHighlights] 尝试整体处理时出错: ${e instanceof Error ? e.message : String(e)}`);
+              // console.log(`[applyHighlights] 尝试整体处理时出错: ${e instanceof Error ? e.message : String(e)}`);
             }
           }
           
@@ -209,7 +215,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
             firstRange.surroundContents(firstMark);
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
-            console.error(`[applyHighlights] 应用起始节点高亮失败: ${errorMessage}`);
+            // console.error(`[applyHighlights] 应用起始节点高亮失败: ${errorMessage}`);
             
             // 如果失败，尝试替换节点内容
             const node = textNodes[startNodeIndex];
@@ -251,7 +257,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
               midRange.surroundContents(midMark);
             } catch (e: unknown) {
               const errorMessage = e instanceof Error ? e.message : String(e);
-              console.error(`[applyHighlights] 应用中间节点高亮失败: ${errorMessage}`);
+              // console.error(`[applyHighlights] 应用中间节点高亮失败: ${errorMessage}`);
               
               // 如果失败，尝试替换整个节点
               const node = textNodes[i];
@@ -278,7 +284,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
             lastRange.surroundContents(lastMark);
           } catch (e: unknown) {
             const errorMessage = e instanceof Error ? e.message : String(e);
-            console.error(`[applyHighlights] 应用结束节点高亮失败: ${errorMessage}`);
+            // console.error(`[applyHighlights] 应用结束节点高亮失败: ${errorMessage}`);
             
             // 如果失败，尝试替换节点内容
             const node = textNodes[endNodeIndex];
@@ -302,10 +308,10 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
           
           // 更新内容
           newContent = tempDiv.innerHTML;
-          console.log(`[applyHighlights] 成功应用分段高亮: ${anno.id}`);
+          // console.log(`[applyHighlights] 成功应用分段高亮: ${anno.id}`);
         } catch (e: unknown) {
           const errorMessage = e instanceof Error ? e.message : String(e);
-          console.error(`[applyHighlights] 应用分段高亮失败: ${errorMessage}`);
+          // console.error(`[applyHighlights] 应用分段高亮失败: ${errorMessage}`);
           
           // 最后的降级方案：尝试使用简单的文本替换
           try {
@@ -319,19 +325,19 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
             
             if (newContent.includes(searchPattern)) {
               newContent = newContent.replace(searchPattern, replacePattern);
-              console.log(`[applyHighlights] 使用降级方案成功应用高亮: ${anno.id}`);
+              // console.log(`[applyHighlights] 使用降级方案成功应用高亮: ${anno.id}`);
             } else {
-              console.error(`[applyHighlights] 所有高亮方法都失败: ${anno.id}`);
+              // console.error(`[applyHighlights] 所有高亮方法都失败: ${anno.id}`);
             }
           } catch (finalError: unknown) {
             const finalErrorMessage = finalError instanceof Error ? finalError.message : String(finalError);
-            console.error(`[applyHighlights] 降级方案也失败了: ${finalErrorMessage}`);
+            // console.error(`[applyHighlights] 降级方案也失败了: ${finalErrorMessage}`);
           }
         }
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`[applyHighlights] 处理高亮时出错: ${errorMessage}`, error);
+      // console.error(`[applyHighlights] 处理高亮时出错: ${errorMessage}`, error);
     }
   });
   
@@ -372,12 +378,12 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     if (annotationObjectStr) {
       try {
         const annotation = JSON.parse(annotationObjectStr);
-        console.log(`[useAnnotations] 找到存储的笔记对象: ${annotation.id}`);
+        // console.log(`[useAnnotations] 找到存储的笔记对象: ${annotation.id}`);
         
         // 确保笔记ID格式正确
         if (!annotation.id.startsWith('annotation-')) {
           annotation.id = `annotation-${annotation.id}`;
-          console.log(`[useAnnotations] 修正笔记ID格式: ${annotation.id}`);
+          // console.log(`[useAnnotations] 修正笔记ID格式: ${annotation.id}`);
         }
         
         // 将笔记对象添加到当前文章的高亮中
@@ -385,26 +391,26 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           // 检查是否已经存在相同ID的笔记
           const exists = prev.some(a => a.id === annotation.id);
           if (exists) {
-            console.log(`[useAnnotations] 笔记 ${annotation.id} 已存在，不重复添加`);
+            // console.log(`[useAnnotations] 笔记 ${annotation.id} 已存在，不重复添加`);
             return prev;
           }
           
-          console.log(`[useAnnotations] 添加笔记 ${annotation.id} 到当前文章`);
+          // console.log(`[useAnnotations] 添加笔记 ${annotation.id} 到当前文章`);
           return [...prev, annotation];
         });
         
         // 应用高亮到内容中
         setProcessedContent(prev => {
           if (!prev) return prev;
-          console.log(`[useAnnotations] 应用高亮到内容中: ${annotation.id}`);
+          // console.log(`[useAnnotations] 应用高亮到内容中: ${annotation.id}`);
           return applyHighlights(prev, [annotation]);
         });
         
         // 清除存储的笔记对象，防止后续误用
-        console.log(`[useAnnotations] 清除存储的笔记对象`);
+        // console.log(`[useAnnotations] 清除存储的笔记对象`);
         sessionStorage.removeItem('annotationObject');
       } catch (error) {
-        console.error('[useAnnotations] 解析存储的笔记对象失败:', error);
+        // console.error('[useAnnotations] 解析存储的笔记对象失败:', error);
       }
     }
   }, [articleId, db, applyHighlights]);
@@ -419,7 +425,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     const annotationLoadKey = `annotation-load-${articleId}`;
     if (window.__annotationLoadTracker?.[annotationLoadKey] && 
         Date.now() - window.__annotationLoadTracker[annotationLoadKey] < 500) {
-      console.log(`[useAnnotations] 短时间内重复加载，跳过: ${articleId}`);
+      // console.log(`[useAnnotations] 短时间内重复加载，跳过: ${articleId}`);
       return annotations; // 直接返回当前状态中的标注
     }
     
@@ -427,11 +433,11 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     if (!window.__annotationLoadTracker) window.__annotationLoadTracker = {};
     window.__annotationLoadTracker[annotationLoadKey] = Date.now();
     
-    console.log(`[useAnnotations] 开始加载文章 ${articleId} 的笔记和高亮`);
+    // console.log(`[useAnnotations] 开始加载文章 ${articleId} 的笔记和高亮`);
     
     // 加载当前文章的笔记和高亮
     const annos = await db.annotations.where({ articleId }).sortBy('createdAt');
-    console.log(`[useAnnotations] 加载了 ${annos.length} 条笔记和高亮`);
+    // console.log(`[useAnnotations] 加载了 ${annos.length} 条笔记和高亮`);
     
     // 只有当articleId匹配时才更新状态，避免竞态条件
     if (articleId === currentArticleId.current) {
@@ -460,17 +466,17 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       const customEvent = event as CustomEvent<{ annotationId: string }>;
       if (customEvent.detail && customEvent.detail.annotationId) {
         const annotationId = customEvent.detail.annotationId;
-        console.log(`[useAnnotations] 收到编辑笔记事件，笔记ID: ${annotationId}`);
+        // console.log(`[useAnnotations] 收到编辑笔记事件，笔记ID: ${annotationId}`);
         setAutoEditNoteId(annotationId);
       }
     };
 
-    console.log('[useAnnotations] 添加编辑笔记事件监听器');
+    // console.log('[useAnnotations] 添加编辑笔记事件监听器');
     document.addEventListener('edit-annotation', handleEditAnnotation);
     eventListenerAdded.current = true;
 
     return () => {
-      console.log('[useAnnotations] 移除编辑笔记事件监听器');
+      // console.log('[useAnnotations] 移除编辑笔记事件监听器');
       document.removeEventListener('edit-annotation', handleEditAnnotation);
       eventListenerAdded.current = false;
     };
@@ -485,7 +491,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
   // 存储原始的handleToggleSidebar函数，用于在memoizedHandleToggleSidebar中引用
   const handleToggleSidebar = useCallback(() => {
     const newVisibility = !isSidebarVisible;
-    console.log(`[useAnnotations] 切换侧边栏可见性: ${newVisibility}`);
+    // console.log(`[useAnnotations] 切换侧边栏可见性: ${newVisibility}`);
     setIsSidebarVisible(newVisibility);
     
     // 触发侧边栏切换事件
@@ -496,14 +502,14 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     // 如果侧边栏打开且是从笔记页面跳转过来的，自动触发编辑笔记
     // 注意：只有在侧边栏从关闭状态变为打开状态时才执行此逻辑
     if (newVisibility && !isSidebarVisible && sessionStorage.getItem('fromNotesPage') === 'true') {
-      console.log('[useAnnotations] 检测到从笔记页面跳转且侧边栏打开，准备自动编辑笔记');
+      // console.log('[useAnnotations] 检测到从笔记页面跳转且侧边栏打开，准备自动编辑笔记');
       
       // 延迟一点时间，确保侧边栏完全打开且笔记数据已加载
       setTimeout(() => {
         // 如果有高亮ID，则触发编辑事件
         const highlightAnnotationId = sessionStorage.getItem('highlightAnnotationId');
         if (highlightAnnotationId) {
-          console.log(`[useAnnotations] 自动触发编辑笔记: ${highlightAnnotationId}`);
+          // console.log(`[useAnnotations] 自动触发编辑笔记: ${highlightAnnotationId}`);
           document.dispatchEvent(new CustomEvent('edit-annotation', {
             detail: { annotationId: highlightAnnotationId }
           }));
@@ -511,7 +517,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           // 如果没有指定高亮ID但有笔记，则编辑第一条笔记
           const noteAnnotations = annotations.filter(a => a.type === 'note');
           if (noteAnnotations.length > 0) {
-            console.log(`[useAnnotations] 未指定高亮ID，自动编辑第一条笔记: ${noteAnnotations[0].id}`);
+            // console.log(`[useAnnotations] 未指定高亮ID，自动编辑第一条笔记: ${noteAnnotations[0].id}`);
             document.dispatchEvent(new CustomEvent('edit-annotation', {
               detail: { annotationId: noteAnnotations[0].id }
             }));
@@ -522,11 +528,11 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
   }, [isSidebarVisible, annotations]);
   
   const handleScrollToAnnotation = (annotationId: string) => {
-    console.log(`[useAnnotations] 尝试滚动到笔记: ${annotationId}`);
+    // console.log(`[useAnnotations] 尝试滚动到笔记: ${annotationId}`);
     
     // 确保ID格式正确，移除可能的前缀
     const cleanId = annotationId.replace(/^annotation-/, '');
-    console.log(`[useAnnotations] 处理后的ID: ${cleanId}`);
+    // console.log(`[useAnnotations] 处理后的ID: ${cleanId}`);
     
     // 尝试不同格式的ID - 包括普通高亮和分段高亮
     const possibleIds = [
@@ -539,22 +545,22 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     for (const id of possibleIds) {
       const element = document.getElementById(id);
       if (element) {
-        console.log(`[useAnnotations] 找到普通高亮元素，使用ID: ${id}`);
+        // console.log(`[useAnnotations] 找到普通高亮元素，使用ID: ${id}`);
         foundElement = element;
         break;
       } else {
-        console.log(`[useAnnotations] 未找到普通高亮元素: ${id}`);
+        // console.log(`[useAnnotations] 未找到普通高亮元素: ${id}`);
       }
     }
     
     // 如果没找到普通高亮，尝试查找分段高亮
     if (!foundElement) {
-      console.log(`[useAnnotations] 尝试查找分段高亮元素`);
+      // console.log(`[useAnnotations] 尝试查找分段高亮元素`);
       
       // 首先通过data-annotation-id属性查找
       const segmentElements = document.querySelectorAll(`[data-annotation-id="${cleanId}"]`);
       if (segmentElements.length > 0) {
-        console.log(`[useAnnotations] 找到 ${segmentElements.length} 个分段高亮元素，使用第一个`);
+        // console.log(`[useAnnotations] 找到 ${segmentElements.length} 个分段高亮元素，使用第一个`);
         foundElement = segmentElements[0] as HTMLElement;
       } else {
         // 如果通过data-annotation-id找不到，尝试通过ID前缀查找
@@ -562,14 +568,14 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         const startSegment = document.getElementById(`${segmentPrefix}-start`);
         
         if (startSegment) {
-          console.log(`[useAnnotations] 找到分段高亮起始元素: ${segmentPrefix}-start`);
+          // console.log(`[useAnnotations] 找到分段高亮起始元素: ${segmentPrefix}-start`);
           foundElement = startSegment;
         } else {
           // 如果连起始段都找不到，尝试查找任何中间段
           let i = 0;
           let midSegment;
           while (!foundElement && i < 10 && (midSegment = document.getElementById(`${segmentPrefix}-mid-${i}`))) {
-            console.log(`[useAnnotations] 找到分段高亮中间元素: ${segmentPrefix}-mid-${i}`);
+            // console.log(`[useAnnotations] 找到分段高亮中间元素: ${segmentPrefix}-mid-${i}`);
             foundElement = midSegment;
             i++;
           }
@@ -578,7 +584,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           if (!foundElement) {
             const endSegment = document.getElementById(`${segmentPrefix}-end`);
             if (endSegment) {
-              console.log(`[useAnnotations] 找到分段高亮结束元素: ${segmentPrefix}-end`);
+              // console.log(`[useAnnotations] 找到分段高亮结束元素: ${segmentPrefix}-end`);
               foundElement = endSegment;
             }
           }
@@ -587,7 +593,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     }
     
     if (foundElement) {
-      console.log(`[useAnnotations] 找到元素，正在滚动到笔记`);
+      // console.log(`[useAnnotations] 找到元素，正在滚动到笔记`);
       foundElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       
       // 高亮显示找到的元素
@@ -621,7 +627,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         }
       }, 1200);
     } else {
-      console.log(`[useAnnotations] 所有尝试都失败，未找到笔记元素`);
+      // console.log(`[useAnnotations] 所有尝试都失败，未找到笔记元素`);
       
       // 如果找不到元素，可能是因为DOM还没有完全加载，尝试延迟再次查找
       setTimeout(() => {
@@ -631,7 +637,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           for (const id of possibleIds) {
             const element = document.getElementById(id);
             if (element) {
-              console.log(`[useAnnotations] 延迟查找成功，找到普通高亮元素: ${id}`);
+              // console.log(`[useAnnotations] 延迟查找成功，找到普通高亮元素: ${id}`);
               element.scrollIntoView({ behavior: 'smooth', block: 'center' });
               element.style.transition = 'background-color 0.3s ease';
               element.style.backgroundColor = '#fadd87';
@@ -645,7 +651,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           // 尝试查找分段高亮
           const segmentElements = document.querySelectorAll(`[data-annotation-id="${cleanId}"]`);
           if (segmentElements.length > 0) {
-            console.log(`[useAnnotations] 延迟查找成功，找到 ${segmentElements.length} 个分段高亮元素`);
+            // console.log(`[useAnnotations] 延迟查找成功，找到 ${segmentElements.length} 个分段高亮元素`);
             const firstSegment = segmentElements[0] as HTMLElement;
             firstSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
@@ -669,7 +675,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           const endSegment = document.getElementById(`${segmentPrefix}-end`);
           
           if (startSegment) {
-            console.log(`[useAnnotations] 延迟查找成功，找到分段起始元素`);
+            // console.log(`[useAnnotations] 延迟查找成功，找到分段起始元素`);
             startSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
             startSegment.style.transition = 'background-color 0.3s ease';
             startSegment.style.backgroundColor = '#fadd87';
@@ -678,7 +684,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
             }, 1200);
             return true;
           } else if (endSegment) {
-            console.log(`[useAnnotations] 延迟查找成功，找到分段结束元素`);
+            // console.log(`[useAnnotations] 延迟查找成功，找到分段结束元素`);
             endSegment.scrollIntoView({ behavior: 'smooth', block: 'center' });
             endSegment.style.transition = 'background-color 0.3s ease';
             endSegment.style.backgroundColor = '#fadd87';
@@ -692,7 +698,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         };
         
         if (!delayedSearch()) {
-          console.log(`[useAnnotations] 延迟查找也失败了，无法找到笔记元素`);
+          // console.log(`[useAnnotations] 延迟查找也失败了，无法找到笔记元素`);
         }
       }, 1000);
     }
@@ -751,7 +757,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     let extendedSuffix = suffix;
 
     if (isCrossingElements) {
-      console.log('[handleHighlightClick] 检测到跨元素选择');
+      // console.log('[handleHighlightClick] 检测到跨元素选择');
       
       // 尝试获取更广泛的上下文
       try {
@@ -769,10 +775,10 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           const suffixEnd = Math.min(fullText.length, textIndex + selectedText.length + 60);
           extendedSuffix = fullText.substring(textIndex + selectedText.length, suffixEnd);
           
-          console.log('[handleHighlightClick] 已获取扩展上下文');
+          // console.log('[handleHighlightClick] 已获取扩展上下文');
         }
       } catch (error: unknown) {
-        console.error('[handleHighlightClick] 获取扩展上下文失败:', error);
+        // console.error('[handleHighlightClick] 获取扩展上下文失败:', error);
         // 如果获取扩展上下文失败，继续使用原始的前缀和后缀
       }
     }
@@ -793,7 +799,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       setProcessedContent(prev => applyHighlights(prev, newAnnos));
       message.success("高亮已保存");
     } catch (error) {
-      console.error("保存高亮失败:", error);
+      // console.error("保存高亮失败:", error);
       message.error("保存高亮失败！");
     } finally {
       window.getSelection()?.removeAllRanges();
@@ -829,7 +835,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
     let extendedSuffix = suffix;
 
     if (isCrossingElements) {
-      console.log('[handleNoteClick] 检测到跨元素选择');
+      // console.log('[handleNoteClick] 检测到跨元素选择');
       
       // 尝试获取更广泛的上下文
       try {
@@ -847,10 +853,10 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           const suffixEnd = Math.min(fullText.length, textIndex + selectedText.length + 60);
           extendedSuffix = fullText.substring(textIndex + selectedText.length, suffixEnd);
           
-          console.log('[handleNoteClick] 已获取扩展上下文');
+          // console.log('[handleNoteClick] 已获取扩展上下文');
         }
       } catch (error: unknown) {
-        console.error('[handleNoteClick] 获取扩展上下文失败:', error);
+        // console.error('[handleNoteClick] 获取扩展上下文失败:', error);
         // 如果获取扩展上下文失败，继续使用原始的前缀和后缀
       }
     }
@@ -884,18 +890,18 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
 
   // 触发笔记变化事件，通知其他组件更新
   const triggerAnnotationChange = useCallback(() => {
-    console.log('[useAnnotations] 触发笔记变化事件');
+    // console.log('[useAnnotations] 触发笔记变化事件');
     document.dispatchEvent(new CustomEvent('annotation-changed'));
   }, []);
 
   const handleSaveNote = async (annotationId: string, content: string) => {
     if (!db || !articleId) return;
     try {
-      console.log(`[useAnnotations] 正在保存笔记: ${annotationId}, 内容长度: ${content.length}`);
+      // console.log(`[useAnnotations] 正在保存笔记: ${annotationId}, 内容长度: ${content.length}`);
       if (annotationId.startsWith('pending-')) {
         // 创建新的annotation对象，保持与临时ID相同的前缀/后缀
         const newId = `annotation-${Date.now()}`;
-        console.log(`[useAnnotations] 这是一个临时笔记，将创建新的笔记ID: ${newId}`);
+        // console.log(`[useAnnotations] 这是一个临时笔记，将创建新的笔记ID: ${newId}`);
         const newAnnotationData: Annotation = { 
           ...pendingAnnotation!, 
           noteContent: content, 
@@ -905,18 +911,18 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         
         // 保存到数据库
         await db.annotations.add(newAnnotationData);
-        console.log(`[useAnnotations] 新笔记已保存到数据库: ${newId}`);
+        // console.log(`[useAnnotations] 新笔记已保存到数据库: ${newId}`);
         
         // 查找并更新临时高亮元素
         const tempHighlight = document.getElementById(`annotation-${pendingAnnotation!.id}`);
         if (tempHighlight) {
           // 更新ID和样式
-          console.log(`[useAnnotations] 找到临时高亮元素，正在更新ID: ${pendingAnnotation!.id} -> ${newId}`);
+          // console.log(`[useAnnotations] 找到临时高亮元素，正在更新ID: ${pendingAnnotation!.id} -> ${newId}`);
           tempHighlight.id = `annotation-${newId}`;
           // 确保这是带笔记的高亮
           tempHighlight.classList.add('customHighlightWithNote');
         } else {
-          console.log(`[useAnnotations] 未找到临时高亮元素，将重新应用高亮`);
+          // console.log(`[useAnnotations] 未找到临时高亮元素，将重新应用高亮`);
           // 如果找不到临时高亮元素，重新应用高亮
           setProcessedContent(prev => applyHighlights(prev, [newAnnotationData]));
         }
@@ -928,16 +934,16 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         triggerAnnotationChange();
       } else {
         // 更新现有笔记
-        console.log(`[useAnnotations] 正在更新现有笔记: ${annotationId}`);
+        // console.log(`[useAnnotations] 正在更新现有笔记: ${annotationId}`);
         await db.annotations.update(annotationId, { noteContent: content });
         
         // 确保高亮元素有正确的样式
         const highlightElement = document.getElementById(`annotation-${annotationId}`);
         if (highlightElement) {
-          console.log(`[useAnnotations] 找到高亮元素，确保它有正确的样式`);
+          // console.log(`[useAnnotations] 找到高亮元素，确保它有正确的样式`);
           highlightElement.classList.add('customHighlightWithNote');
         } else {
-          console.log(`[useAnnotations] 未找到高亮元素: annotation-${annotationId}`);
+          // console.log(`[useAnnotations] 未找到高亮元素: annotation-${annotationId}`);
         }
         
         message.success("笔记已更新");
@@ -950,7 +956,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       await loadAnnotations();
       return true; // 返回成功标志
     } catch (error) {
-      console.error("[useAnnotations] 保存笔记失败:", error);
+      // console.error("[useAnnotations] 保存笔记失败:", error);
       message.error("保存笔记失败！");
       return false; // 返回失败标志
     }
@@ -959,20 +965,20 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
   const handleDeleteAnnotation = async (annotationId: string) => {
     if (!db || !articleId) return;
     try {
-      console.log(`[useAnnotations] 正在删除笔记: ${annotationId}`);
+      // console.log(`[useAnnotations] 正在删除笔记: ${annotationId}`);
       await db.annotations.delete(annotationId);
       
       // 处理普通高亮
       const highlightElement = document.getElementById(`annotation-${annotationId}`);
       if (highlightElement) {
-        console.log(`[useAnnotations] 找到高亮元素，正在移除: annotation-${annotationId}`);
+        // console.log(`[useAnnotations] 找到高亮元素，正在移除: annotation-${annotationId}`);
         const fragment = document.createDocumentFragment();
         while (highlightElement.firstChild) {
           fragment.appendChild(highlightElement.firstChild);
         }
         highlightElement.parentNode?.replaceChild(fragment, highlightElement);
       } else {
-        console.log(`[useAnnotations] 未找到普通高亮元素，尝试查找分段高亮: ${annotationId}`);
+        // console.log(`[useAnnotations] 未找到普通高亮元素，尝试查找分段高亮: ${annotationId}`);
         
         // 处理分段高亮
         const segmentPrefix = `annotation-segment-${annotationId}`;
@@ -981,7 +987,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         const segmentElements = document.querySelectorAll(`[data-annotation-id="${annotationId}"]`);
         
         if (segmentElements.length > 0) {
-          console.log(`[useAnnotations] 找到 ${segmentElements.length} 个分段高亮元素`);
+          // console.log(`[useAnnotations] 找到 ${segmentElements.length} 个分段高亮元素`);
           
           // 移除每个分段高亮元素
           segmentElements.forEach(element => {
@@ -1033,9 +1039,9 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           }
           
           if (startSegment || midSegments.length > 0 || endSegment) {
-            console.log(`[useAnnotations] 已移除分段高亮元素: 起始=${!!startSegment}, 中间=${midSegments.length}, 结束=${!!endSegment}`);
+            // console.log(`[useAnnotations] 已移除分段高亮元素: 起始=${!!startSegment}, 中间=${midSegments.length}, 结束=${!!endSegment}`);
           } else {
-            console.log(`[useAnnotations] 未找到任何高亮元素: annotation-${annotationId}`);
+            // console.log(`[useAnnotations] 未找到任何高亮元素: annotation-${annotationId}`);
           }
         }
       }
@@ -1045,7 +1051,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
       // 触发笔记变化事件
       triggerAnnotationChange();
     } catch (error) {
-      console.error("[useAnnotations] 删除失败:", error);
+      // console.error("[useAnnotations] 删除失败:", error);
       message.error("删除失败！");
     }
   };
@@ -1109,7 +1115,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
         }
         
         if (annotationId && articleId !== null) {
-          console.log(`[useAnnotations] 点击了高亮元素，注释ID: ${annotationId}`);
+          // console.log(`[useAnnotations] 点击了高亮元素，注释ID: ${annotationId}`);
           
           // 查找点击的注释是否存在
           const annotation = annotations.find(a => 
@@ -1118,11 +1124,11 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
           );
           
           if (annotation) {
-            console.log(`[useAnnotations] 找到对应的注释: ${annotation.id}`);
+            // console.log(`[useAnnotations] 找到对应的注释: ${annotation.id}`);
             
             // 如果侧边栏未打开，先打开侧边栏
             if (!isSidebarVisible) {
-              console.log(`[useAnnotations] 侧边栏未打开，正在打开`);
+              // console.log(`[useAnnotations] 侧边栏未打开，正在打开`);
               setIsSidebarVisible(true);
               
               // 触发侧边栏切换事件
@@ -1132,7 +1138,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
             }
             
             // 设置自动编辑的笔记ID
-            console.log(`[useAnnotations] 设置自动编辑笔记ID: ${annotationId}`);
+            // console.log(`[useAnnotations] 设置自动编辑笔记ID: ${annotationId}`);
             setAutoEditNoteId(annotationId);
             
             // 触发编辑笔记事件
@@ -1140,7 +1146,7 @@ export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotatio
               detail: { annotationId }
             }));
           } else {
-            console.log(`[useAnnotations] 未找到对应的注释: ${annotationId}`);
+            // console.log(`[useAnnotations] 未找到对应的注释: ${annotationId}`);
           }
         }
       }

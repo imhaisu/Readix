@@ -26,7 +26,7 @@ export class RssDatabase extends Dexie {
       // Dexie 会自动处理新字段的添加，但我们可以为现有数据设置默认值。
       await tx.table('feeds').toCollection().modify(feed => {
         if (feed.defaultViewMode === undefined) {
-          feed.defaultViewMode = 'summary'; // 默认为摘要模式
+          feed.defaultViewMode = 'fulltext'; // 默认为全文模式
         }
       });
       await tx.table('articles').toCollection().modify(article => {
@@ -236,6 +236,29 @@ export const initializeDatabaseSingleton = async (): Promise<RssDatabase | null>
       isDbInitialized = true;
       (window as any).dbInstanceForDebug = database;
       console.log('[DatabaseSingleton] 数据库初始化成功。');
+      
+      // 检查并修复所有订阅源的defaultViewMode
+      try {
+        const feeds = await database.feeds.toArray();
+        let fixedCount = 0;
+        
+        for (const feed of feeds) {
+          if (!feed.defaultViewMode) {
+            await database.feeds.update(feed.id!, {
+              defaultViewMode: 'fulltext', // 默认设置为全文模式
+              viewMode: 'full' // 同时更新viewMode
+            });
+            fixedCount++;
+          }
+        }
+        
+        if (fixedCount > 0) {
+          console.log(`[DatabaseSingleton] 已修复 ${fixedCount} 个订阅源的默认视图模式设置`);
+        }
+      } catch (error) {
+        console.error('[DatabaseSingleton] 修复订阅源默认视图模式时出错:', error);
+      }
+      
       return dbInstance;
     } catch (error) {
       console.error('数据库初始化失败:', error);

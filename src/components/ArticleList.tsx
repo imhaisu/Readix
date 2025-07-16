@@ -1,43 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react';
-import { Card, Empty, Skeleton, Badge, Tooltip, Avatar, Dropdown, message } from 'antd';
+import { List, Empty, Dropdown, message, Spin, Menu, Skeleton, Avatar } from 'antd';
+import { 
+  StarOutlined, StarFilled, CheckOutlined, CheckCircleOutlined, EyeOutlined, 
+  ArrowUpOutlined, ArrowDownOutlined, CopyOutlined, RightOutlined, MenuOutlined,
+  LeftOutlined, ClockCircleOutlined, ClockCircleFilled, GlobalOutlined
+} from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  StarOutlined, 
-  StarFilled, 
-  ClockCircleOutlined, 
-  GlobalOutlined, 
-  FileImageOutlined,
-  CheckCircleOutlined,
-  EyeOutlined,
-  ArrowUpOutlined,
-  ArrowDownOutlined,
-  CopyOutlined,
-  ReloadOutlined,
-} from '@ant-design/icons';
-import { format, isToday, formatDistanceToNowStrict, isYesterday } from 'date-fns';
-import { zhCN } from 'date-fns/locale';
-import { Article, FeedSource } from '../db/database';
+import { format, formatDistanceToNowStrict } from 'date-fns';
+import { zhCN, enUS } from 'date-fns/locale';
+import { Article } from '../db/database';
+import { useDatabase } from '../contexts/DatabaseContext';
+import { extractFirstParagraphText, extractFirstImage } from '../utils/helpers';
 import styles from './ArticleList.module.css';
 import PulsingLoader from './PulsingLoader';
-import { useArticleListManager } from '../hooks/useArticleListManager'; // 导入新的 Hook
-import { extractFirstImage, extractFirstParagraphText } from '../utils/helpers'; // 导入辅助函数
 import { debounce } from 'lodash';
+import { useArticleListManager } from '../hooks/useArticleListManager'; // 导入ArticleListManager钩子
+import { usePrevious } from '../hooks/usePrevious'; // 导入usePrevious钩子
 
-interface ArticleListProps {
-  filter: any;
-  searchTerm?: string;
-  onSelectArticle: (articleId: string | null) => void;
-  selectedArticleId: string | null;
-  isTodayView?: boolean; 
-  currentFeedId?: string;
-  currentGroupId?: string;
-  currentTopicId?: string;
-  lastUpdatedArticleInfo?: { id: string, changes: Partial<Article> } | null;
-  listRefreshKey?: number;
-  onLastUpdatedArticleInfoChange: (info: { id: string, changes: Partial<Article> } | null) => void;
-  isPullingDown?: boolean;
-}
+// 添加图标错误缓存
+const iconErrorCache = new Map<string, boolean>();
 
 // 辅助函数：格式化日期
 const formatDate = (date: number | Date): string => {
@@ -61,8 +43,20 @@ export interface ArticleListHandle {
   setScrollPosition: (position: number) => void;
 }
 
-// 创建一个记录图标加载错误的Map
-const iconErrorCache = new Map<string, boolean>();
+interface ArticleListProps {
+  filter: any;
+  searchTerm?: string;
+  onSelectArticle: (articleId: string | null) => void;
+  selectedArticleId: string | null;
+  isTodayView?: boolean; 
+  currentFeedId?: string;
+  currentGroupId?: string;
+  currentTopicId?: string;
+  lastUpdatedArticleInfo?: { id: string, changes: Partial<Article> } | null;
+  listRefreshKey?: number;
+  onLastUpdatedArticleInfoChange: (info: { id: string, changes: Partial<Article> } | null) => void;
+  isPullingDown?: boolean;
+}
 
 // 优化ArticleList使用React.memo包装
 const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({ 
@@ -156,6 +150,22 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     if (!containerRef.current) return;
     const articleElement = containerRef.current.querySelector(`[data-article-id="${articleId}"]`) as HTMLElement;
     if (articleElement) {
+      // 计算滚动位置，确保元素位于容器中心位置
+      const containerHeight = containerRef.current.clientHeight;
+      const articleHeight = articleElement.offsetHeight;
+      const articleTop = articleElement.offsetTop;
+      const currentScroll = containerRef.current.scrollTop;
+      
+      // 计算目标滚动位置，使元素位于容器中间
+      const targetScroll = articleTop - (containerHeight - articleHeight) / 2;
+      
+      // 如果目标位置与当前位置相差太小，不执行滚动操作
+      const scrollThreshold = 100; // 像素阈值
+      if (Math.abs(targetScroll - currentScroll) < scrollThreshold) {
+        return; // 跳过无意义的小距离滚动
+      }
+      
+      // 使用平滑滚动，但只在距离较远时才使用
       articleElement.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
@@ -163,27 +173,59 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     }
   };
 
+  const { db } = useDatabase();
+  const prevSelectedArticleId = usePrevious(selectedArticleId);
+
+  // 添加文章选中状态持久化
   useEffect(() => {
-    if (selectedArticleId && !isPullingDown) {
+    // 如果列表刷新后选中的文章不在列表中，尝试重新获取
+    if (selectedArticleId && displayedArticles.length > 0 && !displayedArticles.some(a => a.id === selectedArticleId)) {
+      console.log('选中的文章不在当前列表中，尝试保持选中状态');
+      
+      // 确保文章仍存在于数据库中
+      if (db) {
+        db.articles.get(selectedArticleId).then(article => {
+          if (!article) {
+            // 文章不存在，清除选中状态
+            selectArticleRef.current(null);
+          }
+        }).catch(error => {
+          console.error('检查文章状态失败:', error);
+        });
+      }
+    }
+  }, [selectedArticleId, displayedArticles, db]);
+  
+  // 确保选中的文章在视图内
+  useEffect(() => {
+    if (selectedArticleId && displayedArticles.length > 0 && !isPullingDown) {
+      const selectedArticleIndex = displayedArticles.findIndex(a => a.id === selectedArticleId);
+      if (selectedArticleIndex !== -1) {
+        // 延迟执行，确保DOM已更新
       setTimeout(() => {
-        if (!containerRef.current) return;
+          if (containerRef.current) {
         const articleElement = containerRef.current.querySelector(`[data-article-id="${selectedArticleId}"]`) as HTMLElement;
         if (articleElement) {
           const rect = articleElement.getBoundingClientRect();
           const containerRect = containerRef.current.getBoundingClientRect();
           
+              // 检查元素是否完全可见
           const isFullyVisible = (
               rect.top >= containerRect.top &&
               rect.bottom <= containerRect.bottom
           );
 
-          if (!isFullyVisible) {
+              // 如果元素不完全可见，则滚动到该位置
+              // 但只有在列表刚刚加载或用户明确选择了文章时才滚动
+              if (!isFullyVisible && (listRefreshKey || prevSelectedArticleId !== selectedArticleId)) {
             scrollToArticle(selectedArticleId);
           }
         }
-      }, 0);
+          }
+        }, 100);
+      }
     }
-  }, [displayedArticles, selectedArticleId, isPullingDown]);
+  }, [selectedArticleId, displayedArticles, isPullingDown, filter, searchTerm, listRefreshKey, prevSelectedArticleId]);
 
   // 键盘事件处理函数
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -246,7 +288,16 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   }, []);
 
   const handleArticleClick = (articleId: string) => {
+    // 记录点击时的滚动位置
+    const currentScrollPosition = containerRef.current?.scrollTop || 0;
+    
+    // 调用选择文章的回调
     selectArticleRef.current(articleId);
+    
+    // 将当前滚动位置保存到本地存储
+    if (containerRef.current) {
+      localStorage.setItem(listScrollPositionKey, currentScrollPosition.toString());
+    }
   };
 
   const toggleStar = async (articleId: string) => {

@@ -21,6 +21,8 @@ export type LogModule =
   | 'NETWORK'    // 网络请求日志
   | 'LAYOUT'     // 布局相关日志
   | 'HOMEPAGE'   // 首页相关日志
+  | 'ARTICLE_DETAIL' // 文章详情组件日志
+  | 'IMAGE_PROXY'    // 图片代理相关日志
   | 'PERFORMANCE'; // 性能相关日志
 
 // 日志配置
@@ -37,6 +39,8 @@ class LogConfigManager {
     NETWORK: false,
     LAYOUT: false,
     HOMEPAGE: false,
+    ARTICLE_DETAIL: false, // 默认禁用文章详情日志
+    IMAGE_PROXY: false,    // 默认禁用图片代理日志
     PERFORMANCE: false
   };
   

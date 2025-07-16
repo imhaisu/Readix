@@ -64,7 +64,7 @@ export const useArticleListManager = ({
     onLastUpdatedArticleInfoChangeRef.current = onLastUpdatedArticleInfoChange;
   }, [onSelectArticle, onLastUpdatedArticleInfoChange]);
   
-  // 当选中的文章ID变化时更新引用
+  // Effect: 当选中的文章ID变化时更新引用
   useEffect(() => {
     if (selectedArticleId) {
       selectedArticleIdRef.current = selectedArticleId;
@@ -94,7 +94,14 @@ export const useArticleListManager = ({
     
     // 如果有新选中的文章，确保它被豁免
     if (selectedArticleId) {
-      setExemptedArticleIds(prev => new Set([...prev, selectedArticleId]));
+      // 使用函数形式的更新，确保不会导致多余的重渲染
+      setExemptedArticleIds(prev => {
+        // 如果文章ID已经在集合中，避免创建新的集合
+        if (prev.has(selectedArticleId)) {
+          return prev;
+        }
+        return new Set([...prev, selectedArticleId]);
+      });
     }
   }, [selectedArticleId, prevSelectedArticleId, allArticles, currentFeedId]);
 

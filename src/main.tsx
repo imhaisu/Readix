@@ -18,12 +18,56 @@ import SettingsPage from './pages/SettingsPage';
 import NotesPage from './pages/NotesPage';
 
 // 初始化日志设置
-LogConfig.setLevel(process.env.NODE_ENV === 'development' ? LogLevel.DEBUG : LogLevel.WARN); // 生产环境只显示警告及以上级别
-LogConfig.setModuleEnabled('FILTER', process.env.NODE_ENV === 'development');
-setConsoleLogging(process.env.NODE_ENV === 'development');
+LogConfig.setLevel(LogLevel.ERROR); // 在生产环境中只显示错误日志
+LogConfig.disableAllModules(); // 先禁用所有模块
+LogConfig.setModuleEnabled('FILTER', false); // 确保FILTER模块也被禁用
+LogConfig.setModuleEnabled('ARTICLE_DETAIL', false); // 禁用文章详情组件的日志
+LogConfig.setModuleEnabled('IMAGE_PROXY', false); // 禁用图片代理日志
 
+// 开发环境下可以通过控制台手动开启日志
 if (process.env.NODE_ENV === 'development') {
-  console.log('[初始化] 日志系统已配置，日志级别：DEBUG，过滤器日志已启用');
+  console.log('[初始化] 日志系统已配置，日志级别：ERROR，过滤器日志已禁用');
+  
+  // 添加开发环境下的日志控制函数
+  (window as any).debugLogs = {
+    enableArticleDetailLogs: () => {
+      LogConfig.setModuleEnabled('ARTICLE_DETAIL', true);
+      console.log('[调试] 文章详情日志已启用');
+    },
+    disableArticleDetailLogs: () => {
+      LogConfig.setModuleEnabled('ARTICLE_DETAIL', false);
+      console.log('[调试] 文章详情日志已禁用');
+    },
+    enableImageProxyLogs: () => {
+      LogConfig.setModuleEnabled('IMAGE_PROXY', true);
+      console.log('[调试] 图片代理日志已启用');
+    },
+    disableImageProxyLogs: () => {
+      LogConfig.setModuleEnabled('IMAGE_PROXY', false);
+      console.log('[调试] 图片代理日志已禁用');
+    },
+    setLogLevel: (level: string) => {
+      const logLevel = LogLevel[level as keyof typeof LogLevel];
+      if (logLevel !== undefined) {
+        LogConfig.setLevel(logLevel);
+        console.log(`[调试] 日志级别已设置为: ${level}`);
+      } else {
+        console.error(`[调试] 无效的日志级别: ${level}`);
+      }
+    },
+    // 添加一个帮助函数，显示可用的日志控制命令
+    help: () => {
+      console.log(`
+[调试日志帮助]
+可用命令:
+- debugLogs.enableArticleDetailLogs() - 启用文章详情日志
+- debugLogs.disableArticleDetailLogs() - 禁用文章详情日志
+- debugLogs.enableImageProxyLogs() - 启用图片代理日志
+- debugLogs.disableImageProxyLogs() - 禁用图片代理日志
+- debugLogs.setLogLevel(level) - 设置日志级别，可选值: DEBUG, INFO, WARN, ERROR, NONE
+      `);
+    }
+  };
 }
 
 // 全局错误处理

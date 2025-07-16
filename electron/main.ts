@@ -741,105 +741,235 @@ ipcMain.handle('get-local-icon-base64', async (_, iconPath: string) => {
   }
 });
 
+// 添加域名请求限制跟踪器
+const domainRequestTracker: Record<string, { lastRequest: number, pendingRequests: number }> = {};
+
+// 添加文章内容缓存系统
+const articleContentCache = new Map<string, {content: string, title: string, timestamp: number}>();
+const CACHE_MAX_SIZE = 100; // 最多缓存100篇文章
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+
+// 域名限流配置，有些域名需要更严格的限流
+const DOMAIN_RATE_LIMITS: Record<string, {interval: number, maxPending: number}> = {
+  'tmtpost.com': {interval: 5000, maxPending: 1},  // 钛媒体：5秒间隔，最多1个挂起请求
+  'default': {interval: 2000, maxPending: 2}       // 默认：2秒间隔，最多2个挂起请求
+};
+
+// 清理过期缓存
+const cleanupCache = () => {
+  const now = Date.now();
+  let expiredCount = 0;
+  for (const [key, value] of articleContentCache.entries()) {
+    if (now - value.timestamp > CACHE_TTL) {
+      articleContentCache.delete(key);
+      expiredCount++;
+    }
+  }
+  if (expiredCount > 0) {
+    console.log(`[Main Process] 已清理 ${expiredCount} 条过期文章缓存`);
+  }
+  
+  // 如果缓存太大，删除最旧的条目
+  if (articleContentCache.size > CACHE_MAX_SIZE) {
+    // 按时间戳排序
+    const sortedEntries = [...articleContentCache.entries()]
+      .sort((a, b) => a[1].timestamp - b[1].timestamp);
+      
+    // 删除最旧的条目，直到缓存大小达到目标
+    const entriesToDelete = sortedEntries.slice(0, articleContentCache.size - CACHE_MAX_SIZE);
+    for (const [key] of entriesToDelete) {
+      articleContentCache.delete(key);
+    }
+    console.log(`[Main Process] 已删除 ${entriesToDelete.length} 条最旧的文章缓存`);
+  }
+};
+
+// 每小时清理一次缓存
+setInterval(cleanupCache, 60 * 60 * 1000);
+
 ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
   try {
+    // 生成缓存键
+    const cacheKey = articleUrl;
+    
+    // 检查内存缓存
+    if (articleContentCache.has(cacheKey)) {
+      const cachedData = articleContentCache.get(cacheKey)!;
+      console.log(`[Main Process] 从内存缓存获取文章: ${articleUrl}`);
+      return {
+        title: cachedData.title,
+        content: cachedData.content
+      };
+    }
+
     const { JSDOM } = await import('jsdom');
     const { Readability } = await import('@mozilla/readability');
     
     // 提取网站域名作为referrer
-    const originUrl = new URL(articleUrl).origin;
+    const url = new URL(articleUrl);
+    const originUrl = url.origin;
+    const domain = url.hostname;
     
-    const dom = await JSDOM.fromURL(articleUrl, {
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      referrer: originUrl, // 使用文章URL的origin作为referrer
-      resources: "usable" // 允许加载外部资源
-    });
+    // 检查域名请求限制
+    const domainKey = originUrl;
+    const now = Date.now();
+    if (!domainRequestTracker[domainKey]) {
+      domainRequestTracker[domainKey] = { lastRequest: 0, pendingRequests: 0 };
+    }
     
-    const reader = new Readability(dom.window.document);
-    const article = reader.parse();
+    const tracker = domainRequestTracker[domainKey];
     
-    if (article && article.content) {
-      // 创建一个新的 JSDOM 实例来处理相对路径
-      const contentDom = new JSDOM(article.content, { url: articleUrl });
-      const document = contentDom.window.document;
+    // 确定适用于该域名的限流配置
+    const domainConfig = DOMAIN_RATE_LIMITS[domain] || 
+                         DOMAIN_RATE_LIMITS[domain.replace('www.', '')] || 
+                         DOMAIN_RATE_LIMITS.default;
+    
+    // 如果距离上次请求少于限定时间且已有挂起请求超过限制，则拒绝新请求
+    if (now - tracker.lastRequest < domainConfig.interval && 
+        tracker.pendingRequests >= domainConfig.maxPending) {
+      console.log(`[Main Process] 短时间内对 ${domainKey} 的请求过多，已拒绝新请求`);
+      return null;
+    }
+    
+    // 更新请求记录
+    tracker.lastRequest = now;
+    tracker.pendingRequests++;
+    
+    try {
+      console.log(`[Main Process] 正在获取文章: ${articleUrl}`);
+      
+      // 对于特定站点，添加特殊的请求头
+      const headers: Record<string, string> = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': originUrl,
+      };
+      
+      // 为某些站点添加特殊的请求头
+      if (domain.includes('tmtpost.com')) {
+        headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8';
+        headers['Cache-Control'] = 'no-cache';
+      }
+      
+      // 使用axios手动获取网页内容，这样我们可以设置超时
+      const response = await axios.get(articleUrl, {
+        headers,
+        timeout: 15000 // 15秒超时
+      });
+      
+      const dom = new JSDOM(response.data, {
+        url: articleUrl,
+        referrer: originUrl,
+        contentType: response.headers['content-type'],
+        resources: "usable"
+      });
+    
+      const reader = new Readability(dom.window.document);
+      const article = reader.parse();
+    
+      if (article && article.content) {
+        // 创建一个新的 JSDOM 实例来处理相对路径
+        const contentDom = new JSDOM(article.content, { url: articleUrl });
+        const document = contentDom.window.document;
 
-      // 处理图片
-      const images = document.querySelectorAll('img');
-      images.forEach(img => {
-        const src = img.getAttribute('src');
-        if (src) {
-          try {
-            // 处理数据URL和已经是绝对URL的情况
-            if (src.startsWith('data:') || src.match(/^https?:\/\//i)) {
-              // 不需要修改，已经是绝对路径或数据URL
-            } else {
-              const absoluteSrc = new URL(src, articleUrl).href;
-              img.setAttribute('src', absoluteSrc);
-            }
-            
-            // 改进图片错误处理，添加更多的备选方案
-            img.setAttribute('onerror', `
-              this.onerror=null; 
-              console.error('图片加载失败: ' + this.src); 
-              // 尝试创建备用图片URL
-              if(this.src.includes('cdnfile.sspai.com')) {
-                // 如果是少数派图片链接尝试修改URL
-                this.src = this.src.replace('imageView2/2/w/1120/q/40/interlace/1/ignore-error/1', '');
-              } else {
-                this.style.display='none';
-              }
-            `);
-            
-            // 确保图片不会超出容器宽度
-            img.setAttribute('style', 'max-width: 100%; height: auto;');
-          } catch (e) {
-            console.error(`无效的图片 URL ${src} 在 ${articleUrl}:`, e);
-            img.setAttribute('alt', '无法加载的图片');
-          }
-        }
-      });
-      
-      // 处理其他元素的相对链接，例如 <a> 标签
-      const links = document.querySelectorAll('a');
-      links.forEach(link => {
-        const href = link.getAttribute('href');
-        if (href) {
-          try {
-            if (!href.match(/^https?:\/\//i) && !href.startsWith('#')) {
-              const absoluteHref = new URL(href, articleUrl).href;
-              link.setAttribute('href', absoluteHref);
-            }
-          } catch (e) {
-            console.error(`无效的链接 URL ${href} 在 ${articleUrl}:`, e);
-          }
-        }
-      });
-      
-      // 处理具有背景图片的元素
-      const elementsWithBgImage = document.querySelectorAll('[style*="background-image"]');
-      elementsWithBgImage.forEach(el => {
-        const style = el.getAttribute('style');
-        if (style) {
-          const urlMatch = style.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/i);
-          if (urlMatch && urlMatch[1]) {
+        // 处理图片
+        const images = document.querySelectorAll('img');
+        images.forEach(img => {
+          const src = img.getAttribute('src');
+          if (src) {
             try {
-              if (!urlMatch[1].match(/^https?:\/\//i) && !urlMatch[1].startsWith('data:')) {
-                const absoluteUrl = new URL(urlMatch[1], articleUrl).href;
-                const newStyle = style.replace(urlMatch[1], absoluteUrl);
-                el.setAttribute('style', newStyle);
+              // 处理数据URL和已经是绝对URL的情况
+              if (src.startsWith('data:') || src.match(/^https?:\/\//i)) {
+                // 不需要修改，已经是绝对路径或数据URL
+              } else {
+                const absoluteSrc = new URL(src, articleUrl).href;
+                img.setAttribute('src', absoluteSrc);
+              }
+              
+              // 改进图片错误处理，添加更多的备选方案
+              img.setAttribute('onerror', `
+                this.onerror=null; 
+                console.error('图片加载失败: ' + this.src); 
+                // 尝试创建备用图片URL
+                if(this.src.includes('cdnfile.sspai.com')) {
+                  // 如果是少数派图片链接尝试修改URL
+                  this.src = this.src.replace('imageView2/2/w/1120/q/40/interlace/1/ignore-error/1', '');
+                } else {
+                  this.style.display='none';
+                }
+              `);
+              
+              // 确保图片不会超出容器宽度
+              img.setAttribute('style', 'max-width: 100%; height: auto;');
+            } catch (e) {
+              console.error(`无效的图片 URL ${src} 在 ${articleUrl}:`, e);
+              img.setAttribute('alt', '无法加载的图片');
+            }
+          }
+        });
+      
+        // 处理其他元素的相对链接，例如 <a> 标签
+        const links = document.querySelectorAll('a');
+        links.forEach(link => {
+          const href = link.getAttribute('href');
+          if (href) {
+            try {
+              if (!href.match(/^https?:\/\//i) && !href.startsWith('#')) {
+                const absoluteHref = new URL(href, articleUrl).href;
+                link.setAttribute('href', absoluteHref);
               }
             } catch (e) {
-              console.error(`无效的背景图片 URL ${urlMatch[1]} 在 ${articleUrl}:`, e);
+              console.error(`无效的链接 URL ${href} 在 ${articleUrl}:`, e);
             }
           }
-        }
-      });
+        });
+      
+        // 处理具有背景图片的元素
+        const elementsWithBgImage = document.querySelectorAll('[style*="background-image"]');
+        elementsWithBgImage.forEach(el => {
+          const style = el.getAttribute('style');
+          if (style) {
+            const urlMatch = style.match(/background-image:\s*url\(['"]?([^'")]+)['"]?\)/i);
+            if (urlMatch && urlMatch[1]) {
+              try {
+                if (!urlMatch[1].match(/^https?:\/\//i) && !urlMatch[1].startsWith('data:')) {
+                  const absoluteUrl = new URL(urlMatch[1], articleUrl).href;
+                  const newStyle = style.replace(urlMatch[1], absoluteUrl);
+                  el.setAttribute('style', newStyle);
+                }
+              } catch (e) {
+                console.error(`无效的背景图片 URL ${urlMatch[1]} 在 ${articleUrl}:`, e);
+              }
+            }
+          }
+        });
 
-      return {
-        title: article.title,
-        content: document.body.innerHTML, // 返回处理过的HTML
-      };
-    } else {
+        // 更新请求计数
+        tracker.pendingRequests--;
+        
+        // 处理结果
+        const result = {
+          title: article.title,
+          content: document.body.innerHTML, // 返回处理过的HTML
+        };
+        
+                  // 保存到缓存
+          articleContentCache.set(cacheKey, {
+            content: result.content,
+            title: result.title || '',  // 确保title总是有值
+            timestamp: Date.now()
+          });
+        
+        console.log(`[Main Process] 成功获取文章并缓存: ${articleUrl}`);
+        return result;
+      } else {
+        // 更新请求计数
+        tracker.pendingRequests--;
+        return null;
+      }
+    } catch (error) {
+      // 出错时减少挂起请求计数
+      tracker.pendingRequests--;
+      console.error('获取和解析文章失败:', error);
       return null;
     }
   } catch (error) {
@@ -1055,13 +1185,39 @@ ipcMain.handle('shell-open-external', async (_, url) => {
 ipcMain.handle('proxy-image', async (_, imageUrl) => {
   try {
     console.log(`[Main Process] 代理图片请求: ${imageUrl}`);
+    
+    // 构建请求头
+    const headers: Record<string, string> = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+      'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+    
+    // 获取URL的origin作为默认Referer
+    const urlOrigin = new URL(imageUrl).origin;
+    headers['Referer'] = urlOrigin;
+    
+    // 特别处理少数派网站图片
+    if (imageUrl.includes('sspai.com') || imageUrl.includes('cdnfile.sspai.com')) {
+      console.log(`[Main Process] 检测到少数派图片，应用特殊处理: ${imageUrl}`);
+      headers['Referer'] = 'https://sspai.com/';
+      headers['Origin'] = 'https://sspai.com';
+      headers['Accept'] = '*/*'; // 接受任何内容类型
+      
+      // 如果图片URL包含参数，尝试清理URL参数
+      if (imageUrl.includes('?')) {
+        const cleanUrl = imageUrl.split('?')[0];
+        console.log(`[Main Process] 清理少数派图片URL参数: ${cleanUrl}`);
+        imageUrl = cleanUrl;
+      }
+    }
+    
     const response = await axios.get(imageUrl, {
       responseType: 'arraybuffer',
       timeout: 10000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': new URL(imageUrl).origin
-      }
+      headers: headers
     });
     
     // 确定MIME类型

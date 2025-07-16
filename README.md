@@ -46,6 +46,43 @@ npm run build
 npm run package
 ```
 
+## 调试与日志
+
+NewReader 提供了灵活的日志系统，可以帮助开发者诊断问题。在开发模式下，可以通过浏览器控制台使用以下命令控制日志输出：
+
+### 日志控制命令
+
+```javascript
+// 查看可用的日志命令
+debugLogs.help()
+
+// 设置日志级别（DEBUG, INFO, WARN, ERROR, NONE）
+debugLogs.setLogLevel('DEBUG')
+
+// 启用/禁用文章详情日志
+debugLogs.enableArticleDetailLogs()
+debugLogs.disableArticleDetailLogs()
+
+// 启用/禁用图片代理日志
+debugLogs.enableImageProxyLogs()
+debugLogs.disableImageProxyLogs()
+```
+
+### 日志模块
+
+系统包含以下日志模块：
+
+- `GENERAL` - 通用日志
+- `FEED` - 订阅源相关日志
+- `FILTER` - 过滤规则日志
+- `DATABASE` - 数据库操作日志
+- `NETWORK` - 网络请求日志
+- `LAYOUT` - 布局相关日志
+- `HOMEPAGE` - 首页相关日志
+- `ARTICLE_DETAIL` - 文章详情组件日志
+- `IMAGE_PROXY` - 图片代理相关日志
+- `PERFORMANCE` - 性能相关日志
+
 ## 许可证
 
 MIT 
