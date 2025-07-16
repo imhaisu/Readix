@@ -69,14 +69,15 @@
   display: flex;
   flex-direction: column;
   padding-bottom: 0;
+  margin-top: -6px; /* 减少与菜单项之间的距离 */
 }
 
 .feedsHeader {
-  padding: 8px 16px 2px 16px;
+  padding: 0px 16px 0px 16px; /* 减少上下内边距 */
   display: flex;
   justify-content: space-between;
   align-items: center;
-  min-height: 28px;
+  min-height: 20px; /* 减少最小高度 */
   -webkit-app-region: drag;
 }
 

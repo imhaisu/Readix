@@ -6,7 +6,7 @@
 .feedListContainer {
   height: 100%;
   overflow-y: auto;
-  padding: 4px 4px;
+  padding: 0px 4px; /* 减少顶部内边距 */
   box-sizing: border-box;
 }
 
@@ -26,14 +26,36 @@
   justify-content: space-between;
   align-items: center;
   padding: 4px 8px;
-  margin: 8px 0 4px 0;
+  margin: 5px 0 6px 0;
+}
+
+/* 给第一个 sectionHeader (订阅区域标题) 特别设置更小的上边距 */
+.feedListContainer > .sectionHeader:first-child {
+  margin-top: 0px;
 }
 
 .sectionTitle {
-  font-size: 13px;
-  color: #888;
-  font-weight: 500;
+  font-size: 14px;
+  color: #444;
+  font-weight: 600;
+  margin-left: 4px; /* 增加左边距，使文字往右移 */
 }
+
+/* 添加新的样式类支持区域标题的展开/收起 */
+.sectionTitleWrapper {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex: 1;
+  padding: 4px 0;
+  border-radius: 4px;
+  justify-content: space-between;
+}
+
+/* 移除悬浮效果 */
+/* .sectionTitleWrapper:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+} */
 
 .addButton {
   padding: 0 4px;
@@ -52,6 +74,7 @@
   font-size: 14px;
   width: 100%;
   box-sizing: border-box;
+  min-height: 32px;
 }
 
 .topicItem:hover {
@@ -66,9 +89,18 @@
   background-color: rgba(0, 0, 0, 0.15);
 }
 
+.topicIconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px; /* 与订阅源图标保持一致的右边距 */
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
 .topicIcon {
   font-size: 14px;
-  margin-right: 8px;
   color: #888;
 }
 
@@ -165,10 +197,12 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
+  margin-left: 4px;
 }
 
 .expanderIcon:hover {
   background-color: rgba(0, 0, 0, 0.08);
+  color: #444;
 }
 
 .expanderIcon.expanded {

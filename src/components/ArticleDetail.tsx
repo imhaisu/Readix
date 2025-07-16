@@ -814,10 +814,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const loadArticle = useCallback(async (forceReload = false) => {
     if (articleId && db) {
       if (forceReload || !article || article.id !== articleId) {
-        // 添加延迟设置加载状态，避免内容闪烁
-        let loadingTimer: NodeJS.Timeout | null = null;
-        
-        // 先设置加载状态，避免闪烁
+        // 首先设置加载状态，避免内容闪烁
         setLoading(true);
         
         // 在设置新文章前，保存当前文章的滚动位置（如果存在）
@@ -883,8 +880,8 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           
           // 如果需要自动获取全文，先获取全文再显示
           if (needFullTextFetch) {
-            // 保持loading状态，但暂不渲染任何内容，防止闪烁
-            setFetchingFullText(true);
+            // 保持loading状态，但不设置fetchingFullText，避免额外的加载状态闪烁
+            // 移除: setFetchingFullText(true);
             
             try {
               log(`尝试获取全文: ${currentArticleData.url}`);
@@ -957,9 +954,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
             } catch (error) {
               // 全文获取失败，使用原始内容
               console.error('[ArticleDetail] 自动获取全文失败:', error);
-            } finally {
-              setFetchingFullText(false);
             }
+            // 移除: finally {
+            //   setFetchingFullText(false);
+            // }
           }
           
           // 如果需要标记为已读
@@ -1001,36 +999,16 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
           console.error('加载文章详情失败:', error);
           setArticle(null);
         } finally {
-          // 清除加载计时器
-          if (loadingTimer) {
-            clearTimeout(loadingTimer);
-          }
-          
+          // 所有加载完成后，一次性关闭loading状态
           if (isMounted) {
             setLoading(false);
+            // 确保fetchingFullText也设置为false
+            setFetchingFullText(false);
           }
-          
-          // 重置滚动位置恢复标志，允许之后恢复滚动位置
-          scrollPositionRestored.current = false;
         }
-      } else if (viewMode === 'web' && article && contentRef.current) {
-        contentRef.current.scrollTop = 0;
-        setLoading(false);
-      } else if (viewMode !== 'web' && article && article.id === articleId) {
-        // 当切换AI高亮可见性时，重新渲染内容
-        const contentToShow = 
-          article.aiHighlightedContent && isAiHighlightsVisible
-            ? article.aiHighlightedContent
-            : article.content;
-        const contentWithHighlights = applyHighlights(contentToShow, annotations);
-        setProcessedContent(contentWithHighlights);
-        setLoading(false);
       }
-    } else {
-      setArticle(null);
-      setLoading(false);
     }
-  }, [articleId, db, article, isMounted, loadAnnotations, applyHighlights, setProcessedContent, readingSettings, isAiHighlightsVisible, annotations, saveScrollPosition, viewMode]);
+  }, [articleId, db, article, viewMode, readingSettings.autoMarkAsRead, isMounted, loadAnnotations, applyHighlights, isAiHighlightsVisible]);
   
   useEffect(() => {
     loadArticleRef.current = loadArticle;
@@ -1329,7 +1307,16 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   };
 
   const handleViewModeChange = (mode: 'full' | 'web' | 'original') => {
-    onChangeViewMode(mode);
+    // 如果切换到全文模式且当前文章存在，但没有全文，则自动触发获取全文
+    if (mode === 'full' && article && !article.isFullText) {
+      // 先设置视图模式
+      onChangeViewMode(mode);
+      // 触发全文获取
+      handleFetchAndUpgradeArticle(article);
+    } else {
+      // 其他情况直接切换视图模式
+      onChangeViewMode(mode);
+    }
   };
 
   const handleOpenInBrowser = () => {
@@ -1346,7 +1333,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const { cachedContent } = useContentCache(articleId, processedContent);
 
   const renderArticleContent = () => {
-    if (!article) return null;
+    // 如果处于加载状态或没有文章或正在获取全文，则不渲染内容
+    if (loading || !article || fetchingFullText) return null;
+    
+    // 只在全文模式或原始模式下渲染内容
     if (article.content && (viewMode === 'full' || viewMode === 'original')) {
       return (
         <div 
@@ -1447,6 +1437,80 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const handleUpdateAnnotation = (annotationId: string, content: string) => {
     handleSaveNote(annotationId, content);
   };
+
+  // 添加预获取文章全文的函数
+  const prefetchArticleFullText = useCallback(async (articleId: string) => {
+    if (!db) return;
+    
+    try {
+      // 获取文章信息
+      const article = await db.articles.get(articleId);
+      if (!article || article.isFullText) return; // 如果文章不存在或已有全文，直接返回
+      
+      log(`开始后台预获取文章全文: ${article.title}`);
+      
+      // 首先尝试从本地缓存获取
+      const cachedArticle = localStorage.getItem(`article_cache_${articleId}`);
+      if (cachedArticle) {
+        try {
+          const parsed = JSON.parse(cachedArticle);
+          if (parsed.content && parsed.timestamp) {
+            log(`预获取：发现本地缓存，无需远程获取`);
+            return; // 已有缓存，无需继续
+          }
+        } catch (e) {
+          console.error('解析缓存文章失败:', e);
+        }
+      }
+      
+      // 没有缓存，尝试远程获取
+      const result = await window.electron.fetchArticleContent(article.url);
+      if (result && result.content) {
+        // 保存到本地缓存
+        localStorage.setItem(`article_cache_${articleId}`, JSON.stringify({
+          content: result.content,
+          title: result.title || article.title,
+          timestamp: Date.now()
+        }));
+        log(`预获取成功并缓存到本地: ${article.title}`);
+      }
+    } catch (error) {
+      console.error('预获取文章全文失败:', error);
+    }
+  }, [db]);
+
+  // 添加一个简单的函数，用于获取当前文章的下一篇文章
+  useEffect(() => {
+    if (!articleId || !db) return;
+    
+    // 使用setTimeout将预加载任务放入宏任务队列，避免阻塞主要内容加载
+    const timer = setTimeout(async () => {
+      try {
+        // 简单地获取一些最近的文章进行预加载
+        const recentArticles = await db.articles
+          .orderBy('publishDate')
+          .reverse()
+          .filter(article => article.id !== articleId && !article.isFullText)
+          .limit(3)
+          .toArray();
+        
+        if (recentArticles.length === 0) return;
+        
+        log(`预加载${recentArticles.length}篇最近文章`);
+        
+        // 逐个预加载，但增加延迟避免同时发起多个请求
+        recentArticles.forEach((article, index) => {
+          setTimeout(() => {
+            prefetchArticleFullText(article.id);
+          }, index * 3000); // 每个预加载间隔3秒
+        });
+      } catch (error) {
+        console.error('获取预加载文章失败:', error);
+      }
+    }, 2000); // 当前文章加载2秒后开始预加载
+    
+    return () => clearTimeout(timer);
+  }, [articleId, db, prefetchArticleFullText]);
 
   if (viewMode === 'web') {
     if (!articleId || !article || !article.url) {
@@ -1767,7 +1831,7 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
                 )}
 
                 <div ref={contentRef} className={styles.content}>
-                  {!loading && !fetchingFullText && renderArticleContent()}
+                  {renderArticleContent()}
                 </div>
               </article>
             </>

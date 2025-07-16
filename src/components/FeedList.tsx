@@ -52,6 +52,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
   const [dynamicCounts, setDynamicCounts] = useState<Map<string, number>>(new Map());
   const countCacheRef = useRef(countCache);
+  // 添加订阅区域的展开/收起状态
+  const [isSubscriptionsExpanded, setIsSubscriptionsExpanded] = useState<boolean>(true);
 
   // 主题相关状态
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -60,6 +62,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [isAddTopicModalVisible, setIsAddTopicModalVisible] = useState(false);
   const [editingTopic, setEditingTopic] = useState<Topic | null>(null);
   const [initialActiveTab, setInitialActiveTab] = useState('1'); // 新增状态，用于控制AddTopicModal的初始标签页
+  // 添加主题区域的展开/收起状态
+  const [isTopicsExpanded, setIsTopicsExpanded] = useState<boolean>(true);
   
   // 记录已经处理过的图标URL，防止重复处理
   const processedIconUrls = useRef<Map<string, string | undefined>>(new Map());
@@ -444,24 +448,28 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     }
   }, [feedId, currentRouteGroupId, currentRouteTopicId]);
 
-  const handleGroupExpanderClick = useCallback(async (e: React.MouseEvent, groupKey: ReactKey) => {
+  const handleGroupExpanderClick = useCallback((e: React.MouseEvent, key: ReactKey) => {
     e.stopPropagation();
-    if (!db) return;
-    const groupId = (groupKey as string).replace('group-', '');
-    const isCurrentlyExpanded = expandedKeys.includes(groupKey);
-    setExpandedKeys(prevKeys => 
-      isCurrentlyExpanded ? prevKeys.filter(k => k !== groupKey) : [...prevKeys, groupKey]
-    );
-    try {
-      await db.groups.update(groupId, { collapsed: isCurrentlyExpanded });
-    } catch (err) {
-      console.error("Error updating group collapsed state", err);
-      message.error('Failed to save view state.');
-      setExpandedKeys(prevKeys => 
-        isCurrentlyExpanded ? [...prevKeys, groupKey] : prevKeys.filter(k => k !== groupKey)
-      );
-    }
-  }, [db, expandedKeys]);
+    setExpandedKeys(prevKeys => {
+      if (prevKeys.includes(key)) {
+        return prevKeys.filter(k => k !== key);
+      } else {
+        return [...prevKeys, key];
+      }
+    });
+  }, []);
+  
+  // 添加处理订阅区域展开/收起的函数
+  const handleSubscriptionsExpanderClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsSubscriptionsExpanded(prev => !prev);
+  }, []);
+  
+  // 添加处理主题区域展开/收起的函数
+  const handleTopicsExpanderClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsTopicsExpanded(prev => !prev);
+  }, []);
 
   const handleSelect = (key: string) => {
     if (key.startsWith('feed-')) {
@@ -488,13 +496,26 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     }
   };
   
-  // 主题相关处理函数
+  // 添加函数，处理主题模态框的打开
   const handleAddTopic = () => {
     setEditingTopic(null);
-    setInitialActiveTab('1'); // 默认打开第一个标签页
+    setInitialActiveTab('1');
     setIsAddTopicModalVisible(true);
   };
   
+  // 添加监听全局添加主题事件
+  useEffect(() => {
+    const handleRequestAddTopic = () => {
+      handleAddTopic();
+    };
+    
+    document.addEventListener('request-add-topic', handleRequestAddTopic);
+    
+    return () => {
+      document.removeEventListener('request-add-topic', handleRequestAddTopic);
+    };
+  }, []);
+
   const handleEditTopic = (topic: Topic, initialTab?: string) => {
     setEditingTopic(topic);
     setInitialActiveTab(initialTab || '1');
@@ -914,84 +935,110 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
   return (
     <div className={styles.feedListContainer}>
-      {/* 订阅分组 */}
-      {sortedGroups.map((group, index) => {
-        const groupKey = `group-${group.id}`;
-        const isExpanded = expandedKeys.includes(groupKey);
-        const feedsInGroup = processedFeeds
-          .filter(f => f.groupId === group.id)
-          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const groupTotalCount = feedsInGroup.reduce((total, feed) => {
-          return total + (dynamicCounts.get(feed.id!) ?? 0);
-        }, 0);
-        const hasUnreads = groupTotalCount > 0;
-
-        return (
-          <Dropdown key={groupKey} menu={{ items: createGroupMenuItems(group, hasUnreads) }} trigger={['contextMenu']}>
-            <div>
-              <div
-                className={`${styles.groupItem} ${selectedKeys.includes(groupKey) ? styles.selected : ''}`}
-                onClick={() => handleSelect(groupKey)}
-              >
-                <div
-                  className={`${styles.expanderIcon} ${isExpanded ? styles.expanded : ''}`}
-                  onClick={(e) => handleGroupExpanderClick(e, groupKey)}
-                >
-                  <RightOutlined />
-                </div>
-                <span className={styles.title}>{group.name}</span>
-                {hasUnreads && <span className={styles.count}>{groupTotalCount}</span>}
-              </div>
-
-              {isExpanded && (
-                <div className={styles.feedListWrapper}>
-                  {renderFeeds(feedsInGroup, true)}
-                </div>
-              )}
-            </div>
-          </Dropdown>
-        );
-      })}
-      
-      {(feedsWithoutGroup.length > 0 || sortedGroups.length > 0) && 
-        sortedTopics.length > 0 && <div className={styles.separator} />}
-      
-      {/* 主题阅读部分 */}
+      {/* 添加订阅区域标题 */}
       <div className={styles.sectionHeader}>
-        <span className={styles.sectionTitle}>主题阅读</span>
-        <Button 
-          type="text" 
-          size="small" 
-          className={styles.addButton}
-          icon={<PlusOutlined />} 
-          onClick={handleAddTopic}
-        />
+        <div 
+          className={styles.sectionTitleWrapper}
+          onClick={(e) => handleSubscriptionsExpanderClick(e)}
+        >
+          <span className={styles.sectionTitle}>订阅</span>
+          <div className={`${styles.expanderIcon} ${isSubscriptionsExpanded ? styles.expanded : ''}`}>
+            <RightOutlined />
+          </div>
+        </div>
+      </div>
+
+      {/* 根据展开状态决定是否显示订阅内容 */}
+      {isSubscriptionsExpanded && (
+        <>
+          {/* 订阅分组 */}
+          {sortedGroups.map((group, index) => {
+            const groupKey = `group-${group.id}`;
+            const isExpanded = expandedKeys.includes(groupKey);
+            const feedsInGroup = processedFeeds
+              .filter(f => f.groupId === group.id)
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+            const groupTotalCount = feedsInGroup.reduce((total, feed) => {
+              return total + (dynamicCounts.get(feed.id!) ?? 0);
+            }, 0);
+            const hasUnreads = groupTotalCount > 0;
+
+            return (
+              <Dropdown key={groupKey} menu={{ items: createGroupMenuItems(group, hasUnreads) }} trigger={['contextMenu']}>
+                <div>
+                  <div
+                    className={`${styles.groupItem} ${selectedKeys.includes(groupKey) ? styles.selected : ''}`}
+                    onClick={() => handleSelect(groupKey)}
+                  >
+                    <div
+                      className={`${styles.expanderIcon} ${isExpanded ? styles.expanded : ''}`}
+                      onClick={(e) => handleGroupExpanderClick(e, groupKey)}
+                    >
+                      <RightOutlined />
+                    </div>
+                    <span className={styles.title}>{group.name}</span>
+                    {hasUnreads && <span className={styles.count}>{groupTotalCount}</span>}
+                  </div>
+
+                  {isExpanded && (
+                    <div className={styles.feedListWrapper}>
+                      {renderFeeds(feedsInGroup, true)}
+                    </div>
+                  )}
+                </div>
+              </Dropdown>
+            );
+          })}
+
+          {/* 未分组订阅源 */}
+          {feedsWithoutGroup.length > 0 && renderFeeds(feedsWithoutGroup, false)}
+        </>
+      )}
+      
+      {/* 分隔线 */}
+      {((feedsWithoutGroup.length > 0 || sortedGroups.length > 0) && sortedTopics.length > 0) && 
+        <div className={styles.separator} />}
+      
+      {/* 主题阅读部分 - 修改为与订阅区域相同的逻辑 */}
+      <div className={styles.sectionHeader}>
+        <div 
+          className={styles.sectionTitleWrapper}
+          onClick={(e) => handleTopicsExpanderClick(e)}
+        >
+          <span className={styles.sectionTitle}>主题</span>
+          <div className={`${styles.expanderIcon} ${isTopicsExpanded ? styles.expanded : ''}`}>
+            <RightOutlined />
+          </div>
+        </div>
       </div>
       
-      {sortedTopics.map(topic => {
-        if (!topic.id) return null;
-        const topicKey = `topic-${topic.id}`;
-        const count = topicCounts.get(topic.id) ?? 0;
-        const hasUnreads = count > 0;
-        const TopicIcon = getIconByName(topic.iconName);
-        
-        return (
-          <Dropdown key={topicKey} menu={{ items: createTopicMenuItems(topic, hasUnreads) }} trigger={['contextMenu']}>
-            <div
-              className={`${styles.topicItem} ${selectedKeys.includes(topicKey) ? styles.selected : ''}`}
-              onClick={() => handleSelect(topicKey)}
-            >
-              <TopicIcon className={styles.topicIcon} />
-              <span className={styles.title}>{topic.name}</span>
-              {hasUnreads && <span className={styles.count}>{count}</span>}
-            </div>
-          </Dropdown>
-        );
-      })}
-
-      {feedsWithoutGroup.length > 0 && sortedGroups.length > 0 && <div className={styles.separator} />}
-
-      {renderFeeds(feedsWithoutGroup, false)}
+      {/* 根据展开状态决定是否显示主题内容 */}
+      {isTopicsExpanded && (
+        <>
+          {sortedTopics.map(topic => {
+            if (!topic.id) return null;
+            const topicKey = `topic-${topic.id}`;
+            const count = topicCounts.get(topic.id) ?? 0;
+            const hasUnreads = count > 0;
+            const TopicIcon = getIconByName(topic.iconName);
+            
+            return (
+              <Dropdown key={topicKey} menu={{ items: createTopicMenuItems(topic, hasUnreads) }} trigger={['contextMenu']}>
+                <div
+                  className={`${styles.topicItem} ${selectedKeys.includes(topicKey) ? styles.selected : ''}`}
+                  onClick={() => handleSelect(topicKey)}
+                >
+                  <div className={styles.topicIconWrapper}>
+                    <TopicIcon className={styles.topicIcon} />
+                  </div>
+                  <span className={styles.title}>{topic.name}</span>
+                  {hasUnreads && <span className={styles.count}>{count}</span>}
+                </div>
+              </Dropdown>
+            );
+          })}
+        </>
+      )}
 
       <Modal
         title="重命名分组"

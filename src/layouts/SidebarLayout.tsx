@@ -16,6 +16,7 @@ import {
   AppstoreOutlined,
   FileTextOutlined,
   HighlightOutlined,
+  TagOutlined,
 } from '@ant-design/icons';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import FeedList from '../components/FeedList';
@@ -855,6 +856,7 @@ const SidebarLayout: React.FC = () => {
                         items: [
                             { key: 'add-feed', icon: <EditOutlined />, label: '添加订阅源' },
                             { key: 'add-group', icon: <FolderAddOutlined />, label: '添加分组' },
+                            { key: 'add-topic', icon: <TagOutlined />, label: '添加主题' },
                             { key: 'discover-feeds', icon: <AppstoreOutlined />, label: '发现订阅源' }
                         ],
                         onClick: ({ key }) => {
@@ -862,6 +864,9 @@ const SidebarLayout: React.FC = () => {
                                 setShowAddFeedModal(true);
                             } else if (key === 'add-group') {
                                 setShowAddGroupModal(true);
+                            } else if (key === 'add-topic') {
+                                // 触发全局事件，让FeedList组件响应
+                                document.dispatchEvent(new CustomEvent('request-add-topic'));
                             } else if (key === 'discover-feeds') {
                                 // console.log('[SidebarLayout] "发现订阅源" 菜单项被点击');
                                 setIsDiscoverModalOpen(true);
@@ -955,9 +960,10 @@ const SidebarLayout: React.FC = () => {
 
           <div className={styles.feedsContainer}>
             <div className={`${styles.feedsHeader} ${isPanelCollapsed ? styles.feedsHeaderCollapsed : ''}`}>
-              {!isPanelCollapsed && (
+              {/* 隐藏"订阅"文本 */}
+              {/* {!isPanelCollapsed && (
                 <span className={styles.feedsTitle}>订阅</span>
-              )}
+              )} */}
             </div>
             <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
           </div>
