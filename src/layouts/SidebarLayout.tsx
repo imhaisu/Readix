@@ -17,6 +17,7 @@ import {
   FileTextOutlined,
   HighlightOutlined,
   TagOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle } from 'react-resizable-panels';
 import FeedList from '../components/FeedList';
@@ -895,7 +896,7 @@ const SidebarLayout: React.FC = () => {
             items={[
               {
                 key: 'home',
-                icon: <HomeOutlined />,
+                icon: <CalendarOutlined />,
                 label: (
                   <div className={styles.menuItemContainer}>
                     <span>今日</span>
@@ -943,17 +944,6 @@ const SidebarLayout: React.FC = () => {
                   </div>
                 ),
                 onClick: () => navigate('/notes')
-              },
-              {
-                key: 'readlater',
-                icon: <ClockCircleOutlined />,
-                label: (
-                  <div className={styles.menuItemContainer}>
-                    <span>稍后读</span>
-                    {readLaterCount > 0 && <span className={styles.menuItemBadge}>{readLaterCount}</span>}
-                  </div>
-                ),
-                onClick: () => navigate('/readlater')
               }
             ]}
           />

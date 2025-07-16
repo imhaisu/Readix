@@ -159,24 +159,43 @@
 /* Count is fixed on the right */
 .count {
   flex-shrink: 0;
-  width: 35px;
-  text-align: right;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
+  text-align: right; /* 右对齐文本 */
   font-size: 12px;
   color: #888;
-  font-size: 12px;
   background-color: var(--badge-bg-color);
   color: var(--badge-text-color);
   padding: 0 6px;
   border-radius: 10px;
   font-weight: 500;
-  min-width: 20px;
-  text-align: center;
+  margin-left: auto; /* 确保它总是在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
+  display: flex;
+  justify-content: center; /* 水平居中内容 */
+  align-items: center; /* 垂直居中内容 */
   transition: none;
 }
 
 .selected .count {
   color: #333;
   font-weight: 500;
+}
+
+/* 为了使用绝对定位，我们需要确保父元素是relative定位 */
+.groupItem, .feedItem, .topicItem {
+  position: relative; /* 添加相对定位 */
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding-right: 42px; /* 为计数预留空间 */
 }
 
 /* Group-specific styles */
@@ -264,11 +283,17 @@
 }
 
 .countCell {
-  width: 35px;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
   flex-shrink: 0;
   text-align: right;
   font-size: 12px;
   color: #888;
+  margin-left: auto; /* 确保它总是在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* Root-level items do not have the expander icon space reserved */
@@ -352,8 +377,13 @@
   color: var(--text-secondary);
   font-size: 13px;
   flex-shrink: 0;
-  width: 35px; /* Fixed width for alignment */
+  
+  /* Use a fixed-width column for perfect right alignment */
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
   text-align: right;
+  margin-left: auto; /* 确保在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
 }
 
 /* Text styles */
@@ -429,6 +459,12 @@
   font-weight: 500;
   text-align: right; /* 文章数量右对齐 */
   margin-right: 4px;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
+  display: flex;
+  justify-content: center; /* 水平居中内容 */
+  align-items: center; /* 垂直居中内容 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
 }
 
 .feedItem {
@@ -966,6 +1002,13 @@
   padding: 0;
   border-radius: 0;
   line-height: 1;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
+  text-align: right; /* 右对齐 */
+  display: flex;
+  justify-content: center; /* 水平居中内容 */
+  align-items: center; /* 垂直居中内容 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
 }
 
 .feedIcon {
@@ -1049,8 +1092,11 @@
   flex-shrink: 0;
   
   /* Use a fixed-width column for perfect right alignment */
-  width: 35px; 
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
   text-align: right;
+  margin-left: auto; /* 确保在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
 }
 
 .groupTitle {
@@ -1171,11 +1217,17 @@
 }
 
 .countCell {
-  width: 35px;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
   flex-shrink: 0;
   text-align: right;
   font-size: 12px;
   color: #888;
+  margin-left: auto; /* 确保它总是在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
 /* Root-level items do not have the expander icon space reserved */
@@ -1261,8 +1313,11 @@
   flex-shrink: 0;
   
   /* Use a fixed-width column for perfect right alignment */
-  width: 35px; 
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
   text-align: right;
+  margin-left: auto; /* 确保在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
 }
 
 .groupTitle {
