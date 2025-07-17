@@ -1,7 +1,8 @@
 import Dexie from 'dexie';
-import { Article, FeedSource } from '../db/database';
+import { Article, FeedSource, Annotation } from '../db/database';
 import { RssDatabase } from '../db/database';
 
+// 修改原有的清理函数，考虑笔记、收藏和稍后读的情况
 export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number): Promise<void> => {
   if (!db || !db.isOpen()) {
     if (process.env.NODE_ENV === 'development') {
@@ -20,9 +21,18 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
   const cutoffTimestamp = Date.now() - retentionMilliseconds;
 
   try {
+    // 获取所有需要保留的文章ID
+    const articlesWithAnnotations = await db.annotations.toArray();
+    const annotatedArticleIds = new Set(articlesWithAnnotations.map(a => a.articleId));
+    
     let articlesToDeleteQuery = db.articles
       .where('publishDate').below(cutoffTimestamp)
-      .and((article: Article) => article.isStarred !== 'true');
+      .and((article: Article) => {
+        // 不删除已标星、已加入稍后读或有笔记的文章
+        return article.isStarred !== 'true' && 
+               article.isReadLater !== 'true' && 
+               !annotatedArticleIds.has(article.id);
+      });
 
     const articlesToDelete = await articlesToDeleteQuery.toArray();
 
@@ -30,7 +40,7 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
       const idsToDelete = articlesToDelete.map(article => article.id as string);
       await db.articles.bulkDelete(idsToDelete);
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[Cleanup] Successfully deleted ${articlesToDelete.length} old (non-starred) articles older than ${retentionDays} days.`);
+        console.log(`[Cleanup] Successfully deleted ${articlesToDelete.length} old articles older than ${retentionDays} days.`);
       }
       
       // 更新相关 feed 的未读计数
@@ -50,11 +60,79 @@ export const cleanupOldArticles = async (db: RssDatabase, retentionDays: number)
       }
 
     } else if (process.env.NODE_ENV === 'development') {
-      console.log('[Cleanup] No old (non-starred) articles found to delete.');
+      console.log('[Cleanup] No old articles found to delete.');
     }
   }
   catch (error) {
     console.error('[Cleanup] Error cleaning up old articles:', error);
+  }
+};
+
+// 新增：分别清理已读和未读文章
+export const cleanupArticlesByReadStatus = async (
+  db: RssDatabase, 
+  readDays: number, 
+  unreadDays: number
+): Promise<number> => {
+  if (!db || !db.isOpen()) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cleanup] 按已读/未读状态清理跳过: 数据库不可用或未打开。');
+    }
+    return 0;
+  }
+
+  try {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`[Cleanup] 开始按阅读状态清理文章，已读天数: ${readDays}, 未读天数: ${unreadDays}`);
+    }
+
+    // 获取所有需要保留的文章ID（有笔记的文章）
+    const articlesWithAnnotations = await db.annotations.toArray();
+    const annotatedArticleIds = new Set(articlesWithAnnotations.map(a => a.articleId));
+    
+    const now = Date.now();
+    const readCutoffTimestamp = readDays > 0 ? now - (readDays * 24 * 60 * 60 * 1000) : 0;
+    const unreadCutoffTimestamp = unreadDays > 0 ? now - (unreadDays * 24 * 60 * 60 * 1000) : 0;
+    
+    // 查找符合清理条件的文章
+    const articlesToDelete = await db.articles
+      .filter(article => {
+        // 始终保留已标星、稍后读或有笔记的文章
+        if (article.isStarred === 'true' || 
+            article.isReadLater === 'true' || 
+            annotatedArticleIds.has(article.id)) {
+          return false;
+        }
+        
+        // 根据阅读状态和对应的保留期限判断是否清理
+        if (article.isRead === 'true') {
+          return readDays > 0 && article.publishDate < readCutoffTimestamp;
+        } else {
+          return unreadDays > 0 && article.publishDate < unreadCutoffTimestamp;
+        }
+      })
+      .toArray();
+    
+    if (articlesToDelete.length > 0) {
+      const idsToDelete = articlesToDelete.map(article => article.id);
+      await db.articles.bulkDelete(idsToDelete);
+      
+      // 更新受影响的feed计数
+      await updateAffectedFeedCounts(db);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`[Cleanup] 已成功清理 ${articlesToDelete.length} 篇过期文章`);
+      }
+      return articlesToDelete.length;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Cleanup] 未找到符合条件的过期文章');
+    }
+    return 0;
+  } catch (error) {
+    console.error('[Cleanup] 按阅读状态清理文章失败:', error);
+    return 0;
   }
 };
 

@@ -39,11 +39,12 @@ declare global {
       getSystemFonts: () => Promise<string[]>;
       getDarkMode: () => Promise<boolean>;
       getSavedSettings: () => Promise<any>;
+      getSettings: () => Promise<any>;
       saveSettings: (settings: any) => Promise<void>;
       showSaveDialog: (options: any) => Promise<any>;
       exportArticles: (options: any) => Promise<any>;
       importOPML: () => Promise<any>;
-      exportOPML: () => Promise<any>;
+      exportOPML: (opmlDoc: string) => Promise<any>;
       refreshAllFeeds: (feeds: any[]) => Promise<any>;
       parseRssFeed: (url: string) => Promise<any>;
       // 图标处理

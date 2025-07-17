@@ -12,6 +12,10 @@ export interface GeneralSettings {
     retentionDays: number; // 0 for indefinite
     layoutMode: 'two-column' | 'three-column';
     sidebarWidth?: number;
+    // 新增清理相关设置
+    autoCleanup: boolean; // 是否启用自动清理
+    cleanupUnreadDays: number; // 未读文章保留天数，0表示不清理
+    cleanupReadDays: number; // 已读文章保留天数，0表示不清理
 }
 
 export interface AppearanceSettings {
@@ -57,6 +61,10 @@ export const defaultSettings: Settings = {
         updateFrequency: 30,
         retentionDays: 0,
         layoutMode: 'three-column',
+        // 新增清理相关设置的默认值
+        autoCleanup: false,
+        cleanupUnreadDays: 0,
+        cleanupReadDays: 30,
     },
     appearance: {
         reading: {

@@ -37,17 +37,22 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   useEffect(() => {
     const loadSettings = async () => {
       try {
+        // 使用正确的API名称
         const storedSettings = await window.electron.getSettings();
         if (storedSettings) {
+          console.log('[SettingsContext] 加载到保存的设置:', storedSettings);
           const mergedSettings = mergeWith({}, defaultSettings, storedSettings, (objValue, srcValue) => {
             if (Array.isArray(objValue)) {
               return srcValue; // 对于数组，直接使用新值替换旧值
             }
           });
           setSettings(mergedSettings);
+        } else {
+          console.log('[SettingsContext] 未找到保存的设置，使用默认值');
+          setSettings(defaultSettings);
         }
       } catch (error) {
-        console.error('Failed to load settings, using defaults.', error);
+        console.error('加载设置失败，使用默认值', error);
         setSettings(defaultSettings);
       } finally {
         setIsInitialized(true);
@@ -60,9 +65,13 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({ children }) 
   // 当设置变化时，持久化存储
   useEffect(() => {
     if (isInitialized) {
-      // Persist settings whenever they change
-      window.electron.saveSettings(settings);
-      // console.log('[SettingsContext] Settings saved:', settings);
+      try {
+        // 保存设置到electron存储
+        window.electron.saveSettings(settings);
+        console.log('[SettingsContext] 设置已保存:', settings);
+      } catch (error) {
+        console.error('[SettingsContext] 保存设置失败:', error);
+      }
     }
   }, [settings, isInitialized]);
 
