@@ -89,8 +89,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [articleCount, setArticleCount] = useState(0);
   
-  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const [pullDownProgress, setPullDownProgress] = useState(0); 
   const articleListRef = useRef<ArticleListHandle>(null);
   const articleListContainerRef = useRef<HTMLDivElement>(null);
   const pullStartY = useRef(0);
@@ -98,13 +96,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const PULL_TO_REFRESH_THRESHOLD = 250;
 
-  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing });
+  const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh });
   const lastRefreshTimeRef = useRef<number>(0);
   
   // 确保 refreshDependenciesRef 总是包含最新的值
   useEffect(() => {
-    refreshDependenciesRef.current = { db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing };
-  }, [db, feedId, groupId, triggerArticleListRefresh, setIsPullRefreshing]);
+    refreshDependenciesRef.current = { db, feedId, groupId, triggerArticleListRefresh };
+  }, [db, feedId, groupId, triggerArticleListRefresh]);
   
   const searchInputRef = useRef<InputRef>(null);
   const detailPanelRef = useRef<ImperativePanelHandle>(null);
@@ -154,79 +152,6 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   const handleScrollCapture = (event: React.UIEvent<HTMLDivElement>) => {
     // console.log('[SCROLL CAPTURE] Scroll event detected! The real scrolling element is:', event.target);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    const scrollableElement = articleListRef.current?.getScrollableElement();
-    // console.log('[HomePage Touch] --- TOUCH START ---');
-    if (!scrollableElement) {
-      // console.log('[HomePage Touch] Aborting: scrollableElement is null.');
-      return;
-    }
-    if (scrollableElement.scrollTop !== 0) {
-      // console.log(`[HomePage Touch] Aborting: scrollTop is ${scrollableElement.scrollTop}, not 0.`);
-      return;
-    }
-    if (isPullRefreshing) {
-      // console.log(`[HomePage Touch] Aborting: isPullRefreshing is ${isPullRefreshing}.`);
-      return;
-    }
-    
-    pullStartY.current = e.touches[0].clientY;
-    isPulling.current = true;
-    // console.log(`[HomePage Touch] Success! Pulling gesture initiated. StartY: ${pullStartY.current}`);
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!isPulling.current) return;
-
-    const currentY = e.touches[0].clientY;
-    const pullDistance = currentY - pullStartY.current;
-    
-    // console.log(`[HomePage Touch] handleTouchMove. Pull distance: ${pullDistance}`);
-
-    if (pullDistance > 0) {
-      e.preventDefault(); 
-      const progress = Math.min(1, pullDistance / PULL_TO_REFRESH_THRESHOLD);
-      setPullDownProgress(progress);
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (!isPulling.current) return;
-    isPulling.current = false;
-
-    // console.log(`[HomePage Touch] --- TOUCH END --- Progress: ${pullDownProgress}`);
-    if (pullDownProgress === 1) {
-      // console.log('Pull to refresh triggered by touch.');
-      handleRefreshAll();
-    }
-    
-    setTimeout(() => setPullDownProgress(0), 100);
-  };
-
-  const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
-    if (!settings.advanced.gestures.pullToRefresh || isPulling.current) return;
-
-    const scrollableElement = articleListRef.current?.getScrollableElement();
-    if (!scrollableElement || isPullRefreshing) return;
-
-    const { scrollTop } = scrollableElement;
-    const { deltaY } = event;
-
-    if (scrollTop === 0 && deltaY < 0) {
-      const pullDistance = Math.abs(deltaY);
-      const newProgress = Math.min(1, pullDownProgress + pullDistance / (PULL_TO_REFRESH_THRESHOLD * 2));
-      setPullDownProgress(newProgress);
-
-      if (newProgress >= 1) {
-        // console.log('Pull to refresh triggered by wheel.');
-        handleRefreshAll();
-        setTimeout(() => setPullDownProgress(0), 100);
-      }
-    } else if (pullDownProgress > 0 && deltaY > 0) {
-      setPullDownProgress(0);
-    }
   };
 
   useEffect(() => {
@@ -345,20 +270,16 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     // 防抖：避免短时间内多次刷新
     const now = Date.now();
     if (now - lastRefreshTimeRef.current < 5000) { // 5秒内不重复刷新
-      // 完全移除这个提示，下拉刷新时不需要告诉用户刚刚已经刷新过了
       return;
     }
     lastRefreshTimeRef.current = now;
 
     if (!db) return;
     
-    const { feedId, groupId } = refreshDependenciesRef.current;
-    
-    if (!options?.silent) {
-      setIsPullRefreshing(true);
-    }
+    setLoading(true);
     
     try {
+      const { feedId, groupId } = refreshDependenciesRef.current;
       LogConfig.info('HOMEPAGE', '开始刷新订阅源');
       
       if (feedId) {
@@ -419,14 +340,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     } catch (error) {
       LogConfig.error('HOMEPAGE', '刷新订阅源失败:', error);
     } finally {
-      if (!options?.silent) {
-        setTimeout(() => {
-          setIsPullRefreshing(false);
-        }, 500);
-      } else {
-        setIsPullRefreshing(false);
-      }
-      
+      setLoading(false);
       // 手动更新订阅源列表，确保UI显示最新数据
       loadFeeds();
       
@@ -1145,7 +1059,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                           </span>
                         </Title>
                         <Space className={styles.panelHeaderControls}>
-                          {isPullRefreshing && (
+                          {loading && (
                             <div className={styles.headerRefreshIndicator}>
                               <Spin size="small" />
                             </div>
@@ -1187,10 +1101,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                     <div 
                       className={styles.articleListContainerWrapper}
                       ref={articleListContainerRef}
-                      onWheel={handleWheel}
-                      onTouchStart={handleTouchStart}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
+                      // 移除下拉刷新事件
                     >
                       {feeds.length > 0 || groupId || feedId ? (
                         <ArticleList
@@ -1206,7 +1117,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                           currentTopicId={topicId}
                           lastUpdatedArticleInfo={lastUpdatedArticleInfo}
                           onLastUpdatedArticleInfoChange={setLastUpdatedArticleInfo}
-                          isPullingDown={pullDownProgress > 0}
+                          listRefreshKey={listRefreshKey}
                         />
                       ) : (
                         <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />

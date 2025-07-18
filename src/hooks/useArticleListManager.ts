@@ -42,7 +42,9 @@ export const useArticleListManager = ({
 
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  // allArticles 现在存储的是从数据库直接获取、已排序和过滤的文章
   const [allArticles, setAllArticles] = useState<Article[]>([]);
+  // displayedArticles 将是最终渲染的列表，包含了豁免的文章
   const [displayedArticles, setDisplayedArticles] = useState<Article[]>([]);
   const [feedInfoMap, setFeedInfoMap] = useState<Map<string, FeedSource>>(new Map());
   const [feedRulesMap, setFeedRulesMap] = useState<Map<string, FilterRule[]>>(new Map());
@@ -244,146 +246,100 @@ export const useArticleListManager = ({
     }
   }, [lastUpdatedArticleInfo]);
 
-  // Effect 1: Fetch articles from DB when context changes (feed, group, topic, or forced refresh)
+  // Effect 1: Fetch articles from DB when context, filter, or search term changes
   useEffect(() => {
     if (!isInitialized || !db) {
       return;
     }
 
     const loadArticlesForContext = async () => {
-      // No longer check isRefreshing here, let the effect dependencies handle it.
-      
-      // Show loading indicators
       if (!hasInitialLoaded) {
-        setLoading(true); // Full page skeleton on first load
+        setLoading(true);
       } else {
-        setIsRefreshing(true); // Spinner on subsequent loads
+        setIsRefreshing(true);
       }
       setError(null);
       
-      // 当订阅源、分组或主题变化时，清空豁免列表和持久豁免列表
-      // 这样在切换上下文时不会保留不属于当前上下文的文章
-      setExemptedArticleIds(new Set());
-      setPersistentlyExemptedIds(new Set());
+      const newExemptedIds = new Set<string>();
+      if (selectedArticleIdRef.current) {
+        newExemptedIds.add(selectedArticleIdRef.current);
+      }
+      setExemptedArticleIds(newExemptedIds);
+      setPersistentlyExemptedIds(newExemptedIds);
 
       try {
-        let collection: Dexie.Collection<Article, string> = db.articles.toCollection();
-
-        // 主题相关数据
-        let currentTopic: Topic | undefined;
-        
-        // Filter by Feed, Group, or Topic (DB-side)
+        let collection: Dexie.Collection<Article, string> | Dexie.Table<Article, string> = db.articles;
         let feedsInScope: FeedSource[] = [];
+
+        // 1. 上下文过滤 (Context Filtering)
+        let contextFiltered = false;
         if (currentFeedId) {
-          const feed = await db.feeds.get(currentFeedId);
-          if (feed) feedsInScope.push(feed);
-          collection = collection.filter(article => article.sourceId === currentFeedId);
+          feedsInScope = await db.feeds.where('id').equals(currentFeedId).toArray();
+          collection = db.articles.where('sourceId').equals(currentFeedId);
+          contextFiltered = true;
         } else if (currentGroupId) {
           feedsInScope = await db.feeds.where('groupId').equals(currentGroupId).toArray();
-          const feedIdsInGroup = new Set(feedsInScope.map(f => f.id).filter((id): id is string => !!id));
-          if (feedIdsInGroup.size > 0) {
-            collection = collection.filter(article => article.sourceId ? feedIdsInGroup.has(article.sourceId) : false);
+          const feedIdsInGroup = feedsInScope.map(f => f.id!).filter(Boolean);
+          if (feedIdsInGroup.length > 0) {
+            collection = db.articles.where('sourceId').anyOf(feedIdsInGroup);
+            contextFiltered = true;
           } else {
             setAllArticles([]);
-            setLoading(false);
-            setIsRefreshing(false);
-            setHasInitialLoaded(true);
-            return;
+            feedsInScope = [];
           }
         } else if (currentTopicId) {
-          // 获取主题下所有的订阅源ID
           const topicFeeds = await db.topicFeeds.where('topicId').equals(currentTopicId).toArray();
           const feedIdsInTopic = topicFeeds.map(tf => tf.feedId);
-          
-          // 加载主题信息，用于后续应用过滤规则
-          currentTopic = await db.topics.get(currentTopicId);
-          
-          // 获取主题下所有的订阅源
           if (feedIdsInTopic.length > 0) {
             feedsInScope = await db.feeds.where('id').anyOf(feedIdsInTopic).toArray();
-            // 过滤文章，只显示属于主题内订阅源的文章
-            collection = collection.filter(article => article.sourceId ? feedIdsInTopic.includes(article.sourceId) : false);
+            collection = db.articles.where('sourceId').anyOf(feedIdsInTopic);
+            contextFiltered = true;
           } else {
-            // 如果主题下没有订阅源，则返回空数组
             setAllArticles([]);
-            setLoading(false);
-            setIsRefreshing(false);
-            setHasInitialLoaded(true);
-            return;
+            feedsInScope = [];
           }
-        } else {
-          // No specific context, fetch all feeds for rule application
-          feedsInScope = await db.feeds.toArray();
         }
-        
-        const fetchedArticles = await collection.toArray();
 
-        // 构建订阅源规则映射
-        const newFeedRulesMap = new Map<string, FilterRule[]>();
-        for (const feed of feedsInScope) {
-          if (feed.id && feed.filterRules && Array.isArray(feed.filterRules)) {
-            newFeedRulesMap.set(feed.id, feed.filterRules);
-          }
+        if (!contextFiltered) {
+          feedsInScope = await db.feeds.toArray();
+          collection = db.articles.toCollection();
         }
+
+        // 2. 属性过滤 (Attribute Filtering)
+        collection = collection.filter(article => {
+          if (filter.isRead === 'false' && article.isRead !== 'false') return false;
+          if (filter.isRead === 'true' && article.isRead !== 'true') return false;
+          if (filter.isStarred === 'true' && article.isStarred !== 'true') return false;
+          if (filter.isReadLater === 'true' && article.isReadLater !== 'true') return false;
+          return true;
+        });
+
+        // 3. 搜索过滤 (Search Term Filtering)
+        if (searchTerm && searchTerm.trim() !== '') {
+          const lowerCaseSearchTerm = searchTerm.toLowerCase();
+          collection = collection.filter(article => 
+            article.title.toLowerCase().includes(lowerCaseSearchTerm)
+          );
+        }
+
+        // 4. 排序 (Sorting)
+        const sortedArticles = await collection.reverse().sortBy('publishDate');
+
+        // 5. 应用动态过滤规则 (JS-side filtering)
+        const newFeedRulesMap = new Map(feedsInScope.map(f => [f.id!, f.filterRules || []]));
         setFeedRulesMap(newFeedRulesMap);
         
-        // 按发布日期排序
-        fetchedArticles.sort((a, b) => b.publishDate - a.publishDate);
-        
-        // 如果是主题视图并且有过滤规则，应用主题特定的过滤
-        let filteredArticles = fetchedArticles;
-        if (currentTopic && currentTopic.filterRules && currentTopic.filterRules.length > 0) {
-          // 确保过滤规则被应用 - 修复过滤逻辑
-          const articlesBeforeFilter = filteredArticles.length;
-          const tempArticles = [];
-          
-          // 遍历所有文章，应用过滤规则
-          for (const article of filteredArticles) {
-            if (applyTopicFilterRules(article, currentTopic.filterRules || [])) {
-              tempArticles.push(article);
-            }
-          }
-          
-          // 替换为过滤后的文章列表
-          filteredArticles = tempArticles;
-          
-          // 只在开发环境下输出日志
-          if (process.env.NODE_ENV === 'development') {
-            console.log(`主题过滤: ${articlesBeforeFilter} -> ${filteredArticles.length} 篇文章`);
-          }
-        }
-        
-        setAllArticles(filteredArticles);
+        const finalArticles = sortedArticles.filter(article => 
+          !shouldArticleBeHidden(article, [...(newFeedRulesMap.get(article.sourceId) || []), ...globalFilterRules])
+        );
 
-        // 如果当前有选中的文章，确保它在列表中
-        if (selectedArticleIdRef.current) {
-          const selectedArticle = filteredArticles.find(a => a.id === selectedArticleIdRef.current);
-          if (!selectedArticle) {
-            // 如果选中的文章不在获取的文章列表中，尝试单独获取它
-            try {
-              const article = await db.articles.get(selectedArticleIdRef.current);
-              if (article) {
-                // 只有当文章符合当前主题的过滤规则时，才添加到列表
-                if (!currentTopic || !currentTopic.filterRules || !currentTopic.filterRules.length || 
-                    applyTopicFilterRules(article, currentTopic.filterRules)) {
-                  setAllArticles(prev => [article, ...prev]);
-                }
-              }
-            } catch (err) {
-              console.error("Failed to fetch selected article:", err);
-            }
-          }
-        }
+        setAllArticles(finalArticles);
 
-        // 获取所有文章中涉及的订阅源ID
-        const sourceIds = [...new Set(fetchedArticles.map(a => a.sourceId).filter(Boolean))];
-        
-        // 修复：确保获取所有需要的订阅源，而不仅仅是当前上下文中的
-        // 这样即使在未读筛选条件下也能显示正确的订阅源信息
+        // 获取并设置订阅源信息
+        const sourceIds = [...new Set(finalArticles.map(a => a.sourceId).filter(Boolean))];
         if (sourceIds.length > 0) {
           const feeds = await db.feeds.where('id').anyOf(sourceIds as string[]).toArray();
           const newFeedInfoMap = new Map<string, FeedSource>();
-          
           for (const feed of feeds) {
             if (feed && feed.id) {
               newFeedInfoMap.set(feed.id, {
@@ -392,256 +348,64 @@ export const useArticleListManager = ({
               });
             }
           }
-          
-          // 确保当前选中的订阅源也在映射中
-          if (currentFeedId && !newFeedInfoMap.has(currentFeedId)) {
-            const currentFeed = await db.feeds.get(currentFeedId);
-            if (currentFeed) {
-              newFeedInfoMap.set(currentFeedId, {
-                ...currentFeed,
-                iconUrl: await processIconUrl(currentFeed.iconUrl),
-              });
-            }
-          }
-          
           setFeedInfoMap(newFeedInfoMap);
         }
         
-        if (!hasInitialLoaded) {
-          setHasInitialLoaded(true);
-        }
       } catch (err) {
         setError('加载文章失败，请稍后重试。');
-        if (err instanceof Error) {
-            console.error(`Error name: ${err.name}, message: ${err.message}`);
-        }
+        console.error("Error loading articles:", err);
       } finally {
         setLoading(false);
         setIsRefreshing(false);
+        if (!hasInitialLoaded) {
+          setHasInitialLoaded(true);
+        }
       }
     };
 
     loadArticlesForContext();
     
-  }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, listRefreshKey, articleListRefreshTrigger]);
+  }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, filter, searchTerm, listRefreshKey, articleListRefreshTrigger, globalFilterRules]);
 
-  // 存储当前主题对象及其过滤规则
-  const [currentTopic, setCurrentTopic] = useState<Topic | null>(null);
   
-  // Effect: 当主题ID变化时，加载主题数据
+  // Effect 2: Combine fetched articles with exempted articles for display
   useEffect(() => {
-    if (currentTopicId && db) {
-      db.topics.get(currentTopicId)
-        .then(topic => {
-          if (topic) {
-            setCurrentTopic(topic);
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`已加载主题 "${topic.name}" 的过滤规则，共 ${topic.filterRules?.length || 0} 条规则`);
-            }
-          } else {
-            setCurrentTopic(null);
-          }
-        })
-        .catch(error => {
-          console.error('加载主题失败:', error);
-          setCurrentTopic(null);
-        });
-    } else {
-      setCurrentTopic(null);
-    }
-  }, [currentTopicId, db]);
+    const combineArticles = async () => {
+      if (!db || loading) return;
 
-  // 存储主题关联的订阅源ID
-  const [topicFeedIds, setTopicFeedIds] = useState<string[]>([]);
-  
-  // 当主题ID变化时，加载该主题关联的订阅源
-  useEffect(() => {
-    if (!db || !currentTopicId) {
-      setTopicFeedIds([]);
-      return;
-    }
-    
-    db.topicFeeds.where('topicId').equals(currentTopicId).toArray()
-      .then(topicFeeds => {
-        const feedIds = topicFeeds.map(tf => tf.feedId);
-        setTopicFeedIds(feedIds);
-        if (feedIds.length > 0 && process.env.NODE_ENV === 'development') {
-          console.log(`主题关联了 ${feedIds.length} 个订阅源: ${feedIds.join(', ')}`);
-        } else if (process.env.NODE_ENV === 'development') {
-          console.log(`主题未关联任何订阅源`);
+      const articlesMap = new Map(allArticles.map(a => [a.id, a]));
+      
+      const exemptedIdsToFetch = new Set<string>();
+      const combinedExemptedIds = new Set([...exemptedArticleIds, ...persistentlyExemptedIds]);
+
+      combinedExemptedIds.forEach(id => {
+        if (!articlesMap.has(id)) {
+          exemptedIdsToFetch.add(id);
         }
-      })
-      .catch(error => {
-        console.error('获取主题关联的订阅源失败:', error);
-        setTopicFeedIds([]);
       });
-  }, [db, currentTopicId]);
 
-  // Effect 2: Filter and sort articles for display when data or filters change
-  const displayedArticlesResult = useMemo(() => {
-    let filtered = [...allArticles];
-    // 过滤开始
-
-    // 如果是主题视图，先过滤出属于该主题关联订阅源的文章
-    if (currentTopicId && topicFeedIds.length > 0) {
-      const beforeFilter = filtered.length;
-      // 只保留属于主题关联订阅源的文章
-      filtered = filtered.filter(article => topicFeedIds.includes(article.sourceId));
-    }
-    
-    // 然后应用主题过滤规则
-    if (currentTopicId && currentTopic) {
-      // 创建一个临时数组，只包含通过过滤规则的文章
-      const passedArticles = [];
-      
-      // 遍历所有文章，检查是否通过过滤规则
-      for (const article of filtered) {
-        // 对于主题视图，我们需要严格应用过滤规则，除非文章是当前选中的
-        const isCurrentSelection = article.id === selectedArticleIdRef.current;
-        
-        // 只有当前选中的文章可以豁免过滤规则，其他文章必须通过过滤
-        if ((isCurrentSelection && exemptedArticleIds.has(article.id)) || 
-            applyTopicFilterRules(article, currentTopic.filterRules || [])) {
-          passedArticles.push(article);
-        }
+      if (exemptedIdsToFetch.size > 0) {
+        try {
+          const missingExemptedArticles = await db.articles.where('id').anyOf([...exemptedIdsToFetch]).toArray();
+          missingExemptedArticles.forEach(article => {
+            articlesMap.set(article.id, article);
+          });
+        } catch (error) {
+          console.error("Error fetching exempted articles:", error);
+          }
       }
       
-      // 替换过滤后的文章列表
-      filtered = passedArticles;
-    }
-
-    // 应用过滤规则（动态过滤，不依赖于数据库中的isHidden字段）
-    filtered = filtered.filter(article => {
-      // 修复：检查文章是否属于当前订阅源，这是第一个最严格的过滤条件
-      // 如果指定了订阅源，则必须严格过滤，不允许任何例外
-      if (currentFeedId && article.sourceId !== currentFeedId) {
-        // 移除豁免逻辑，确保在特定订阅源视图下只显示该订阅源的文章
-        return false;
-      }
+      const finalIdSet = new Set([...allArticles.map(a => a.id), ...combinedExemptedIds]);
+      const finalArticles = Array.from(finalIdSet)
+        .map(id => articlesMap.get(id))
+        .filter((a): a is Article => !!a)
+        .sort((a, b) => b.publishDate - a.publishDate);
       
-      // 检查文章是否在豁免列表中，只有在没有指定特定订阅源时才应用这个逻辑
-      // 或者当文章确实属于当前订阅源时
-      const isExempted = (!currentFeedId || article.sourceId === currentFeedId) && (
-        exemptedArticleIds.has(article.id) || 
-        persistentlyExemptedIds.has(article.id) || 
-        article.id === selectedArticleIdRef.current
-      );
-      
-      if (isExempted) {
-        return true;
-      }
-
-      // 首先检查数据库中的isHidden字段
-      if (article.isHidden === true) {
-        return false;
-      }
-
-      // 获取该文章对应的订阅源规则
-      const feedRules = article.sourceId ? feedRulesMap.get(article.sourceId) || [] : [];
-      const activeFeedRules = feedRules.filter(r => r.isActive);
-      
-      // 获取激活的全局规则
-      const activeGlobalRules = globalFilterRules.filter(r => r.isActive);
-      
-      // 合并规则并检查文章是否应该被隐藏
-      const combinedRules = [...activeFeedRules, ...activeGlobalRules];
-      
-      const shouldHide = shouldArticleBeHidden(article, combinedRules);
-      return !shouldHide;
-    });
-
-    // Client-side search term filter
-    if (searchTerm && searchTerm.trim() !== '') {
-      const lowerSearchTerm = searchTerm.toLowerCase();
-      filtered = filtered.filter((article: Article) => {
-        // 如果是当前选中的文章，在它属于当前订阅源时显示
-        if (article.id === selectedArticleIdRef.current) {
-          // 修复：如果当前选择了特定订阅源，选中的文章也必须匹配该订阅源
-          if (currentFeedId && article.sourceId !== currentFeedId) {
-            return false;
-          }
-          return true;
-        }
-        
-        return article.title.toLowerCase().includes(lowerSearchTerm) ||
-          (article.author && article.author.toLowerCase().includes(lowerSearchTerm)) ||
-          (article.summary && article.summary.toLowerCase().includes(lowerSearchTerm)) ||
-          (article.contentText && article.contentText.toLowerCase().includes(lowerSearchTerm));
-      });
-    }
-
-    // Apply main filters from the 'filter' prop
-    if (filter) {
-      filtered = filtered.filter(article => {
-        // 如果是当前选中的文章，只有在它属于当前订阅源时才显示
-        if (article.id === selectedArticleIdRef.current) {
-          if (currentFeedId && article.sourceId !== currentFeedId) {
-            return false;
-          }
-          return true;
-        }
-        
-        // 如果文章在豁免列表中，只有在它属于当前订阅源时才显示
-        if (exemptedArticleIds.has(article.id) || persistentlyExemptedIds.has(article.id)) {
-          if (currentFeedId && article.sourceId !== currentFeedId) {
-            return false;
-          }
-          return true;
-        }
-        
-        let passes = true;
-        if (typeof filter.isRead === 'string' && article.isRead !== filter.isRead) {
-          passes = false;
-        }
-        if (passes && filter.isStarred === 'true' && article.isStarred !== 'true') {
-          passes = false;
-        }
-        if (passes && filter.publishDate && typeof filter.publishDate === 'object' && '$gte' in filter.publishDate && '$lte' in filter.publishDate) {
-          const { $gte, $lte } = filter.publishDate;
-          if (article.publishDate < $gte || article.publishDate > $lte) {
-            passes = false;
-          }
-        }
-        return passes;
-      });
-    }
-
-    return {
-      articles: filtered,
-      total: allArticles.length,
-      filtered: filtered.length,
+      setDisplayedArticles(finalArticles);
     };
-  }, [allArticles, searchTerm, filter, exemptedArticleIds, persistentlyExemptedIds, feedRulesMap, globalFilterRules, currentFeedId, currentTopic, currentTopicId, topicFeedIds]);
 
-  // Update displayed articles when the result changes
-  useEffect(() => {
-    setDisplayedArticles(displayedArticlesResult.articles);
-    
-    // 添加调试信息 - 只在开发环境下输出
-    if (currentTopicId && process.env.NODE_ENV === 'development') {
-      console.log(`主题视图最终显示文章数量: ${displayedArticlesResult.articles.length} 篇`);
-    }
-  }, [displayedArticlesResult, currentTopicId]);
-
-  // 添加一个文章数量变化的回调事件
-  useEffect(() => {
-    // 当显示的文章数量变化时，触发一个事件
-    if (typeof window !== 'undefined') {
-      // 创建一个自定义事件，包含文章数量信息
-      const event = new CustomEvent('articleCountChanged', {
-        detail: {
-          count: displayedArticles.length,
-          filter,
-          feedId: currentFeedId,
-          groupId: currentGroupId,
-          topicId: currentTopicId
-        }
-      });
-      
-      // 派发事件
-      window.dispatchEvent(event);
-    }
-  }, [displayedArticles.length, filter, currentFeedId, currentGroupId, currentTopicId]);
+    combineArticles();
+  }, [allArticles, exemptedArticleIds, persistentlyExemptedIds, db, loading]);
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;
@@ -690,12 +454,11 @@ export const useArticleListManager = ({
   return {
     loading,
     isRefreshing,
-    error,
-    displayedArticles,
+    articles: displayedArticles,
     feedInfoMap,
+    error,
     toggleArticleReadStatus,
     handleToggleStar,
     handleMarkArticlesAsRead,
-    setAllArticles,
   };
 }; 
