@@ -933,57 +933,58 @@ const SidebarLayout: React.FC = () => {
             className={styles.menu}
             inlineCollapsed={isPanelCollapsed}
             items={[
-              {
-                key: 'home',
-                icon: <CalendarOutlined />,
-                label: (
-                  <div className={styles.menuItemContainer}>
-                    <span>今日</span>
-                    {todayCount > 0 && <span className={styles.menuItemBadge}>{todayCount}</span>}
-                  </div>
-                ),
-                onClick: () => {
-                  if (location.pathname === '/today') {
-                    // 即使已经在"今天"页面，也触发刷新
-                    handleRefreshAll(false);
-                    document.dispatchEvent(new CustomEvent('request-list-refresh'));
-                  } else {
-                    navigate('/today');
-                  }
-                }
-              },
-              {
-                key: 'all',
-                icon: <AppstoreOutlined />,
-                label: (
-                  <div className={styles.menuItemContainer}>
-                    <span>所有</span>
-                    {allCount > 0 && <span className={styles.menuItemBadge}>{allCount}</span>}
-                  </div>
-                ),
-                onClick: () => {
-                  if (location.pathname === '/all') {
-                    document.dispatchEvent(new CustomEvent('request-list-refresh'));
-                  } else {
-                    navigate('/all');
-                  }
-                }
-              },
-              {
-                key: 'notes',
-                icon: <FileTextOutlined />,
-                label: (
-                  <div className={styles.menuItemContainer}>
-                    <span>笔记</span>
-                    {notesCount > 0 && (
-                      <span className={styles.menuItemBadge} data-testid="notes-count">
-                        {notesCount}
-                      </span>
-                    )}
-                  </div>
-                ),
-                onClick: () => navigate('/notes')
-              }
+              // 注释掉原有的导航菜单项
+              // {
+              //   key: 'home',
+              //   icon: <CalendarOutlined />,
+              //   label: (
+              //     <div className={styles.menuItemContainer}>
+              //       <span>今日</span>
+              //       {todayCount > 0 && <span className={styles.menuItemBadge}>{todayCount}</span>}
+              //     </div>
+              //   ),
+              //   onClick: () => {
+              //     if (location.pathname === '/today') {
+              //       // 即使已经在"今天"页面，也触发刷新
+              //       handleRefreshAll(false);
+              //       document.dispatchEvent(new CustomEvent('request-list-refresh'));
+              //     } else {
+              //       navigate('/today');
+              //     }
+              //   }
+              // },
+              // {
+              //   key: 'all',
+              //   icon: <AppstoreOutlined />,
+              //   label: (
+              //     <div className={styles.menuItemContainer}>
+              //       <span>所有</span>
+              //       {allCount > 0 && <span className={styles.menuItemBadge}>{allCount}</span>}
+              //     </div>
+              //   ),
+              //   onClick: () => {
+              //     if (location.pathname === '/all') {
+              //       document.dispatchEvent(new CustomEvent('request-list-refresh'));
+              //     } else {
+              //       navigate('/all');
+              //     }
+              //   }
+              // },
+              // {
+              //   key: 'notes',
+              //   icon: <FileTextOutlined />,
+              //   label: (
+              //     <div className={styles.menuItemContainer}>
+              //       <span>笔记</span>
+              //       {notesCount > 0 && (
+              //         <span className={styles.menuItemBadge} data-testid="notes-count">
+              //           {notesCount}
+              //         </span>
+              //       )}
+              //     </div>
+              //   ),
+              //   onClick: () => navigate('/notes')
+              // }
             ]}
           />
 

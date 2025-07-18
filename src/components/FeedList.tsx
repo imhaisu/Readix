@@ -1,6 +1,6 @@
 import React, { useState, useEffect, Key as ReactKey, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input, Button } from 'antd';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input, Button, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { 
   LinkOutlined,
@@ -15,7 +15,16 @@ import {
   TagOutlined,
   PlusOutlined,
   FilterOutlined,
-  GlobalOutlined
+  GlobalOutlined,
+  FileTextOutlined,
+  ClockCircleOutlined,
+  ReadOutlined,
+  CalendarOutlined,
+  AppstoreOutlined,
+  FileOutlined,
+  SnippetsOutlined,
+  BookOutlined,
+  HistoryOutlined
 } from '@ant-design/icons';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useFilter } from '../contexts/FilterContext';
@@ -25,6 +34,14 @@ import styles from './FeedList.module.css';
 import EditFeedModal from './EditFeedModal';
 import AddTopicModal from './AddTopicModal';
 import { getIconByName } from '../utils/topicIconUtils';
+import { getTodayRange } from '../utils/helpers';
+import {
+  CalendarFilled,
+  AppstoreFilled,
+  BookFilled,
+  ClockCircleFilled,
+  ReadFilled
+} from '@ant-design/icons';
 
 interface FeedListProps {
   collapsed: boolean;
@@ -42,6 +59,7 @@ const CACHE_VALID_DURATION = 10000; // 缓存有效期10秒
 
 const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, groups: groupsFromProps, onRefreshFeeds }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { feedId, groupId: currentRouteGroupId, topicId: currentRouteTopicId } = useParams<{ feedId?: string; groupId?: string; topicId?: string }>();
   const { db, triggerArticleListRefresh, feedCountRefreshTrigger } = useDatabase();
   const { filter } = useFilter();
@@ -64,6 +82,14 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [initialActiveTab, setInitialActiveTab] = useState('1'); // 新增状态，用于控制AddTopicModal的初始标签页
   // 添加主题区域的展开/收起状态
   const [isTopicsExpanded, setIsTopicsExpanded] = useState<boolean>(true);
+  
+  // 新增状态用于顶部图标导航栏的计数
+  const [todayCount, setTodayCount] = useState(0);
+  const [allCount, setAllCount] = useState(0);
+  const [notesCount, setNotesCount] = useState(0);
+  const [readLaterCount, setReadLaterCount] = useState(0);
+  // 用于跟踪当前选中的路由类型
+  const [activeNavItem, setActiveNavItem] = useState<string>('');
   
   // 记录已经处理过的图标URL，防止重复处理
   const processedIconUrls = useRef<Map<string, string | undefined>>(new Map());
@@ -448,6 +474,68 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     }
   }, [feedId, currentRouteGroupId, currentRouteTopicId]);
 
+  // 新增: 获取顶部导航栏的文章计数
+  useEffect(() => {
+    if (!db) return;
+
+    const fetchNavCounts = async () => {
+      try {
+        // 获取今日文章数量
+        const todayRange = getTodayRange();
+        const todayArticles = await db.articles
+          .where('publishDate').between(todayRange.start, todayRange.end, true, true)
+          .filter(article => !article.isHidden)
+          .count();
+        
+        // 获取所有文章数量
+        const allArticles = await db.articles
+          .filter(article => !article.isHidden)
+          .count();
+          
+        // 获取笔记数量
+        const notes = await db.annotations.count();
+        
+        // 获取稍后读文章数量 - 修正查询逻辑
+        let readLater = 0;
+        try {
+          // 先尝试查询savedLinks表
+          readLater = await db.savedLinks.count();
+        } catch (error) {
+          // 如果出错，尝试使用articles表的isReadLater字段
+          readLater = await db.articles
+            .where('isReadLater').equals('true')
+            .filter(article => !article.isHidden)
+            .count();
+        }
+          
+        setTodayCount(todayArticles);
+        setAllCount(allArticles);
+        setNotesCount(notes);
+        setReadLaterCount(readLater);
+      } catch (error) {
+        console.error("Error fetching nav counts:", error);
+      }
+    };
+
+    fetchNavCounts();
+  }, [db, triggerArticleListRefresh, feedCountRefreshTrigger]);
+
+  // 新增: 处理路由变化，更新选中状态
+  useEffect(() => {
+    const path = location.pathname;
+    if (path.includes('/today')) {
+      setActiveNavItem('today');
+    } else if (path.includes('/all')) {
+      setActiveNavItem('all');
+    } else if (path.includes('/notes')) {
+      setActiveNavItem('notes');
+    } else if (path.includes('/readlater')) {
+      setActiveNavItem('readlater');
+    } else {
+      setActiveNavItem('');
+    }
+  }, [location.pathname]);
+
   const handleGroupExpanderClick = useCallback((e: React.MouseEvent, key: ReactKey) => {
     e.stopPropagation();
     setExpandedKeys(prevKeys => {
@@ -668,7 +756,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             
             // 将这些订阅源移动到默认分组（无分组）
             for (const feed of feedsInGroup) {
-              await db.feeds.update(feed.id!, { groupId: null });
+              await db.feeds.update(feed.id!, { groupId: '' });
             }
 
             // 删除分组
@@ -867,6 +955,27 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     });
   };
 
+  // 新增: 处理导航项点击
+  const handleNavItemClick = (key: string) => {
+    setActiveNavItem(key);
+    switch (key) {
+      case 'today':
+        navigate('/today');
+        break;
+      case 'all':
+        navigate('/all');
+        break;
+      case 'notes':
+        navigate('/notes');
+        break;
+      case 'readlater':
+        navigate('/readlater');
+        break;
+      default:
+        break;
+    }
+  };
+
   if (loading) {
     return (
       <div className={styles.loadingContainer}>
@@ -935,6 +1044,49 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
   return (
     <div className={styles.feedListContainer}>
+      {/* 精致图标导航栏 */}
+      <div className={styles.iconNavBar}>
+        <Tooltip title="今日文章" placement="bottom">
+          <div 
+            className={`${styles.iconNavItem} ${activeNavItem === 'today' ? styles.iconNavItemActive : ''} ${styles.todayItem}`}
+            onClick={() => handleNavItemClick('today')}
+          >
+            <CalendarFilled className={styles.iconNavIcon} />
+            <span className={styles.iconNavCount}>{todayCount > 99 ? '99+' : todayCount}</span>
+          </div>
+        </Tooltip>
+        
+        <Tooltip title="所有文章" placement="bottom">
+          <div 
+            className={`${styles.iconNavItem} ${activeNavItem === 'all' ? styles.iconNavItemActive : ''} ${styles.allItem}`}
+            onClick={() => handleNavItemClick('all')}
+          >
+            <AppstoreFilled className={styles.iconNavIcon} />
+            <span className={styles.iconNavCount}>{allCount > 99 ? '99+' : allCount}</span>
+          </div>
+        </Tooltip>
+        
+        <Tooltip title="我的笔记" placement="bottom">
+          <div 
+            className={`${styles.iconNavItem} ${activeNavItem === 'notes' ? styles.iconNavItemActive : ''} ${styles.notesItem}`}
+            onClick={() => handleNavItemClick('notes')}
+          >
+            <ReadFilled className={styles.iconNavIcon} />
+            <span className={styles.iconNavCount}>{notesCount}</span>
+          </div>
+        </Tooltip>
+        
+        <Tooltip title="稍后阅读" placement="bottom">
+          <div 
+            className={`${styles.iconNavItem} ${activeNavItem === 'readlater' ? styles.iconNavItemActive : ''} ${styles.readLaterItem}`}
+            onClick={() => handleNavItemClick('readlater')}
+          >
+            <ClockCircleFilled className={styles.iconNavIcon} />
+            <span className={styles.iconNavCount}>{readLaterCount}</span>
+          </div>
+        </Tooltip>
+      </div>
+
       {/* 添加订阅区域标题 */}
       <div className={styles.sectionHeader}>
         <div 

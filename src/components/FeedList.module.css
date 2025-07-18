@@ -15,6 +15,99 @@
   height: 0;
 }
 
+/* 精致的图标导航栏样式 */
+.iconNavBar {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  padding: 0 6px; /* 减少左右内边距 */
+  margin: -6px 0 12px 0; /* 向上移动4px，底部增加10px边距 */
+  background: transparent;
+  box-shadow: none;
+}
+
+.iconNavItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 2px 6px;
+  min-width: 34px;
+  position: relative;
+}
+
+.iconNavItem:hover {
+  transform: translateY(-1px);
+}
+
+.iconNavItem:hover .iconNavIcon {
+  opacity: 0.8;
+}
+
+/* 每个导航项有自己的颜色 */
+.todayItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(22, 119, 255, 0.1); /* 蓝色背景 */
+  color: #1677ff; /* 蓝色 - 日历色 */
+}
+
+.allItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(82, 196, 26, 0.1); /* 绿色背景 */
+  color: #52c41a; /* 绿色 - 全部内容 */
+}
+
+.notesItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(114, 46, 209, 0.1); /* 紫色背景 */
+  color: #722ed1; /* 紫色 - 笔记色 */
+}
+
+.readLaterItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(250, 140, 22, 0.1); /* 橙色背景 */
+  color: #fa8c16; /* 橙色 - 稍后读 */
+}
+
+.iconNavItemActive .iconNavCount {
+  font-weight: 600;
+}
+
+.todayItem.iconNavItemActive .iconNavCount {
+  color: #1677ff;
+}
+
+.allItem.iconNavItemActive .iconNavCount {
+  color: #52c41a;
+}
+
+.notesItem.iconNavItemActive .iconNavCount {
+  color: #722ed1;
+}
+
+.readLaterItem.iconNavItemActive .iconNavCount {
+  color: #fa8c16;
+}
+
+.iconNavIcon {
+  font-size: 16px; /* 更小的图标 */
+  color: #8c8c8c;
+  margin-bottom: 2px;
+  transition: all 0.2s;
+  border-radius: 50%; 
+  padding: 5px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconNavCount {
+  font-size: 11px;
+  font-weight: 500;
+  color: #595959;
+  line-height: 1;
+}
+
 .separator {
   border-top: 0px solid #f0f0f0;
   margin: 8px 0;
@@ -25,8 +118,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 4px 8px;
-  margin: 5px 0 6px 0;
+  padding: 2px 8px; /* 减少上下内边距从4px到2px */
+  margin: 5px 0 2px 0; 
 }
 
 /* 给第一个 sectionHeader (订阅区域标题) 特别设置更小的上边距 */
@@ -38,7 +131,7 @@
   font-size: 14px;
   color: #444;
   font-weight: 600;
-  margin-left: 4px; /* 增加左边距，使文字往右移 */
+  margin-left: 4px;
 }
 
 /* 添加新的样式类支持区域标题的展开/收起 */
@@ -47,7 +140,7 @@
   align-items: center;
   cursor: pointer;
   flex: 1;
-  padding: 4px 0;
+  padding: 2px 0; /* 减少上下内边距从4px到2px */
   border-radius: 4px;
   justify-content: space-between;
 }
