@@ -10,6 +10,7 @@ import { useFilterRules } from '../contexts/FilterRulesContext';
 import { useLayout } from '../contexts/LayoutContext';
 import { applyTopicFilterRules } from '../utils/filterApplier';
 import { LogConfig } from '../utils/logConfig';
+import { getTodayRange } from '../utils/helpers';
 
 export interface UseArticleListManagerProps {
   filter: any;
@@ -260,6 +261,9 @@ export const useArticleListManager = ({
       }
       setError(null);
       
+      console.log('===== ArticleListManager: 开始加载文章 =====');
+      console.log('当前上下文:', { currentFeedId, currentGroupId, currentTopicId, filter });
+      
       const newExemptedIds = new Set<string>();
       if (selectedArticleIdRef.current) {
         newExemptedIds.add(selectedArticleIdRef.current);
@@ -274,12 +278,15 @@ export const useArticleListManager = ({
         // 1. 上下文过滤 (Context Filtering)
         let contextFiltered = false;
         if (currentFeedId) {
+          console.log('按订阅源过滤:', currentFeedId);
           feedsInScope = await db.feeds.where('id').equals(currentFeedId).toArray();
           collection = db.articles.where('sourceId').equals(currentFeedId);
           contextFiltered = true;
         } else if (currentGroupId) {
+          console.log('按分组过滤:', currentGroupId);
           feedsInScope = await db.feeds.where('groupId').equals(currentGroupId).toArray();
           const feedIdsInGroup = feedsInScope.map(f => f.id!).filter(Boolean);
+          console.log('分组中的订阅源数量:', feedIdsInGroup.length);
           if (feedIdsInGroup.length > 0) {
             collection = db.articles.where('sourceId').anyOf(feedIdsInGroup);
             contextFiltered = true;
@@ -288,25 +295,48 @@ export const useArticleListManager = ({
             feedsInScope = [];
           }
         } else if (currentTopicId) {
+          console.log('按主题过滤:', currentTopicId);
           const topicFeeds = await db.topicFeeds.where('topicId').equals(currentTopicId).toArray();
           const feedIdsInTopic = topicFeeds.map(tf => tf.feedId);
+          console.log('主题中的订阅源数量:', feedIdsInTopic.length);
           if (feedIdsInTopic.length > 0) {
             feedsInScope = await db.feeds.where('id').anyOf(feedIdsInTopic).toArray();
             collection = db.articles.where('sourceId').anyOf(feedIdsInTopic);
             contextFiltered = true;
+            
+            // 获取主题过滤规则
+            const topic = await db.topics.get(currentTopicId);
+            if (topic && topic.filterRules && topic.filterRules.length > 0) {
+              console.log('应用主题过滤规则:', topic.filterRules.length, '条规则');
+            }
           } else {
             setAllArticles([]);
             feedsInScope = [];
           }
+        } else if (window.location.pathname === '/today') {
+          // 特殊处理今日视图
+          console.log('今日视图');
+          const todayRange = getTodayRange();
+          console.log('今日时间范围:', new Date(todayRange.start), '至', new Date(todayRange.end));
+          feedsInScope = await db.feeds.toArray();
+          collection = db.articles
+            .where('publishDate')
+            .between(todayRange.start, todayRange.end, true, true);
+          contextFiltered = true;
         }
 
         if (!contextFiltered) {
+          console.log('无上下文过滤，获取所有订阅源');
           feedsInScope = await db.feeds.toArray();
           collection = db.articles.toCollection();
         }
 
         // 2. 属性过滤 (Attribute Filtering)
+        console.log('应用属性过滤:', filter);
         collection = collection.filter(article => {
+          // 始终排除隐藏的文章
+          if (article.isHidden === true) return false;
+          
           if (filter.isRead === 'false' && article.isRead !== 'false') return false;
           if (filter.isRead === 'true' && article.isRead !== 'true') return false;
           if (filter.isStarred === 'true' && article.isStarred !== 'true') return false;
@@ -316,6 +346,7 @@ export const useArticleListManager = ({
 
         // 3. 搜索过滤 (Search Term Filtering)
         if (searchTerm && searchTerm.trim() !== '') {
+          console.log('应用搜索过滤:', searchTerm);
           const lowerCaseSearchTerm = searchTerm.toLowerCase();
           collection = collection.filter(article => 
             article.title.toLowerCase().includes(lowerCaseSearchTerm)
@@ -324,15 +355,42 @@ export const useArticleListManager = ({
 
         // 4. 排序 (Sorting)
         const sortedArticles = await collection.reverse().sortBy('publishDate');
+        console.log('排序后的文章数量:', sortedArticles.length);
 
         // 5. 应用动态过滤规则 (JS-side filtering)
         const newFeedRulesMap = new Map(feedsInScope.map(f => [f.id!, f.filterRules || []]));
         setFeedRulesMap(newFeedRulesMap);
         
-        const finalArticles = sortedArticles.filter(article => 
+        // 先获取可能需要的主题过滤规则
+        let topicFilterRules: TopicFilterRule[] = [];
+        if (currentTopicId) {
+          try {
+            const topic = await db.topics.get(currentTopicId);
+            if (topic && topic.filterRules && topic.filterRules.length > 0) {
+              topicFilterRules = topic.filterRules;
+              console.log('获取到主题过滤规则:', topicFilterRules.length, '条规则');
+            }
+          } catch (error) {
+            console.error('获取主题过滤规则失败:', error);
+          }
+        }
+        
+        // 应用所有过滤规则
+        let finalArticles = sortedArticles.filter(article => 
           !shouldArticleBeHidden(article, [...(newFeedRulesMap.get(article.sourceId) || []), ...globalFilterRules])
         );
-
+        
+        // 如果有主题过滤规则，进一步过滤文章
+        if (currentTopicId && topicFilterRules.length > 0) {
+          // 导入applyTopicFilterRules函数
+          const { applyTopicFilterRules } = await import('../utils/filterApplier');
+          finalArticles = finalArticles.filter(article => {
+            return applyTopicFilterRules(article, topicFilterRules);
+          });
+          console.log('应用主题过滤规则后的文章数量:', finalArticles.length);
+        }
+        
+        console.log('应用过滤规则后的文章数量:', finalArticles.length);
         setAllArticles(finalArticles);
 
         // 获取并设置订阅源信息
@@ -351,6 +409,7 @@ export const useArticleListManager = ({
           setFeedInfoMap(newFeedInfoMap);
         }
         
+        console.log('===== ArticleListManager: 文章加载完成 =====');
       } catch (err) {
         setError('加载文章失败，请稍后重试。');
         console.error("Error loading articles:", err);
@@ -373,26 +432,52 @@ export const useArticleListManager = ({
     const combineArticles = async () => {
       if (!db || loading) return;
 
+      // 使用 useMemo 或者在这里缓存结果，避免不必要的重新计算
       const articlesMap = new Map(allArticles.map(a => [a.id, a]));
       
       const exemptedIdsToFetch = new Set<string>();
       const combinedExemptedIds = new Set([...exemptedArticleIds, ...persistentlyExemptedIds]);
 
+      // 只处理真正需要获取的文章 ID
       combinedExemptedIds.forEach(id => {
         if (!articlesMap.has(id)) {
           exemptedIdsToFetch.add(id);
         }
       });
 
-      if (exemptedIdsToFetch.size > 0) {
-        try {
-          const missingExemptedArticles = await db.articles.where('id').anyOf([...exemptedIdsToFetch]).toArray();
-          missingExemptedArticles.forEach(article => {
-            articlesMap.set(article.id, article);
-          });
-        } catch (error) {
-          console.error("Error fetching exempted articles:", error);
-          }
+      // 如果没有需要额外获取的文章，直接使用现有数据
+      if (exemptedIdsToFetch.size === 0) {
+        const finalIdSet = new Set([...allArticles.map(a => a.id), ...combinedExemptedIds]);
+        const finalArticles = Array.from(finalIdSet)
+          .map(id => articlesMap.get(id))
+          .filter((a): a is Article => !!a)
+          .sort((a, b) => b.publishDate - a.publishDate);
+        
+        setDisplayedArticles(finalArticles);
+        
+        // 发送文章计数变化事件，这样FeedList可以保持同步
+        const articleCount = finalArticles.length;
+        document.dispatchEvent(new CustomEvent('articleCountChanged', { 
+          detail: { 
+            count: articleCount,
+            filter: filter,
+            feedId: currentFeedId,
+            groupId: currentGroupId,
+            topicId: currentTopicId
+          } 
+        }));
+        
+        return;
+      }
+
+      // 只有当真正需要时才从数据库获取额外的文章
+      try {
+        const missingExemptedArticles = await db.articles.where('id').anyOf([...exemptedIdsToFetch]).toArray();
+        missingExemptedArticles.forEach(article => {
+          articlesMap.set(article.id, article);
+        });
+      } catch (error) {
+        console.error("Error fetching exempted articles:", error);
       }
       
       const finalIdSet = new Set([...allArticles.map(a => a.id), ...combinedExemptedIds]);
@@ -402,10 +487,29 @@ export const useArticleListManager = ({
         .sort((a, b) => b.publishDate - a.publishDate);
       
       setDisplayedArticles(finalArticles);
+      
+      // 发送文章计数变化事件
+      const articleCount = finalArticles.length;
+      document.dispatchEvent(new CustomEvent('articleCountChanged', { 
+        detail: { 
+          count: articleCount,
+          filter: filter,
+          feedId: currentFeedId,
+          groupId: currentGroupId,
+          topicId: currentTopicId
+        } 
+      }));
     };
 
-    combineArticles();
-  }, [allArticles, exemptedArticleIds, persistentlyExemptedIds, db, loading]);
+    // 使用 requestAnimationFrame 确保在下一帧渲染时更新，避免阻塞当前帧
+    const rafId = requestAnimationFrame(() => {
+      combineArticles();
+    });
+    
+    return () => {
+      cancelAnimationFrame(rafId);
+    };
+  }, [allArticles, exemptedArticleIds, persistentlyExemptedIds, db, loading, filter, currentFeedId, currentGroupId, currentTopicId]);
 
   const handleToggleStar = async (articleId: string) => {
     if (!db) return;

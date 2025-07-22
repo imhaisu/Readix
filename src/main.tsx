@@ -16,6 +16,7 @@ import HomePage from './pages/HomePage';
 import ReadLaterPage from './pages/ReadLaterPage';
 import SettingsPage from './pages/SettingsPage';
 import NotesPage from './pages/NotesPage';
+import ManagePage from './pages/ManagePage';
 
 // 初始化日志设置
 LogConfig.setLevel(LogLevel.ERROR); // 在生产环境中只显示错误日志
@@ -101,6 +102,7 @@ const router = createBrowserRouter(
             { path: 'readlater', element: <ReadLaterPage /> },
             { path: 'notes', element: <NotesPage /> },
             { path: 'settings', element: <SettingsPage /> },
+            { path: 'manage', element: <ManagePage /> }, // 新增：管理页面路由
           ],
         },
       ],

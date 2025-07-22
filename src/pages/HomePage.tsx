@@ -78,7 +78,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const [pageTitle, setPageTitle] = useState('所有文章');
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [isTodayView, setIsTodayView] = useState(() => {
+  const [isTodayView, setIsTodayView] = useState<boolean>(() => {
     // 只有在明确指定今日视图时才设置为true
     return window.location.pathname === '/today';
   });
@@ -257,6 +257,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                    (filter === undefined && !feedId && !groupId);
     
     if (isToday !== isTodayView) {
+      console.log('===== HomePage: 更新今日视图状态 =====', { isToday, isTodayView });
       setIsTodayView(isToday);
     }
 
@@ -382,6 +383,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     if (dbInitialized && isTodayView) {
       // 只有在初始加载或明确要求刷新时才进行刷新
       if (!initialLoadRefreshed) {
+        console.log('===== HomePage: 初始加载今日视图，触发刷新 =====');
         handleRefreshAll({ silent: true });
         setInitialLoadRefreshed();
       }
@@ -591,6 +593,47 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       if (feedIdsInTopic.length === 0) {
         return; // 如果没有关联的订阅源，直接返回
       }
+      
+      // 获取主题过滤规则
+      const topic = await db.topics.get(currentFilter.topicId);
+      let hasTopicFilterRules = false;
+      
+      if (topic && topic.filterRules && topic.filterRules.length > 0) {
+        console.log('处理主题过滤规则:', topic.filterRules.length, '条规则');
+        hasTopicFilterRules = true;
+        
+        // 这里需要特殊处理，因为批量操作中无法直接应用复杂的主题过滤规则
+        // 对于标记已读操作，我们可以先获取所有符合条件的文章，再进行过滤
+        if (topic.filterRules.some(rule => rule.isActive)) {
+          // 先获取所有可能的文章
+          const potentialArticles = await db.articles
+            .where('sourceId')
+            .anyOf(feedIdsInTopic)
+            .and(article => article.isRead === 'false')
+            .toArray();
+            
+          // 应用过滤规则
+          const { applyTopicFilterRules } = await import('../utils/filterApplier');
+          const filteredArticles = potentialArticles.filter(article => 
+            applyTopicFilterRules(article, topic.filterRules || [])
+          );
+          
+          // 只操作过滤后的文章
+          if (filteredArticles.length === 0) {
+            return; // 如果没有符合条件的文章，直接返回
+          }
+          articlesToUpdateQuery = db.articles
+            .where('id')
+            .anyOf(filteredArticles.map(a => a.id))
+            .and(a => a.isRead === 'false');
+          
+          // 已经完全处理了条件，删除原条件
+          delete currentFilter.topicId;
+          return;
+        }
+      }
+      
+      // 如果没有活跃的过滤规则，使用标准的源ID过滤
       articlesToUpdateQuery = articlesToUpdateQuery.and((a: Article) => feedIdsInTopic.includes(a.sourceId));
       delete currentFilter.topicId; // 移除已处理的条件
     }
@@ -992,24 +1035,52 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       
       if (!customEvent.detail) return;
       
-      const { count, feedId: eventFeedId, groupId: eventGroupId, topicId: eventTopicId } = customEvent.detail;
+      const { count, feedId: eventFeedId, groupId: eventGroupId, topicId: eventTopicId, filter: eventFilter } = customEvent.detail;
       
-      // 只有当事件相关的上下文匹配当前页面上下文时，才更新计数
-      if (
+      console.log('HomePage: 收到文章计数变化事件', {
+        count,
+        eventFeedId,
+        eventGroupId,
+        eventTopicId,
+        eventFilter,
+        currentFeedId: feedId,
+        currentGroupId: groupId,
+        currentTopicId: topicId,
+        currentFilter: activeListFilter
+      });
+      
+      // 上下文匹配检查 - 更精确的匹配
+      const contextMatches = 
         eventFeedId === feedId &&
         eventGroupId === groupId &&
-        eventTopicId === topicId
-      ) {
+        eventTopicId === topicId;
+      
+      // 如果上下文匹配，立即更新计数
+      if (contextMatches) {
+        console.log('HomePage: 上下文匹配，更新文章计数为', count);
         setArticleCount(count);
+        
+        // 分发一个全局事件，让FeedList组件也可以接收到这个更新
+        const globalCountEvent = new CustomEvent('global-article-count-update', {
+          detail: {
+            count,
+            feedId: eventFeedId,
+            groupId: eventGroupId,
+            topicId: eventTopicId,
+            filter: eventFilter || activeListFilter
+          }
+        });
+        document.dispatchEvent(globalCountEvent);
       }
     };
 
-    window.addEventListener('articleCountChanged', handleArticleCountChanged);
+    // 使用document而不是window，确保和useArticleListManager中的一致
+    document.addEventListener('articleCountChanged', handleArticleCountChanged);
     
     return () => {
-      window.removeEventListener('articleCountChanged', handleArticleCountChanged);
+      document.removeEventListener('articleCountChanged', handleArticleCountChanged);
     };
-  }, [feedId, groupId, topicId]);
+  }, [feedId, groupId, topicId, activeListFilter]);
 
   return (
     <div className={styles.homeLayout}>

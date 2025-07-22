@@ -252,10 +252,10 @@
 }
 
 .articleListContainer {
-  flex: 1;
+  height: 100%;
   overflow-y: auto;
-  overflow-x: hidden;
-  position: relative;
+  /* 移除这里的右边框，我们不再需要它了 */
+  border-right: none; 
 }
 
 .articleDetail {
@@ -278,19 +278,16 @@
 }
 
 .resizeHandle {
-  width: 1px;
-  background-color: #e8e8e8;
-  cursor: col-resize;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s ease;
-  z-index: 10;
+  position: relative; /* 必须设置，为内部的“线”提供定位基准 */
+  width: 5px !important;
+  background-color: transparent !important;
+  border-left: 1px solid #f0f0f0; /* 直接在拖拽条上创建这条线 */
 }
 
-.resizeHandle:hover,
-.resizeHandle[data-resize-handle-active] { 
-  background-color: var(--primary-color-active);
+/* 为确保万无一失，我会移除任何可能存在的 hover 或 drag 状态下的高亮样式 */
+.resizeHandle[data-resize-handle-state="hover"],
+.resizeHandle[data-resize-handle-state="drag"] {
+  background-color: transparent !important; /* 拖拽时也保持透明 */
 }
 
 .resizeHandle::before {
@@ -561,9 +558,34 @@
 
 .articleDetailContainer {
   height: 100%;
-  overflow: auto;
-  background-color: var(--background-color-primary, #fff);
-} 
+  overflow-y: auto;
+  /* 同样确保这里没有左边框 */
+}
+
+/* 移除之前添加的所有 resizeHandle 样式，恢复到最简状态 */
+.resizeHandle {
+  width: 5px !important;
+  background-color: transparent !important;
+  /* 
+    最关键的一步：
+    设置 z-index 为 0，将这个透明的拖拽条沉到下方，
+    这样它就不会再覆盖旁边的边框线了。
+  */
+  z-index: 0 !important;
+}
+
+/* 如果下面这个高亮规则存在，它将被彻底删除 */
+/* 
+.resizeHandle[data-resize-handle-state="hover"],
+.resizeHandle[data-resize-handle-state="drag"] {
+  background-color: #1677ff !important;
+}
+*/
+
+.welcomeContainer {
+  display: flex;
+  justify-content: center;
+}
 
 .articleListContainerWrapper {
   position: relative;

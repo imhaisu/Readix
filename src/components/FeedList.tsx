@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Key as ReactKey, useCallback, useRef } from 'react';
+import React, { useState, useEffect, Key as ReactKey, useCallback, useRef, useContext } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Empty, Skeleton, Avatar, message, Modal, Dropdown, Menu, Input, Button, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
@@ -35,6 +35,7 @@ import EditFeedModal from './EditFeedModal';
 import AddTopicModal from './AddTopicModal';
 import { getIconByName } from '../utils/topicIconUtils';
 import { getTodayRange } from '../utils/helpers';
+import { FORCE_FEEDLIST_REFRESH_EVENT } from '../contexts/DatabaseContext';
 import {
   CalendarFilled,
   AppstoreFilled,
@@ -42,6 +43,7 @@ import {
   ClockCircleFilled,
   ReadFilled
 } from '@ant-design/icons';
+import { useLiveQuery } from "dexie-react-hooks";
 
 interface FeedListProps {
   collapsed: boolean;
@@ -67,14 +69,71 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [expandedKeys, setExpandedKeys] = useState<ReactKey[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<ReactKey[]>([]);
   const [refreshingFeedId, setRefreshingFeedId] = useState<string | null>(null);
-  const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
   const [dynamicCounts, setDynamicCounts] = useState<Map<string, number>>(new Map());
   const countCacheRef = useRef(countCache);
   // 添加订阅区域的展开/收起状态
   const [isSubscriptionsExpanded, setIsSubscriptionsExpanded] = useState<boolean>(true);
+  
+  // 将 refreshKey 的声明移到这里，在使用它之前
+  const [refreshKey, setRefreshKey] = useState(0);
+  
+  // 使用 useLiveQuery 获取实时数据
+  const liveFeeds = useLiveQuery(() => {
+    if (db) {
+      console.log('===== FeedList: 重新获取 feeds 数据，refreshKey:', refreshKey);
+      return db.feeds.toArray();
+    }
+    return [];
+  }, [db, feedCountRefreshTrigger, refreshKey]) || [];
+  
+  const liveGroups = useLiveQuery(() => {
+    if (db) return db.groups.toArray();
+    return [];
+  }, [db, feedCountRefreshTrigger, refreshKey]) || [];
+  
+  const liveTopics = useLiveQuery(() => {
+    if (db) return db.topics.toArray();
+    return [];
+  }, [db, feedCountRefreshTrigger, refreshKey]) || [];
+  
+  // 添加对强制刷新事件的监听
+  useEffect(() => {
+    const handleForceRefresh = () => {
+      console.log('===== FeedList: 收到强制刷新事件 =====');
+      
+      // 强制重新获取数据
+      setRefreshKey(prev => {
+        console.log('===== FeedList: 更新 refreshKey，当前值:', prev, '新值:', prev + 1);
+        return prev + 1;
+      });
+      
+      // 直接从数据库获取数据
+      if (db) {
+        console.log('===== FeedList: 直接从数据库获取数据 =====');
+        db.feeds.toArray().then(feeds => {
+          console.log('===== FeedList: 数据库中的订阅源数量:', feeds.length);
+          
+          // 直接更新处理后的订阅源
+          // 注意：这里不使用 processAllFeedIcons，因为它会导致依赖循环
+          setProcessedFeeds(feeds);
+        });
+      }
+    };
+    
+    console.log('===== FeedList: 添加事件监听器 =====');
+    document.addEventListener(FORCE_FEEDLIST_REFRESH_EVENT, handleForceRefresh);
+    
+    return () => {
+      console.log('===== FeedList: 移除事件监听器 =====');
+      document.removeEventListener(FORCE_FEEDLIST_REFRESH_EVENT, handleForceRefresh);
+    };
+  }, [db]);
+  
+  // 使用实时数据或者传入的数据
+  const feeds = liveFeeds.length > 0 ? liveFeeds : feedsFromProps;
+  const groups = liveGroups.length > 0 ? liveGroups : groupsFromProps;
 
   // 主题相关状态
-  const [topics, setTopics] = useState<Topic[]>([]);
   const [topicFeeds, setTopicFeeds] = useState<Map<string, string[]>>(new Map());
   const [topicCounts, setTopicCounts] = useState<Map<string, number>>(new Map());
   const [isAddTopicModalVisible, setIsAddTopicModalVisible] = useState(false);
@@ -93,6 +152,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   
   // 记录已经处理过的图标URL，防止重复处理
   const processedIconUrls = useRef<Map<string, string | undefined>>(new Map());
+  const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
 
   // Modals State
   const [isRenameGroupModalVisible, setIsRenameGroupModalVisible] = useState(false);
@@ -102,7 +162,9 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   const [isEditFeedModalVisible, setIsEditFeedModalVisible] = useState(false);
   const [editingFeedData, setEditingFeedData] = useState<FeedSource | null>(null);
 
-  const [refreshKey, setRefreshKey] = useState(0);
+  const handleDropdownVisibleChange = (visible: boolean) => {
+    console.log('Dropdown visible state changed:', visible);
+  };
 
   // 处理单个图标URL的函数
   const processSingleIconUrl = useCallback(async (iconUrl: string | undefined): Promise<string | undefined> => {
@@ -267,10 +329,6 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       if (!db) return;
       
       try {
-        // 获取所有主题
-        const allTopics = await db.topics.toArray();
-        setTopics(allTopics.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-        
         // 获取所有主题-订阅源关联
         const allTopicFeeds = await db.topicFeeds.toArray();
         
@@ -291,7 +349,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         // 检查哪些主题需要重新计算计数
         const topicsToUpdate: Topic[] = [];
         
-        for (const topic of allTopics) {
+        for (const topic of liveTopics || []) {
           if (!topic.id) continue;
           
           // 检查缓存
@@ -428,7 +486,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     };
     
     loadTopics();
-  }, [db, refreshKey, filter]);
+  }, [db, refreshKey, filter, liveTopics]);
 
   useEffect(() => {
     if (groupsFromProps) {
@@ -441,6 +499,58 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       setLoading(true);
     }
   }, [groupsFromProps]);
+
+  // 添加全局文章计数更新事件监听
+  useEffect(() => {
+    const handleGlobalCountUpdate = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        count: number;
+        filter: string;
+        feedId?: string;
+        groupId?: string;
+        topicId?: string;
+      }>;
+      
+      if (!customEvent.detail) return;
+      
+      const { count, feedId: eventFeedId, groupId: eventGroupId, topicId: eventTopicId } = customEvent.detail;
+      
+      console.log('FeedList: 收到全局文章计数更新事件', {
+        count,
+        eventFeedId,
+        eventGroupId,
+        eventTopicId,
+        selectedKeys
+      });
+      
+      // 如果当前选中的是对应的订阅源/分组/主题，更新对应的计数
+      if (selectedKeys.length > 0) {
+        const currentKey = selectedKeys[0];
+        
+        if (eventFeedId && currentKey === `feed-${eventFeedId}`) {
+          // 更新订阅源计数
+          const newDynamicCounts = new Map(dynamicCounts);
+          newDynamicCounts.set(eventFeedId, count);
+          setDynamicCounts(newDynamicCounts);
+          console.log(`FeedList: 更新订阅源 ${eventFeedId} 计数为 ${count}`);
+        }
+        
+        if (eventTopicId && currentKey === `topic-${eventTopicId}`) {
+          // 更新主题计数
+          const newTopicCounts = new Map(topicCounts);
+          newTopicCounts.set(eventTopicId, count);
+          setTopicCounts(newTopicCounts);
+          console.log(`FeedList: 更新主题 ${eventTopicId} 计数为 ${count}`);
+        }
+      }
+    };
+    
+    document.addEventListener('global-article-count-update', handleGlobalCountUpdate);
+    
+    return () => {
+      document.removeEventListener('global-article-count-update', handleGlobalCountUpdate);
+    };
+  }, [selectedKeys, dynamicCounts, topicCounts]);
 
   // 处理图标
   useEffect(() => {
@@ -480,20 +590,30 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
 
     const fetchNavCounts = async () => {
       try {
-        // 获取今日文章数量
+        console.log('===== FeedList: 开始获取导航栏计数 =====');
+        
+        // 获取今日时间范围
         const todayRange = getTodayRange();
+        console.log('今日时间范围:', new Date(todayRange.start), '至', new Date(todayRange.end));
+        
+        // 获取今日文章数量 - 确保排除隐藏的文章
         const todayArticles = await db.articles
           .where('publishDate').between(todayRange.start, todayRange.end, true, true)
-          .filter(article => !article.isHidden)
+          .filter(article => article.isHidden !== true)
           .count();
         
-        // 获取所有文章数量
+        console.log('今日文章数量:', todayArticles);
+        
+        // 获取所有文章数量 - 确保排除隐藏的文章
         const allArticles = await db.articles
-          .filter(article => !article.isHidden)
+          .filter(article => article.isHidden !== true)
           .count();
           
+        console.log('所有文章数量:', allArticles);
+        
         // 获取笔记数量
         const notes = await db.annotations.count();
+        console.log('笔记数量:', notes);
         
         // 获取稍后读文章数量 - 修正查询逻辑
         let readLater = 0;
@@ -504,21 +624,25 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           // 如果出错，尝试使用articles表的isReadLater字段
           readLater = await db.articles
             .where('isReadLater').equals('true')
-            .filter(article => !article.isHidden)
+            .filter(article => article.isHidden !== true)
             .count();
         }
+        
+        console.log('稍后读文章数量:', readLater);
           
         setTodayCount(todayArticles);
         setAllCount(allArticles);
         setNotesCount(notes);
         setReadLaterCount(readLater);
+        
+        console.log('===== FeedList: 导航栏计数获取完成 =====');
       } catch (error) {
         console.error("Error fetching nav counts:", error);
       }
     };
 
     fetchNavCounts();
-  }, [db, triggerArticleListRefresh, feedCountRefreshTrigger]);
+  }, [db, triggerArticleListRefresh, feedCountRefreshTrigger, refreshKey]);
 
   // 新增: 处理路由变化，更新选中状态
   useEffect(() => {
@@ -547,15 +671,12 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     });
   }, []);
   
-  // 添加处理订阅区域展开/收起的函数
-  const handleSubscriptionsExpanderClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+  // 修改handleSubscriptionsExpanderClick和handleTopicsExpanderClick函数
+  const handleSubscriptionsExpanderClick = useCallback(() => {
     setIsSubscriptionsExpanded(prev => !prev);
   }, []);
-  
-  // 添加处理主题区域展开/收起的函数
-  const handleTopicsExpanderClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+
+  const handleTopicsExpanderClick = useCallback(() => {
     setIsTopicsExpanded(prev => !prev);
   }, []);
 
@@ -586,9 +707,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
   
   // 添加函数，处理主题模态框的打开
   const handleAddTopic = () => {
-    setEditingTopic(null);
-    setInitialActiveTab('1');
-    setIsAddTopicModalVisible(true);
+    navigate('/manage?tab=4');
   };
   
   // 添加监听全局添加主题事件
@@ -988,9 +1107,9 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
     return null;
   }
   
-  const sortedGroups = [...groupsFromProps].sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
+  const sortedGroups = [...groups].sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
   const feedsWithoutGroup = processedFeeds.filter(f => !f.groupId).sort((a,b) => (a.order ?? 0) - (b.order ?? 0));
-  const sortedTopics = [...topics].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const sortedTopics = [...liveTopics || []].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 
   const renderFeeds = (feedList: FeedSource[], isGrouped: boolean) => {
     return feedList.map(feed => {
@@ -1017,10 +1136,19 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
           className={`${styles.feedItemWrapper} ${selectedKeys.includes(feedKey) ? styles.selected : ''}`}
           onClick={() => handleSelect(feedKey)}
         >
-          <Dropdown menu={{ items: createFeedMenuItems(feed) }} trigger={['contextMenu']} getPopupContainer={triggerNode => triggerNode.parentElement!}>
+          <Dropdown 
+            menu={{ items: createFeedMenuItems(feed) }} 
+            trigger={['contextMenu']}
+            onOpenChange={handleDropdownVisibleChange}
+            destroyOnHidden
+            overlayClassName={styles.contextMenu}
+          >
             <div
               className={styles.feedItem}
-              onContextMenu={(e) => e.stopPropagation()}
+              onContextMenu={(e) => {
+                e.preventDefault(); // 阻止默认的浏览器右键菜单
+                e.stopPropagation(); // 阻止事件冒泡
+              }}
             >
               {hasIconError || !feed.iconUrl ? (
                 <Avatar size={16} icon={<GlobalOutlined />} className={styles.feedIcon} />
@@ -1088,11 +1216,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
       </div>
 
       {/* 添加订阅区域标题 */}
-      <div className={styles.sectionHeader}>
-        <div 
-          className={styles.sectionTitleWrapper}
-          onClick={(e) => handleSubscriptionsExpanderClick(e)}
-        >
+      <div className={styles.sectionHeader} onClick={() => handleSubscriptionsExpanderClick()}>
+        <div className={styles.sectionTitleWrapper}>
           <span className={styles.sectionTitle}>订阅</span>
           <div className={`${styles.expanderIcon} ${isSubscriptionsExpanded ? styles.expanded : ''}`}>
             <RightOutlined />
@@ -1116,11 +1241,21 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             const hasUnreads = groupTotalCount > 0;
 
             return (
-              <Dropdown key={groupKey} menu={{ items: createGroupMenuItems(group, hasUnreads) }} trigger={['contextMenu']}>
-                <div>
+              <div key={groupKey}>
+                <Dropdown
+                  menu={{ items: createGroupMenuItems(group, hasUnreads) }}
+                  trigger={['contextMenu']}
+                  onOpenChange={handleDropdownVisibleChange}
+                  destroyOnHidden
+                  overlayClassName={styles.contextMenu}
+                >
                   <div
                     className={`${styles.groupItem} ${selectedKeys.includes(groupKey) ? styles.selected : ''}`}
                     onClick={() => handleSelect(groupKey)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
                   >
                     <div
                       className={`${styles.expanderIcon} ${isExpanded ? styles.expanded : ''}`}
@@ -1131,14 +1266,14 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
                     <span className={styles.title}>{group.name}</span>
                     {hasUnreads && <span className={styles.count}>{groupTotalCount}</span>}
                   </div>
+                </Dropdown>
 
-                  {isExpanded && (
-                    <div className={styles.feedListWrapper}>
-                      {renderFeeds(feedsInGroup, true)}
-                    </div>
-                  )}
-                </div>
-              </Dropdown>
+                {isExpanded && (
+                  <div className={styles.feedListWrapper}>
+                    {renderFeeds(feedsInGroup, true)}
+                  </div>
+                )}
+              </div>
             );
           })}
 
@@ -1152,11 +1287,8 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         <div className={styles.separator} />}
       
       {/* 主题阅读部分 - 修改为与订阅区域相同的逻辑 */}
-      <div className={styles.sectionHeader}>
-        <div 
-          className={styles.sectionTitleWrapper}
-          onClick={(e) => handleTopicsExpanderClick(e)}
-        >
+      <div className={styles.sectionHeader} onClick={() => handleTopicsExpanderClick()}>
+        <div className={styles.sectionTitleWrapper}>
           <span className={styles.sectionTitle}>主题</span>
           <div className={`${styles.expanderIcon} ${isTopicsExpanded ? styles.expanded : ''}`}>
             <RightOutlined />
@@ -1175,10 +1307,21 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
             const TopicIcon = getIconByName(topic.iconName);
             
             return (
-              <Dropdown key={topicKey} menu={{ items: createTopicMenuItems(topic, hasUnreads) }} trigger={['contextMenu']}>
+              <Dropdown 
+                key={topicKey} 
+                menu={{ items: createTopicMenuItems(topic, hasUnreads) }} 
+                trigger={['contextMenu']}
+                onOpenChange={handleDropdownVisibleChange}
+                destroyOnHidden
+                overlayClassName={styles.contextMenu}
+              >
                 <div
                   className={`${styles.topicItem} ${selectedKeys.includes(topicKey) ? styles.selected : ''}`}
                   onClick={() => handleSelect(topicKey)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
                 >
                   <div className={styles.topicIconWrapper}>
                     <TopicIcon className={styles.topicIcon} />
@@ -1209,7 +1352,7 @@ const FeedList: React.FC<FeedListProps> = ({ collapsed, feeds: feedsFromProps, g
         <EditFeedModal
           feed={editingFeedData}
           open={isEditFeedModalVisible}
-          groups={groupsFromProps}
+          groups={groups}
           onSuccess={handleEditFeedSuccess}
           onCancel={handleEditFeedCancel}
         />

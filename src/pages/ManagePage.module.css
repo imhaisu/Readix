@@ -1,0 +1,115 @@
+.manageContainer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: auto;
+  background-color: #ffffff;
+}
+
+/* 添加可拖拽区域 */
+.dragArea {
+  width: 100%;
+  height: 8px;
+  -webkit-app-region: drag;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 4px 16px 0;
+  -webkit-app-region: drag;
+}
+
+/* 确保按钮可点击 */
+.backButton {
+  -webkit-app-region: no-drag;
+  margin-right: 10px;
+}
+
+.pageTitle {
+  margin: 0 !important;
+  font-weight: 500;
+  font-size: 15px !important;
+  line-height: 1.2 !important;
+}
+
+.contentWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 16px;
+  position: relative;
+}
+
+.manageTabs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.manageTabs :global(.ant-tabs-content) {
+  height: 100%;
+  flex: 1;
+}
+
+.manageTabs :global(.ant-tabs-tab) {
+  padding: 4px 10px;
+  font-size: 13px;
+  margin-right: 4px !important;
+  transition: all 0.2s ease;
+}
+
+.manageTabs :global(.ant-tabs-tab-active) {
+  background: #f0f5ff;
+}
+
+.manageTabs :global(.ant-tabs-nav) {
+  margin-bottom: 8px !important;
+}
+
+/* 标签页内容样式 */
+.tabLabel {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+}
+
+.tabIcon {
+  font-size: 13px;
+  margin-right: 4px;
+}
+
+.tabContent {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: auto;
+}
+
+/* 主题图标选择区样式优化 */
+.tabContent :global(.ant-btn) {
+  margin: 4px;
+  transition: all 0.3s;
+}
+
+/* 添加卡片样式 */
+.tabContent :global(.ant-card) {
+  border: none;
+  box-shadow: none;
+}
+
+/* 确保其他控件不可拖拽 */
+.tabContent,
+.manageTabs,
+.manageTabs :global(.ant-tabs-nav),
+.manageTabs :global(.ant-tabs-tab) {
+  -webkit-app-region: no-drag;
+} 

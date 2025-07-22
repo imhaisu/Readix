@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { RssDatabase, initializeDatabaseSingleton, dbInstance, isDbInitialized } from '../db/database';
 
+// 创建一个全局事件，用于强制刷新 FeedList
+export const FORCE_FEEDLIST_REFRESH_EVENT = 'force-feedlist-refresh';
+
+// 创建一个工具函数，用于触发强制刷新事件
+export const forceFeedListRefresh = () => {
+  console.log('===== 触发强制刷新 FeedList 事件 =====');
+  const event = new CustomEvent(FORCE_FEEDLIST_REFRESH_EVENT);
+  document.dispatchEvent(event);
+  console.log('===== 事件已分发 =====');
+};
+
 // 数据库上下文类型
 interface DatabaseContextType {
   db: RssDatabase | null;
@@ -11,6 +22,7 @@ interface DatabaseContextType {
   triggerFeedCountRefresh: () => void;
   initialLoadRefreshed: boolean;
   setInitialLoadRefreshed: () => void;
+  forceFeedListRefresh: () => void; // 添加强制刷新 FeedList 的方法
 }
 
 // 创建上下文
@@ -66,7 +78,8 @@ export const DatabaseProvider: React.FC<DatabaseProviderProps> = ({ children }) 
     feedCountRefreshTrigger,
     triggerFeedCountRefresh,
     initialLoadRefreshed,
-    setInitialLoadRefreshed: handleSetInitialLoadRefreshed
+    setInitialLoadRefreshed: handleSetInitialLoadRefreshed,
+    forceFeedListRefresh // 添加强制刷新 FeedList 的方法
   };
 
   return <DatabaseContext.Provider value={value}>{children}</DatabaseContext.Provider>;

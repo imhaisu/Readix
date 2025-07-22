@@ -1,0 +1,30 @@
+/* 添加全局拖拽区域样式 */
+.app-drag-region {
+  -webkit-app-region: drag;
+}
+
+/* 全局顶部拖拽区域 */
+.app-drag-region-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 10px;
+  -webkit-app-region: drag;
+  z-index: 1000;
+}
+
+/* 确保按钮和其他交互元素不可拖拽 */
+button, 
+input,
+a, 
+[role="button"],
+.ant-tabs-tab,
+.ant-select,
+.ant-radio-button-wrapper,
+.ant-checkbox-wrapper,
+.ant-input,
+.ant-btn,
+.ant-dropdown-trigger {
+  -webkit-app-region: no-drag !important;
+}

@@ -16,12 +16,14 @@ import PulsingLoader from './PulsingLoader';
 import { debounce } from 'lodash';
 import { useArticleListManager } from '../hooks/useArticleListManager';
 import { usePrevious } from '../hooks/usePrevious';
-import { FixedSizeList, ListChildComponentProps } from 'react-window';
+import { FixedSizeList, ListChildComponentProps, areEqual } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { motion } from 'framer-motion';
 
 // 添加图标错误缓存
 const iconErrorCache = new Map<string, boolean>();
+// 添加图片错误缓存
+const imageErrorCache = new Map<string, boolean>();
 
 // 辅助函数：格式化日期
 const formatDate = (date: number | Date): string => {
@@ -68,6 +70,7 @@ const Row = memo(({ index, style, data }: ListChildComponentProps) => {
     feedInfoMap,
     handleArticleClick,
     createContextMenuItems,
+    updateImageErrorCache,
   } = data;
   
   const article = articles[index];
@@ -112,13 +115,26 @@ const Row = memo(({ index, style, data }: ListChildComponentProps) => {
   const articleSummary = article.summary || extractFirstParagraphText(article.content) || article.contentText || '没有摘要';
   const articleImage = article.imageUrl || extractFirstImage(article.content);
   const contextMenuItems = createContextMenuItems(article);
+  
+  // 检查图片是否已标记为错误
+  const hasImageError = articleImage ? imageErrorCache.get(articleImage) : false;
+
+  // 处理图片加载错误
+  const handleImageError = () => {
+    if (articleImage) {
+      imageErrorCache.set(articleImage, true);
+      // 调用父组件提供的函数来更新缓存并触发重新渲染
+      updateImageErrorCache(articleImage);
+      return false;
+    }
+  };
 
   return (
     <div style={style}>
       <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: "spring", damping: 15, stiffness: 100 }}
+        initial={{ opacity: 0.8 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.2 }}
       >
         <Dropdown menu={{ items: contextMenuItems }} trigger={['contextMenu']}>
           <div
@@ -154,9 +170,15 @@ const Row = memo(({ index, style, data }: ListChildComponentProps) => {
                   <p className={`${styles.summaryV5} desc-lines-2`}>{articleSummary}</p>
                 )}
               </div>
-              {articleImage && (
+              {articleImage && !hasImageError && (
                 <div className={styles.imageContainerV5}>
-                  <img src={articleImage} alt={article.title || '文章图片'} className={styles.imageV5} loading="lazy" />
+                  <img 
+                    src={articleImage} 
+                    alt={article.title || '文章图片'} 
+                    className={styles.imageV5} 
+                    loading="lazy" 
+                    onError={handleImageError} 
+                  />
                 </div>
               )}
             </div>
@@ -184,6 +206,9 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<FixedSizeList>(null);
   const selectArticleRef = useRef(onSelectArticle);
+  
+  // 添加状态变量，用于触发重新渲染
+  const [imageErrorRefresh, setImageErrorRefresh] = useState(0);
   
   useEffect(() => {
     selectArticleRef.current = onSelectArticle;
@@ -240,7 +265,7 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     if (selectedArticleId && prevSelectedArticleId !== selectedArticleId) {
       scrollToArticle(selectedArticleId, 'smart');
     }
-  }, [selectedArticleId, prevSelectedArticleId, scrollToArticle]);
+  }, [selectedArticleId, prevSelectedArticleId, scrollToArticle, imageErrorRefresh]);
 
   const handleArticleClick = (articleId: string) => {
     selectArticleRef.current(articleId);
@@ -310,12 +335,24 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
     }
   ], [toggleArticleReadStatus, handleToggleStar, handleMarkArticlesAsRead, handleMarkAboveAsRead, handleMarkBelowAsRead, handleCopyLink]);
 
+  // 处理图片错误并更新缓存
+  const updateImageErrorCache = useCallback((imageUrl: string) => {
+    // 设置缓存
+    imageErrorCache.set(imageUrl, true);
+    // 增加计数器触发重新渲染
+    setImageErrorRefresh(prev => prev + 1);
+    
+    // 强制整个列表重新渲染
+    // 我们不需要额外操作，React会因为状态变化而重新渲染
+  }, []);
+
   const itemData = {
     articles: displayedArticles,
     selectedArticleId,
     feedInfoMap,
     handleArticleClick,
     createContextMenuItems,
+    updateImageErrorCache, // 添加到传递给Row的数据中
   };
   
   const ITEM_HEIGHT = 107; // 基于CSS的计算结果
@@ -352,6 +389,11 @@ const ArticleList = memo(forwardRef<ArticleListHandle, ArticleListProps>(({
               itemData={itemData}
               ref={listRef}
               outerRef={containerRef}
+              overscanCount={5} // 增加预渲染的项目数量，减少滚动时的闪烁
+              initialScrollOffset={0}
+              style={{ willChange: 'transform' }} // 启用 GPU 加速
+              // 添加 key 属性，确保图片错误时列表会重新渲染
+              key={`article-list-${imageErrorRefresh}`}
             >
               {Row}
             </FixedSizeList>

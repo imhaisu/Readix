@@ -16,6 +16,7 @@ import { diagnoseTopicFilters } from './utils/filterUtils';
 import { message } from 'antd';
 import { v4 as uuidv4 } from 'uuid';
 import { diagnoseArticleTopicFilter } from './utils/filterUtils';
+import './appDrag.css'; // 导入拖拽样式
 
 // 全局诊断辅助工具
 declare global {
