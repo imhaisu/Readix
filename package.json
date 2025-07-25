@@ -95,12 +95,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "你的GitHub用户名",
-        "repo": "readix"
-      },
-      {
-        "provider": "generic",
-        "url": "https://你的更新服务器URL/"
+        "owner": "imhaisu",
+        "repo": "NewReader"
       }
     ]
   }
