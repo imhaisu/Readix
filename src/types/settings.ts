@@ -3,6 +3,9 @@ export interface Settings {
     appearance: AppearanceSettings;
     advanced: AdvancedSettings;
     layout: LayoutSettings;
+    features: {
+        // 已移除useNewFeedList设置项，因为现在只使用新版组件
+    };
 }
 
 export interface GeneralSettings {
@@ -54,6 +57,7 @@ export interface LayoutSettings {
     articleListWidth: number; // 新增：文章列表的像素宽度
 }
 
+// 默认设置
 export const defaultSettings: Settings = {
     general: {
         syncOnStartup: true,
@@ -106,5 +110,8 @@ export const defaultSettings: Settings = {
         sidebarLayout: [20, 80],
         mainLayout: [30, 70],
         articleListWidth: 350, // 新增默认值
+    },
+    features: {
+        // 已移除useNewFeedList设置项
     },
 };

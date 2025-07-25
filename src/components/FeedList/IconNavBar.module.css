@@ -1,0 +1,94 @@
+/* 精致的图标导航栏样式 */
+.iconNavBar {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  padding: 0 6px; /* 减少左右内边距 */
+  margin: -12px 0 10px 0; /* 更进一步向上移动，调整为-12px */
+  background: transparent;
+  box-shadow: none;
+  position: relative;
+  z-index: 10; /* 增加层级，确保显示在其他元素之上 */
+}
+
+.iconNavItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 3px 6px; /* 减小上下内边距 */
+  min-width: 34px;
+  position: relative;
+}
+
+.iconNavItem:hover {
+  transform: translateY(-1px);
+}
+
+.iconNavItem:hover .iconNavIcon {
+  opacity: 0.8;
+}
+
+/* 每个导航项有自己的颜色 */
+.todayItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(22, 119, 255, 0.1); /* 蓝色背景 */
+  color: #1677ff; /* 蓝色 - 日历色 */
+}
+
+.allItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(82, 196, 26, 0.1); /* 绿色背景 */
+  color: #52c41a; /* 绿色 - 全部内容 */
+}
+
+.notesItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(114, 46, 209, 0.1); /* 紫色背景 */
+  color: #722ed1; /* 紫色 - 笔记色 */
+}
+
+.readLaterItem.iconNavItemActive .iconNavIcon {
+  background-color: rgba(250, 140, 22, 0.1); /* 橙色背景 */
+  color: #fa8c16; /* 橙色 - 稍后读 */
+}
+
+.iconNavItemActive .iconNavCount {
+  font-weight: 600;
+}
+
+.todayItem.iconNavItemActive .iconNavCount {
+  color: #1677ff;
+}
+
+.allItem.iconNavItemActive .iconNavCount {
+  color: #52c41a;
+}
+
+.notesItem.iconNavItemActive .iconNavCount {
+  color: #722ed1;
+}
+
+.readLaterItem.iconNavItemActive .iconNavCount {
+  color: #fa8c16;
+}
+
+.iconNavIcon {
+  font-size: 15px; /* 稍微减小图标大小 */
+  color: #8c8c8c;
+  margin-bottom: 2px; /* 减小与计数的间距 */
+  transition: all 0.2s;
+  border-radius: 50%; 
+  padding: 5px;
+  width: 24px; /* 减小图标容器大小 */
+  height: 24px; /* 减小图标容器大小 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconNavCount {
+  font-size: 10px; /* 减小计数字体大小 */
+  font-weight: 500;
+  color: #595959;
+  line-height: 1;
+} 

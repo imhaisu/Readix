@@ -391,6 +391,8 @@ const SettingsPage: React.FC = () => {
               <Form.Item name="maxArticlesPerFeed" label="每个订阅源最大文章数" tooltip="设置为0表示无限制。当订阅源的文章数超过此限制时，最旧的文章将被自动删除。">
                 <InputNumber min={0} style={{ width: '100%' }} />
               </Form.Item>
+              
+              {/* 移除订阅源列表版本选择开关，因为现在只使用新版组件 */}
             </div>
             
             <Divider style={{ margin: '20px 0' }} />

@@ -1,0 +1,202 @@
+/* 订阅区域样式 */
+.groupItem, .feedItem {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px; /* 字体调小为13px */
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 28px; /* 减小高度 */
+  position: relative;
+  padding-right: 42px; /* 为计数预留空间 */
+}
+
+.groupItem {
+  font-size: 14px; /* 增加分组字体大小 */
+  margin-bottom: 1px; /* 增加底部间距 */
+}
+
+.groupItem:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.groupItem.selected {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.groupItem.selected:hover {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* 确保悬浮时文字颜色清晰可见 */
+.groupItem:hover .title, .feedItemWrapper:hover .title {
+  color: var(--text-primary, #000);
+}
+
+.groupItem.selected .title, .feedItemWrapper.selected .title {
+  color: var(--text-primary, #000);
+  font-weight: 400;
+}
+
+/* Title takes up all available space */
+.title {
+  flex-grow: 1;
+  padding: 0 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px; /* 调整为13px */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  /* 移除宽度限制，让文本尽可能占用空间 */
+}
+
+.groupItem .title {
+  font-size: 14px; /* 增加分组标题字体大小 */
+  font-weight: 500; /* 加粗分组标题 */
+}
+
+/* Count is fixed on the right */
+.count {
+  flex-shrink: 0;
+  min-width: 30px; /* 增加宽度，确保有足够空间 */
+  text-align: right; /* 右对齐文本 */
+  font-size: 12px;
+  color: #888;
+  background-color: var(--badge-bg-color, transparent);
+  color: var(--badge-text-color, #888);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  margin-left: auto; /* 确保它总是在右侧 */
+  position: absolute; /* 使用绝对定位 */
+  right: 8px; /* 距离右侧固定距离 */
+  display: flex;
+  justify-content: center; /* 水平居中内容 */
+  align-items: center; /* 垂直居中内容 */
+  transition: none;
+  z-index: 1; /* 确保数量显示在文本上方 */
+}
+
+.selected .count {
+  color: #333;
+  font-weight: 500;
+}
+
+/* 调整箭头与分组的距离 */
+.expanderIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px; /* 和title保持4px的间距 */
+  width: 8px;
+  height: 8px;
+  transition: all 0.2s;
+  opacity: 0.6;
+  flex-shrink: 0;
+  font-size: 10px; /* 调整为与旧版一致的字体大小 */
+  color: #999;
+  padding: 2px; /* 增加可点击区域 */
+}
+
+.expanderIcon:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+  color: #444;
+}
+
+.expanderIcon.expanded {
+  transform: rotate(90deg);
+}
+
+/* Feed-specific styles */
+.feedIcon {
+  flex-shrink: 0;
+  width: 16px !important;
+  height: 16px !important;
+  margin-right: 2px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 3px !important;
+  overflow: hidden !important;
+}
+
+/* Feed item wrapper styles */
+.feedItemWrapper {
+  border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
+  display: block; /* 确保元素是块级元素 */
+  overflow: visible; /* 确保内容不被裁剪 */
+  position: relative; /* 使用相对定位 */
+  margin-bottom: 2px; /* 增加订阅源之间的间距 */
+}
+
+.feedItemWrapper:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.feedListWrapper .feedItemWrapper:hover {
+  margin-left: -18px; /* 扩展到左边缘，抵消父容器的padding-left */
+  padding-left: 18px; /* 保持内容位置不变 */
+  width: calc(100% + 18px); /* 确保宽度覆盖到右边缘 */
+  border-radius: 6px; /* 恢复圆角 */
+}
+
+.feedItemWrapper.selected {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.feedListWrapper .feedItemWrapper.selected {
+  margin-left: -18px; /* 扩展到左边缘，抵消父容器的padding-left */
+  padding-left: 18px; /* 保持内容位置不变 */
+  width: calc(100% + 18px); /* 确保宽度覆盖到右边缘 */
+  border-radius: 6px; /* 恢复圆角 */
+}
+
+.feedItemWrapper.selected:hover {
+  background-color: rgba(0, 0, 0, 0.15);
+}
+
+/* Feed item内部样式 */
+.feedItem {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px; /* 调整为13px */
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 28px; /* 减小高度 */
+  position: relative;
+  padding-right: 42px; /* 为计数预留空间 */
+}
+
+/* This is the key for indenting feeds within a group */
+.feedListWrapper {
+  padding-left: 18px; /* 保持与旧版一样的缩进距离 */
+  margin-top: 1px; /* 减少顶部边距 */
+  margin-bottom: 4px; /* 减少底部边距 */
+  position: relative; /* 确保子元素可以相对于此定位 */
+}
+
+/* 上下文菜单样式 */
+.contextMenu :global(.ant-dropdown-menu-item) {
+  padding: 3px 14px;
+}
+
+.contextMenu :global(.ant-dropdown-menu-title-content) {
+  font-size: 12px;
+}
+
+.contextMenu :global(.ant-dropdown-menu-item-divider) {
+  margin: 4px 0;
+}
+
+.contextMenu :global(.ant-dropdown-menu-item .anticon) {
+  font-size: 14px;
+} 

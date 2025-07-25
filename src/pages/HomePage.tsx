@@ -97,7 +97,11 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   const PULL_TO_REFRESH_THRESHOLD = 250;
 
   const refreshDependenciesRef = useRef({ db, feedId, groupId, triggerArticleListRefresh });
+  // 添加本地状态控制初始化刷新，避免使用initialLoadRefreshed
+  const [hasLocalInitialRefreshed, setHasLocalInitialRefreshed] = useState(false);
+  const refreshCountRef = useRef(0);
   const lastRefreshTimeRef = useRef<number>(0);
+  const MIN_REFRESH_INTERVAL = 5000; // 最小刷新间隔5秒
   
   // 确保 refreshDependenciesRef 总是包含最新的值
   useEffect(() => {
@@ -267,13 +271,23 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
 
   }, [filter, feedId, groupId, isTodayView]);
   
+  // 修改刷新函数，添加频率限制
   const handleRefreshAll = useCallback(async (options?: { silent?: boolean }) => {
     // 防抖：避免短时间内多次刷新
     const now = Date.now();
-    if (now - lastRefreshTimeRef.current < 5000) { // 5秒内不重复刷新
+    if (now - lastRefreshTimeRef.current < MIN_REFRESH_INTERVAL) { // 5秒内不重复刷新
+      console.log('刷新间隔太短，跳过此次刷新');
       return;
     }
+    
+    // 限制刷新频率，启动后最多允许2次自动刷新
+    if (!options?.silent && refreshCountRef.current >= 2) {
+      console.log('已达到最大自动刷新次数限制，跳过此次刷新');
+      return;
+    }
+    
     lastRefreshTimeRef.current = now;
+    refreshCountRef.current += 1;
 
     if (!db) return;
     
@@ -358,7 +372,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         }
       }
     }
-  }, [loadFeeds]);
+  }, [db, loadFeeds, triggerArticleListRefresh]);
   
   const handleLocalListRefresh = useCallback(() => {
     // 增加列表刷新键值，强制重新渲染列表
@@ -379,16 +393,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     };
   }, [handleLocalListRefresh]);
 
+  // 使用本地状态替代initialLoadRefreshed
   useEffect(() => {
-    if (dbInitialized && isTodayView) {
-      // 只有在初始加载或明确要求刷新时才进行刷新
-      if (!initialLoadRefreshed) {
+    if (dbInitialized && isTodayView && !hasLocalInitialRefreshed) {
         console.log('===== HomePage: 初始加载今日视图，触发刷新 =====');
+      // 使用setTimeout延迟执行，避免启动时的多次刷新
+      const timerId = setTimeout(() => {
         handleRefreshAll({ silent: true });
-        setInitialLoadRefreshed();
+        setHasLocalInitialRefreshed(true);
+      }, 1500); // 延迟1.5秒执行
+      
+      return () => clearTimeout(timerId);
       }
-    }
-  }, [dbInitialized, isTodayView, initialLoadRefreshed, setInitialLoadRefreshed, handleRefreshAll]);
+  }, [dbInitialized, isTodayView, hasLocalInitialRefreshed, handleRefreshAll]);
 
   useEffect(() => {
     if (searchModeActive && searchInputRef.current) {

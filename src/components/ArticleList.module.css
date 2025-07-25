@@ -2,11 +2,38 @@
   outline: none;
 }
 
+/* 列表切换过渡动画 - 更轻量级版本 */
+@keyframes fadeInList {
+  from {
+    opacity: 0.8;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 渐隐动画 */
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 平滑过渡的虚拟列表 */
+.virtualList {
+  transition: opacity 0.15s ease;
+  will-change: transform, opacity;
+  backface-visibility: hidden; /* 加速渲染 */
+}
+
+/* 列表容器增强 - 移除相对定位提高性能 */
 .scrollableArticleListContainer {
-  height: 100%; /* 确保它填满父容器的高度 */
-  overflow-y: auto; /* 当内容超出时显示垂直滚动条 */
-  padding: 2px 0; /* 增加上下内边距，解决卡片遮挡问题 */
-  box-sizing: border-box; /* padding 不会增加元素的总宽度/高度 */
+  height: 100%;
+  overflow-y: auto;
+  padding: 0;
+  box-sizing: border-box;
+  contain: strict; /* 提高滚动性能 */
 }
 
 /* 添加可拖拽区域 */
@@ -23,6 +50,199 @@
 /* =========================================== */
 /* V5 列表视图样式 (ArticleList.module.css) */
 /* =========================================== */
+
+/* 添加文章条目动效 */
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 进度条动画 */
+@keyframes loadingBar {
+  0% { width: 0; opacity: 0.8; }
+  50% { width: 70%; opacity: 1; }
+  100% { width: 100%; opacity: 0; }
+}
+
+/* 改进的进度条 */
+.progressBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--primary-color, #1677ff), var(--primary-light, #69c0ff));
+  animation: loadingBar 1.5s ease-in-out forwards;
+  z-index: 100;
+  box-shadow: 0 0 3px rgba(102, 153, 255, 0.5);
+}
+
+/* 平滑列表切换动画，带有波浪效果 */
+.animatedListItem {
+  will-change: transform, opacity;
+}
+
+/* 列表切换刷新指示器 */
+.refreshingIndicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 50%, #1677ff 100%);
+  background-size: 200% 100%;
+  animation: loadingAnimation 1.5s infinite linear;
+  z-index: 100;
+  box-shadow: 0 0 5px rgba(102, 153, 255, 0.3);
+}
+
+@keyframes loadingAnimation {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* 优化空状态的动画效果 */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  animation: fadeIn 0.3s ease forwards; /* 加快动画 */
+  opacity: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 改进列表项动效 */
+.animatedListItem {
+  animation: slideInUp 0.3s ease forwards;
+  will-change: transform, opacity;
+}
+
+.readAnimateOut {
+  animation: fadeOut 0.5s ease forwards;
+}
+
+/* 列表项基本样式 */
+.listItemV5 {
+  padding: 12px;
+  border-bottom: 1px solid var(--divider-color, #f0f0f0);
+  cursor: pointer;
+  background-color: var(--card-background, #fff);
+  height: 100%;
+  box-sizing: border-box;
+  transition: background-color 0.15s ease; /* 加快过渡动画 */
+  will-change: transform, opacity, background-color;
+  contain: layout style; /* 提高渲染性能 */
+}
+
+/* 改进的已读项目样式 */
+.readItemV5 {
+  opacity: 0.75;
+  border-left: 3px solid transparent;
+  transition: all 0.15s ease; /* 加快过渡动画 */
+}
+
+/* 改进的未读项目样式 */
+.unreadItemV5 {
+  border-left: 3px solid #1677ff;
+  transition: border-color 0.15s ease; /* 加快过渡动画 */
+}
+
+/* 重新定义列表项样式，优化动效体验 */
+.listItemV5 {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  
+  background-color: transparent;
+  border: none;
+  border-radius: 8px;
+  margin: 0 8px 2px 8px; 
+  padding: 10px;
+  box-shadow: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform, opacity, background-color;
+  transform-origin: center top;
+}
+
+.listItemV5:hover {
+  background-color: var(--hover-bg-color);
+}
+
+.selectedItemV5 {
+  background-color: var(--selected-bg-color);
+  border: none;
+  box-shadow: none;
+}
+
+/* 优化已读项的视觉效果 */
+.readItemV5 {
+  border-left: 3px solid transparent;
+  opacity: 0.75;
+  transition: all 0.3s ease;
+}
+
+.readItemV5:hover {
+  opacity: 0.9;
+}
+
+/* 添加未读指示器 */
+.unreadItemV5 {
+  border-left: 3px solid #1677ff;
+  transition: border-color 0.3s ease;
+}
+
+/* 刷新指示器优化 */
+.refreshingIndicator {
+  height: 2px;
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 50%, #1677ff 100%);
+  background-size: 200% 100%;
+  animation: loadingAnimation 1.5s infinite linear;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+}
+
+@keyframes loadingAnimation {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* 改进空状态样式 */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  opacity: 0;
+  animation: fadeIn 0.5s ease forwards;
+  animation-delay: 0.3s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 
 /* 列表项整体 */
 .listItemV5 {
@@ -278,4 +498,21 @@
   display: flex;
   justify-content: center;
   align-items: center;
+} 
+
+.loadingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+}
+
+body[data-theme='dark'] .loadingOverlay {
+  background-color: rgba(0, 0, 0, 0.5);
 } 

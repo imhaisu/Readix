@@ -671,7 +671,13 @@ const SidebarLayout: React.FC = () => {
                 <span className={styles.feedsTitle}>订阅</span>
               )} */}
             </div>
-            <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
+            <div className={styles.feedListContainer}>
+              {/* 顶部内容可以根据需要添加 */}
+              {/* <div className={styles.topContent}>
+                {显示文章统计或其他内容}
+              </div> */}
+              <FeedList feeds={feeds} groups={groups} collapsed={isPanelCollapsed} onRefreshFeeds={handleRefreshAll} />
+            </div>
           </div>
 
           <div className={`${styles.siderFooter} ${isPanelCollapsed ? styles.siderFooterCollapsed : ''}`}>
