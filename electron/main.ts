@@ -372,7 +372,7 @@ function configureAutoUpdater() {
   console.log('[Main Process] 当前应用版本:', app.getVersion());
   console.log('[Main Process] 更新日志路径:', log.transports.file.getFile().path);
   
-  // 添加详细的错误日志
+  // 添加详细的错误日志，但向用户展示友好的错误信息
   autoUpdater.on('error', (err) => {
     console.error('[Main Process] 更新出错:', err);
     console.error('[Main Process] 错误详情:', err.toString());
@@ -387,7 +387,33 @@ function configureAutoUpdater() {
     if (err.message) {
       console.error('[Main Process] 错误消息:', err.message);
     }
-    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message });
+    
+    // 检查错误类型，转换为用户友好的消息
+    let userFriendlyMessage = '检查更新失败，请稍后再试';
+    
+    // 判断是否为404错误（latest-mac.yml或其他文件未找到）
+    if (err.message && (
+        err.message.includes('404') || 
+        err.message.includes('latest-mac.yml') ||
+        err.message.includes('Cannot find') ||
+        err.message.includes('update info'))) {
+      // 向用户显示"当前已是最新版本"而非错误
+      console.log('[Main Process] 发现404错误，转换为友好提示');
+      mainWindow?.webContents.send('update-status', { status: 'not-available', message: '当前已是最新版本' });
+      return;
+    }
+    
+    // 其他错误类型的友好处理
+    if (err.message && err.message.includes('net::ERR_INTERNET_DISCONNECTED')) {
+      userFriendlyMessage = '网络连接问题，请检查您的网络设置';
+    } else if (err.message && err.message.includes('net::ERR_CONNECTION_TIMED_OUT')) {
+      userFriendlyMessage = '连接超时，请检查您的网络设置';
+    }
+    
+    mainWindow?.webContents.send('update-status', { 
+      status: 'error', 
+      error: userFriendlyMessage 
+    });
   });
 
   // 设置更新事件监听
@@ -423,15 +449,27 @@ function configureAutoUpdater() {
       }).then(({ response }) => {
         if (response === 0) {
           // 用户确认下载，开始下载更新
-          autoUpdater.downloadUpdate();
+          autoUpdater.downloadUpdate().catch(err => {
+            console.error('[Main Process] 下载更新失败:', err);
+            // 下载失败时也提供友好提示
+            mainWindow?.webContents.send('update-status', { 
+              status: 'error', 
+              error: '下载更新失败，请稍后再试' 
+            });
+          });
         }
+      }).catch(err => {
+        console.error('[Main Process] 显示对话框失败:', err);
       });
     }
   });
 
   autoUpdater.on('update-not-available', (info) => {
     console.log('[Main Process] 已是最新版本');
-    mainWindow?.webContents.send('update-status', { status: 'not-available' });
+    mainWindow?.webContents.send('update-status', { 
+      status: 'not-available',
+      message: '当前已是最新版本' 
+    });
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -462,6 +500,8 @@ function configureAutoUpdater() {
           // 用户确认安装，退出并安装更新
           autoUpdater.quitAndInstall(false, true);
         }
+      }).catch(err => {
+        console.error('[Main Process] 显示更新下载完成对话框失败:', err);
       });
     }
   });
@@ -472,6 +512,8 @@ function configureAutoUpdater() {
     try {
       autoUpdater.checkForUpdates().catch(err => {
         console.error('[Main Process] 检查更新失败:', err);
+        // 错误时不向用户显示技术错误，而是统一友好提示
+        // 错误处理会通过autoUpdater.on('error')事件处理
       });
     } catch (error) {
       console.error('[Main Process] 检查更新过程中出现异常:', error);

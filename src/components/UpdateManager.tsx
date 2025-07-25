@@ -35,22 +35,30 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
     // 监听来自主进程的更新状态消息
     const handleUpdateStatus = (event: any, data: any) => {
       console.log('收到更新状态:', data);
+      
+      // 处理状态
       setStatus(data.status);
       
+      // 处理自定义消息
       if (data.message) {
         setStatusMessage(data.message);
       } else {
         setStatusMessage(null);
       }
       
-      if (data.status === 'error') {
-        setError(data.error || '更新过程中出现错误');
+      // 处理错误信息
+      if (data.status === 'error' && data.error) {
+        setError(data.error);
+      } else {
+        setError(null);
       }
       
+      // 处理下载进度
       if (data.status === 'downloading' && data.progress) {
         setProgress(data.progress);
       }
       
+      // 处理版本信息
       if (data.status === 'available') {
         setUpdateInfo({
           version: data.version,
@@ -73,8 +81,16 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
   }, []);
 
   const handleCheckForUpdates = async () => {
-    if (!window.electron || !window.electron.checkForUpdatesManual) {
+    if (!window.electron) {
       setError('更新功能仅在Electron环境下可用');
+      return;
+    }
+
+    // 优先使用manual检查，如果不存在则使用普通检查
+    const checkFunction = window.electron.checkForUpdatesManual || window.electron.checkForUpdates;
+    
+    if (!checkFunction) {
+      setError('更新检查功能不可用');
       return;
     }
 
@@ -83,15 +99,15 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
     setStatus('checking');
     
     try {
-      const result = await window.electron.checkForUpdatesManual();
+      const result = await checkFunction();
+      // 结果处理已在handleUpdateStatus中进行，这里只需额外处理错误
       if (!result.success && result.error) {
         setError(result.error);
         setStatus('error');
-      } else if (result.message) {
-        setStatusMessage(result.message);
       }
     } catch (err: any) {
-      setError(err.message || '检查更新时发生错误');
+      console.error('检查更新出错:', err);
+      setError('检查更新时发生错误，请稍后再试');
       setStatus('error');
     } finally {
       setIsChecking(false);
@@ -148,7 +164,7 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         return <Alert message="更新已下载，将在下次启动时安装" type="success" showIcon />;
         
       case 'error':
-        // 显示友好错误提示
+        // 显示友好错误提示，使用info类型而非error
         return <Alert message="检查更新" description={error || '检查更新失败，请稍后再试'} type="info" showIcon />;
         
       case 'not-available':
