@@ -353,14 +353,30 @@ function configureAutoUpdater() {
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
 
-  // 日志设置
-  autoUpdater.logger = console;
   // 记录日志级别
   console.log('[Main Process] 配置自动更新...');
+  console.log('[Main Process] 当前应用版本:', app.getVersion());
+  
+  // 添加详细的错误日志
+  autoUpdater.on('error', (err) => {
+    console.error('[Main Process] 更新出错:', err);
+    console.error('[Main Process] 错误详情:', err.toString());
+    if (err.stack) {
+      console.error('[Main Process] 错误堆栈:', err.stack);
+    }
+    if (err.cause) {
+      console.error('[Main Process] 错误原因:', err.cause);
+    }
+    if (err.message) {
+      console.error('[Main Process] 错误消息:', err.message);
+    }
+    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message });
+  });
 
   // 设置更新事件监听
   autoUpdater.on('checking-for-update', () => {
     console.log('[Main Process] 正在检查更新...');
+    console.log('[Main Process] 更新URL:', autoUpdater.getFeedURL());
     mainWindow?.webContents.send('update-status', { status: 'checking' });
   });
 
@@ -394,11 +410,6 @@ function configureAutoUpdater() {
   autoUpdater.on('update-not-available', (info) => {
     console.log('[Main Process] 已是最新版本');
     mainWindow?.webContents.send('update-status', { status: 'not-available' });
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[Main Process] 更新出错:', err);
-    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message });
   });
 
   autoUpdater.on('download-progress', (progressObj) => {
@@ -436,9 +447,13 @@ function configureAutoUpdater() {
   // 启动时检查更新
   setTimeout(() => {
     console.log('[Main Process] 启动后自动检查更新');
-    autoUpdater.checkForUpdates().catch(err => {
-      console.error('[Main Process] 检查更新失败:', err);
-    });
+    try {
+      autoUpdater.checkForUpdates().catch(err => {
+        console.error('[Main Process] 检查更新失败:', err);
+      });
+    } catch (error) {
+      console.error('[Main Process] 检查更新过程中出现异常:', error);
+    }
   }, 3000); // 延迟3秒检查，避免影响启动速度
 }
 
