@@ -41,7 +41,16 @@ declare global {
 
       // 应用更新
       checkForUpdates: () => Promise<{ success: boolean; error?: string; updateInfo?: any }>;
-      checkForUpdatesManual: () => Promise<{ success: boolean; error?: string; updateAvailable?: boolean; version?: string; releaseDate?: string; releaseNotes?: string; downloadUrl?: string }>;
+      checkForUpdatesManual: () => Promise<{
+        success: boolean;
+        error?: string;
+        updateAvailable?: boolean;
+        version?: string;
+        releaseDate?: string;
+        releaseNotes?: string;
+        downloadUrl?: string;
+        message?: string;
+      }>;
       onUpdateStatus: (callback: (event: any, status: any) => void) => () => void;
       offUpdateStatus: (callback: (event: any, status: any) => void) => void;
 

@@ -29,12 +29,19 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isChecking, setIsChecking] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     // 监听来自主进程的更新状态消息
     const handleUpdateStatus = (event: any, data: any) => {
       console.log('收到更新状态:', data);
       setStatus(data.status);
+      
+      if (data.message) {
+        setStatusMessage(data.message);
+      } else {
+        setStatusMessage(null);
+      }
       
       if (data.status === 'error') {
         setError(data.error || '更新过程中出现错误');
@@ -73,20 +80,19 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
 
     setIsChecking(true);
     setError(null);
+    setStatus('checking');
     
     try {
       const result = await window.electron.checkForUpdatesManual();
-      if (!result.success) {
-        setError(result.error || '检查更新失败');
-      } else if (result.updateAvailable) {
-        setUpdateInfo({
-          version: result.version,
-          releaseDate: result.releaseDate,
-          releaseNotes: result.releaseNotes
-        });
+      if (!result.success && result.error) {
+        setError(result.error);
+        setStatus('error');
+      } else if (result.message) {
+        setStatusMessage(result.message);
       }
     } catch (err: any) {
       setError(err.message || '检查更新时发生错误');
+      setStatus('error');
     } finally {
       setIsChecking(false);
     }
@@ -142,10 +148,11 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         return <Alert message="更新已下载，将在下次启动时安装" type="success" showIcon />;
         
       case 'error':
-        return <Alert message={error || '更新过程中出现错误'} type="error" showIcon />;
+        // 显示友好错误提示
+        return <Alert message="检查更新" description={error || '检查更新失败，请稍后再试'} type="info" showIcon />;
         
       case 'not-available':
-        return <Alert message="当前已是最新版本" type="success" showIcon />;
+        return <Alert message={statusMessage || "当前已是最新版本"} type="success" showIcon />;
         
       case 'idle':
       default:

@@ -1368,7 +1368,8 @@ ipcMain.handle('check-for-updates-manual', async () => {
       
       if (releases.length === 0) {
         log.info('没有找到已发布的版本');
-        return { success: false, error: '没有找到已发布的版本' };
+        mainWindow?.webContents.send('update-status', { status: 'not-available' });
+        return { success: true, updateAvailable: false, message: '当前已是最新版本' };
       }
       
       // 获取最新版本
@@ -1439,6 +1440,8 @@ ipcMain.handle('check-for-updates-manual', async () => {
           }
         } else if (!downloadUrl) {
           log.warn(`没有找到适合当前平台(${process.platform})的下载资源`);
+          // 使用release页面作为备用
+          downloadUrl = latestRelease.html_url;
         }
         
         return { 
@@ -1452,15 +1455,57 @@ ipcMain.handle('check-for-updates-manual', async () => {
       } else {
         log.info('已是最新版本');
         mainWindow?.webContents.send('update-status', { status: 'not-available' });
-        return { success: true, updateAvailable: false };
+        return { success: true, updateAvailable: false, message: '当前已是最新版本' };
       }
     } else {
       log.error('GitHub API请求失败或没有releases:', response.status);
-      return { success: false, error: `GitHub API请求失败: ${response.status}` };
+      // 友好错误提示
+      mainWindow?.webContents.send('update-status', { 
+        status: 'not-available', 
+        message: '当前已是最新版本' 
+      });
+      return { success: true, updateAvailable: false, message: '当前已是最新版本' };
     }
   } catch (error: any) {
     log.error('检查更新出错:', error);
-    return { success: false, error: error.message || '检查更新失败' };
+    
+    // 详细记录错误信息以便调试
+    if (error.response) {
+      log.error(`HTTP状态: ${error.response.status}`);
+      log.error(`响应数据: ${JSON.stringify(error.response.data)}`);
+    } else if (error.request) {
+      log.error(`请求错误: ${error.message}`);
+      log.error(`错误代码: ${error.code}`);
+    } else {
+      log.error(`错误: ${error.message}`);
+    }
+    
+    // 根据错误类型返回用户友好的消息
+    let userFriendlyMessage = '检查更新失败，请稍后再试';
+    
+    if (error.response) {
+      if (error.response.status === 404) {
+        userFriendlyMessage = '当前已是最新版本';
+        mainWindow?.webContents.send('update-status', { status: 'not-available' });
+        return { success: true, updateAvailable: false, message: userFriendlyMessage };
+      } else if (error.response.status === 403) {
+        userFriendlyMessage = '请求频率受限，请稍后再试';
+      } else if (error.response.status >= 500) {
+        userFriendlyMessage = '更新服务器暂时不可用，请稍后再试';
+      }
+    } else if (error.code === 'ENOTFOUND') {
+      userFriendlyMessage = '网络连接问题，请检查您的网络设置';
+    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+      userFriendlyMessage = '连接超时，请检查您的网络设置';
+    }
+    
+    // 发送友好的错误消息到前端
+    mainWindow?.webContents.send('update-status', { 
+      status: 'error', 
+      error: userFriendlyMessage 
+    });
+    
+    return { success: false, error: userFriendlyMessage };
   }
 });
 
