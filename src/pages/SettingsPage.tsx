@@ -26,6 +26,7 @@ import FilterRulesManager from '../components/FilterRulesManager';
 import type { TabsProps } from 'antd';
 import { cleanupOrphanedArticles } from '../utils/cleanupHelper';
 import { debounce } from 'lodash';
+import UpdateManager from '../components/UpdateManager';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -491,6 +492,8 @@ const SettingsPage: React.FC = () => {
               </Form.Item>
             </div>
           </Card>
+
+          <UpdateManager className={styles.settingCard} />
         </>
       )
     },

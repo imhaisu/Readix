@@ -38,6 +38,16 @@ contextBridge.exposeInMainWorld('electron', {
   getFeeds: () => ipcRenderer.invoke('get-feeds'),
   fetchArticleContent: (url: string) => ipcRenderer.invoke('fetch-article-content', url),
 
+  // 应用更新
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  onUpdateStatus: (callback: (event: any, status: any) => void) => {
+    ipcRenderer.on('update-status', callback);
+    return () => ipcRenderer.removeListener('update-status', callback);
+  },
+  offUpdateStatus: (callback: (event: any, status: any) => void) => {
+    ipcRenderer.removeListener('update-status', callback);
+  },
+
   // OPML
   importOpml: () => ipcRenderer.invoke('import-opml'),
   exportOpml: (opmlContent: string) => ipcRenderer.invoke('export-opml', opmlContent),

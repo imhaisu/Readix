@@ -14,7 +14,8 @@
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win",
     "package:mac": "npm run build && electron-builder --mac",
-    "package:linux": "npm run build && electron-builder --linux"
+    "package:linux": "npm run build && electron-builder --linux",
+    "release": "npm run build && electron-builder --publish always"
   },
   "author": "",
   "license": "MIT",
@@ -34,6 +35,7 @@
     "dexie": "^4.0.11",
     "dexie-react-hooks": "^1.1.7",
     "electron-store": "^8.2.0",
+    "electron-updater": "^6.6.2",
     "framer-motion": "^12.23.6",
     "jsdom": "^26.1.0",
     "lodash.mergewith": "^4.6.2",
@@ -76,7 +78,11 @@
     },
     "mac": {
       "category": "public.app-category.news",
-      "icon": "assets/icons.icns"
+      "icon": "assets/icons.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "target": "nsis",
@@ -85,6 +91,17 @@
     "linux": {
       "target": "AppImage",
       "icon": "assets/icon.png"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "你的GitHub用户名",
+        "repo": "readix"
+      },
+      {
+        "provider": "generic",
+        "url": "https://你的更新服务器URL/"
+      }
+    ]
   }
 }

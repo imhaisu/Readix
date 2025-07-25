@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import type { Settings } from '../src/types/settings'; // 导入类型
 import fetch from 'node-fetch';
 import { execSync } from 'child_process';
+import { autoUpdater } from 'electron-updater';
 
 // AI 服务配置
 const AI_MODEL = 'doubao-seed-1-6-250615';
@@ -339,7 +340,107 @@ app.whenReady().then(() => {
   app.on('will-quit', () => {
     clearInterval(memoryMonitor);
   });
+
+  // 配置自动更新
+  if (!isDevelopment) {
+    configureAutoUpdater();
+  }
 });
+
+// 配置自动更新
+function configureAutoUpdater() {
+  // 防止重复下载和安装
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  // 日志设置
+  autoUpdater.logger = console;
+  // 记录日志级别
+  console.log('[Main Process] 配置自动更新...');
+
+  // 设置更新事件监听
+  autoUpdater.on('checking-for-update', () => {
+    console.log('[Main Process] 正在检查更新...');
+    mainWindow?.webContents.send('update-status', { status: 'checking' });
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('[Main Process] 发现新版本:', info.version);
+    mainWindow?.webContents.send('update-status', { 
+      status: 'available', 
+      version: info.version,
+      releaseDate: info.releaseDate,
+      releaseNotes: info.releaseNotes
+    });
+
+    // 弹出对话框询问用户是否下载更新
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: '发现新版本',
+        message: `Readix ${info.version} 已发布，是否现在更新？`,
+        detail: `发布日期: ${info.releaseDate || '未知'}\n${info.releaseNotes || ''}`,
+        buttons: ['是', '否'],
+        defaultId: 0
+      }).then(({ response }) => {
+        if (response === 0) {
+          // 用户确认下载，开始下载更新
+          autoUpdater.downloadUpdate();
+        }
+      });
+    }
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('[Main Process] 已是最新版本');
+    mainWindow?.webContents.send('update-status', { status: 'not-available' });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[Main Process] 更新出错:', err);
+    mainWindow?.webContents.send('update-status', { status: 'error', error: err.message });
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    const progress = {
+      percent: progressObj.percent,
+      bytesPerSecond: progressObj.bytesPerSecond,
+      transferred: progressObj.transferred,
+      total: progressObj.total
+    };
+    console.log(`[Main Process] 下载进度: ${progress.percent.toFixed(2)}%`);
+    mainWindow?.webContents.send('update-status', { status: 'downloading', progress });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('[Main Process] 更新已下载，准备安装');
+    mainWindow?.webContents.send('update-status', { status: 'downloaded' });
+    
+    // 通知用户更新已下载，询问是否立即安装
+    if (mainWindow) {
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: '更新已下载',
+        message: '新版本已下载完成，立即安装并重启应用?',
+        buttons: ['立即安装', '稍后安装'],
+        defaultId: 0
+      }).then(({ response }) => {
+        if (response === 0) {
+          // 用户确认安装，退出并安装更新
+          autoUpdater.quitAndInstall(false, true);
+        }
+      });
+    }
+  });
+
+  // 启动时检查更新
+  setTimeout(() => {
+    console.log('[Main Process] 启动后自动检查更新');
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[Main Process] 检查更新失败:', err);
+    });
+  }, 3000); // 延迟3秒检查，避免影响启动速度
+}
 
 // 除了 macOS 外，当所有窗口都被关闭的时候退出程序。 macOS 中用户通常期望应用在没有窗口可见的情况下继续运行，除非用户显式退出
 app.on('window-all-closed', () => {
@@ -1178,6 +1279,25 @@ ipcMain.handle('shell-open-external', async (_, url) => {
   } catch (error) {
     console.error('[Main Process] 打开外部链接失败:', error);
     throw error;
+  }
+});
+
+// 添加检查更新的IPC处理程序
+ipcMain.handle('check-for-updates', async () => {
+  if (isDevelopment) {
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
+  try {
+    console.log('[Main Process] 手动检查更新...');
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) {
+      return { success: false, error: '检查更新失败，未收到响应' };
+    }
+    return { success: true, updateInfo: result.updateInfo };
+  } catch (error: any) {
+    console.error('[Main Process] 手动检查更新失败:', error);
+    return { success: false, error: error.message };
   }
 });
 
