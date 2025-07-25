@@ -364,8 +364,10 @@ function configureAutoUpdater() {
     if (err.stack) {
       console.error('[Main Process] 错误堆栈:', err.stack);
     }
-    if (err.cause) {
-      console.error('[Main Process] 错误原因:', err.cause);
+    // TypeScript较旧版本不支持Error.cause，使用any类型绕过
+    const anyErr = err as any;
+    if (anyErr.cause) {
+      console.error('[Main Process] 错误原因:', anyErr.cause);
     }
     if (err.message) {
       console.error('[Main Process] 错误消息:', err.message);
