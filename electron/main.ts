@@ -1351,8 +1351,8 @@ ipcMain.handle('check-for-updates-manual', async () => {
     const currentVersion = app.getVersion();
     log.info(`当前版本: ${currentVersion}`);
     
-    // 从GitHub API获取最新版本信息
-    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases/latest', {
+    // 从GitHub API获取所有版本信息
+    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
       headers: {
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
@@ -1360,12 +1360,25 @@ ipcMain.handle('check-for-updates-manual', async () => {
       }
     });
     
-    if (response.status === 200) {
-      const latestRelease = response.data;
+    if (response.status === 200 && response.data.length > 0) {
+      // 过滤非草稿版本并按发布日期排序
+      const releases = response.data
+        .filter((release: any) => !release.draft && release.published_at)
+        .sort((a: any, b: any) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+      
+      if (releases.length === 0) {
+        log.info('没有找到已发布的版本');
+        return { success: false, error: '没有找到已发布的版本' };
+      }
+      
+      // 获取最新版本
+      const latestRelease = releases[0];
       const latestVersion = latestRelease.tag_name.replace('v', '');
       const releaseNotes = latestRelease.body || '';
       const releaseDate = latestRelease.published_at;
+      
       log.info(`最新版本: ${latestVersion}`);
+      log.info(`发布说明: ${releaseNotes}`);
       
       // 版本比较
       const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0;
@@ -1383,18 +1396,21 @@ ipcMain.handle('check-for-updates-manual', async () => {
           const dmgAsset = assets.find((asset: any) => asset.name.endsWith('.dmg'));
           if (dmgAsset) {
             downloadUrl = dmgAsset.browser_download_url;
+            log.info(`找到macOS DMG下载地址: ${downloadUrl}`);
           }
         } else if (process.platform === 'win32') {
           // Windows - 寻找EXE或MSI文件
           const winAsset = assets.find((asset: any) => asset.name.endsWith('.exe') || asset.name.endsWith('.msi'));
           if (winAsset) {
             downloadUrl = winAsset.browser_download_url;
+            log.info(`找到Windows下载地址: ${downloadUrl}`);
           }
         } else if (process.platform === 'linux') {
           // Linux - 寻找AppImage或deb文件
           const linuxAsset = assets.find((asset: any) => asset.name.endsWith('.AppImage') || asset.name.endsWith('.deb'));
           if (linuxAsset) {
             downloadUrl = linuxAsset.browser_download_url;
+            log.info(`找到Linux下载地址: ${downloadUrl}`);
           }
         }
         
@@ -1421,6 +1437,8 @@ ipcMain.handle('check-for-updates-manual', async () => {
             // 用户确认，打开下载链接
             await shell.openExternal(downloadUrl);
           }
+        } else if (!downloadUrl) {
+          log.warn(`没有找到适合当前平台(${process.platform})的下载资源`);
         }
         
         return { 
@@ -1429,7 +1447,7 @@ ipcMain.handle('check-for-updates-manual', async () => {
           version: latestVersion,
           releaseDate: releaseDate,
           releaseNotes: releaseNotes,
-          downloadUrl: downloadUrl
+          downloadUrl: downloadUrl || latestRelease.html_url
         };
       } else {
         log.info('已是最新版本');
@@ -1437,7 +1455,7 @@ ipcMain.handle('check-for-updates-manual', async () => {
         return { success: true, updateAvailable: false };
       }
     } else {
-      log.error('GitHub API请求失败:', response.status);
+      log.error('GitHub API请求失败或没有releases:', response.status);
       return { success: false, error: `GitHub API请求失败: ${response.status}` };
     }
   } catch (error: any) {
