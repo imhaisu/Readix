@@ -1351,13 +1351,13 @@ ipcMain.handle('check-for-updates-manual', async () => {
     const currentVersion = app.getVersion();
     log.info(`当前版本: ${currentVersion}`);
     
-    // 从GitHub API获取所有版本信息
+    // 从GitHub API获取所有版本信息 - 使用公共API，不需要认证
     const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
       headers: {
         'Accept': 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
         'User-Agent': 'ReadixApp'
-      }
+      },
+      timeout: 10000 // 10秒超时
     });
     
     if (response.status === 200 && response.data.length > 0) {
