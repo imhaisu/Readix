@@ -378,7 +378,12 @@ function configureAutoUpdater() {
   // 设置更新事件监听
   autoUpdater.on('checking-for-update', () => {
     console.log('[Main Process] 正在检查更新...');
-    console.log('[Main Process] 更新URL:', autoUpdater.getFeedURL());
+    try {
+      const feedURL = autoUpdater.getFeedURL();
+      console.log('[Main Process] 更新URL:', feedURL || '未设置');
+    } catch (error) {
+      console.error('[Main Process] 获取更新URL出错:', error);
+    }
     mainWindow?.webContents.send('update-status', { status: 'checking' });
   });
 
