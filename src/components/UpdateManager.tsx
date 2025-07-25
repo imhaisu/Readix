@@ -66,7 +66,7 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
   }, []);
 
   const handleCheckForUpdates = async () => {
-    if (!window.electron || !window.electron.checkForUpdates) {
+    if (!window.electron || !window.electron.checkForUpdatesManual) {
       setError('更新功能仅在Electron环境下可用');
       return;
     }
@@ -75,9 +75,15 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
     setError(null);
     
     try {
-      const result = await window.electron.checkForUpdates();
+      const result = await window.electron.checkForUpdatesManual();
       if (!result.success) {
         setError(result.error || '检查更新失败');
+      } else if (result.updateAvailable) {
+        setUpdateInfo({
+          version: result.version,
+          releaseDate: result.releaseDate,
+          releaseNotes: result.releaseNotes
+        });
       }
     } catch (err: any) {
       setError(err.message || '检查更新时发生错误');

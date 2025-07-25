@@ -11,6 +11,11 @@ import type { Settings } from '../src/types/settings'; // 导入类型
 import fetch from 'node-fetch';
 import { execSync } from 'child_process';
 import { autoUpdater } from 'electron-updater';
+import electronLog from 'electron-log';
+
+// 设置electron-log
+electronLog.transports.file.level = 'debug';
+const log = electronLog;
 
 // AI 服务配置
 const AI_MODEL = 'doubao-seed-1-6-250615';
@@ -349,13 +354,23 @@ app.whenReady().then(() => {
 
 // 配置自动更新
 function configureAutoUpdater() {
+  // 手动设置更新URL
+  const feedURL = `https://github.com/imhaisu/NewReader/releases/latest/download`;
+  console.log('[Main Process] 设置更新URL:', feedURL);
+  
   // 防止重复下载和安装
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
-
-  // 记录日志级别
+  
+  // 禁用自动下载
+  autoUpdater.allowPrerelease = false;
+  
+  // 设置Logger详细程度
+  const log = require('electron-log');
+  log.transports.file.level = 'debug';
   console.log('[Main Process] 配置自动更新...');
   console.log('[Main Process] 当前应用版本:', app.getVersion());
+  console.log('[Main Process] 更新日志路径:', log.transports.file.getFile().path);
   
   // 添加详细的错误日志
   autoUpdater.on('error', (err) => {
@@ -1322,6 +1337,129 @@ ipcMain.handle('check-for-updates', async () => {
     return { success: false, error: error.message };
   }
 });
+
+// 添加IPC处理程序以检查GitHub上的最新版本
+ipcMain.handle('check-for-updates-manual', async () => {
+  if (isDevelopment) {
+    log.info('开发模式下不支持自动更新');
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
+  try {
+    log.info('手动检查GitHub更新');
+    // 获取当前版本
+    const currentVersion = app.getVersion();
+    log.info(`当前版本: ${currentVersion}`);
+    
+    // 从GitHub API获取最新版本信息
+    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases/latest', {
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'ReadixApp'
+      }
+    });
+    
+    if (response.status === 200) {
+      const latestRelease = response.data;
+      const latestVersion = latestRelease.tag_name.replace('v', '');
+      const releaseNotes = latestRelease.body || '';
+      const releaseDate = latestRelease.published_at;
+      log.info(`最新版本: ${latestVersion}`);
+      
+      // 版本比较
+      const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+      
+      if (isUpdateAvailable) {
+        log.info('发现新版本');
+        
+        // 获取下载资源
+        const assets = latestRelease.assets || [];
+        let downloadUrl = '';
+        
+        // 根据平台选择下载URL
+        if (process.platform === 'darwin') {
+          // macOS - 寻找DMG文件
+          const dmgAsset = assets.find((asset: any) => asset.name.endsWith('.dmg'));
+          if (dmgAsset) {
+            downloadUrl = dmgAsset.browser_download_url;
+          }
+        } else if (process.platform === 'win32') {
+          // Windows - 寻找EXE或MSI文件
+          const winAsset = assets.find((asset: any) => asset.name.endsWith('.exe') || asset.name.endsWith('.msi'));
+          if (winAsset) {
+            downloadUrl = winAsset.browser_download_url;
+          }
+        } else if (process.platform === 'linux') {
+          // Linux - 寻找AppImage或deb文件
+          const linuxAsset = assets.find((asset: any) => asset.name.endsWith('.AppImage') || asset.name.endsWith('.deb'));
+          if (linuxAsset) {
+            downloadUrl = linuxAsset.browser_download_url;
+          }
+        }
+        
+        // 通知用户有新版本
+        if (mainWindow && downloadUrl) {
+          mainWindow.webContents.send('update-status', { 
+            status: 'available',
+            version: latestVersion,
+            releaseDate: releaseDate,
+            releaseNotes: releaseNotes,
+            downloadUrl: downloadUrl
+          });
+          
+          const { response } = await dialog.showMessageBox(mainWindow, {
+            type: 'info',
+            title: '发现新版本',
+            message: `Readix ${latestVersion} 已发布，是否打开下载页面？`,
+            detail: `发布日期: ${releaseDate || '未知'}\n${releaseNotes || ''}`,
+            buttons: ['是', '否'],
+            defaultId: 0
+          });
+          
+          if (response === 0) {
+            // 用户确认，打开下载链接
+            await shell.openExternal(downloadUrl);
+          }
+        }
+        
+        return { 
+          success: true, 
+          updateAvailable: true,
+          version: latestVersion,
+          releaseDate: releaseDate,
+          releaseNotes: releaseNotes,
+          downloadUrl: downloadUrl
+        };
+      } else {
+        log.info('已是最新版本');
+        mainWindow?.webContents.send('update-status', { status: 'not-available' });
+        return { success: true, updateAvailable: false };
+      }
+    } else {
+      log.error('GitHub API请求失败:', response.status);
+      return { success: false, error: `GitHub API请求失败: ${response.status}` };
+    }
+  } catch (error: any) {
+    log.error('检查更新出错:', error);
+    return { success: false, error: error.message || '检查更新失败' };
+  }
+});
+
+// 版本比较函数
+function compareVersions(versionA: string, versionB: string): number {
+  const partsA = versionA.split('.').map(Number);
+  const partsB = versionB.split('.').map(Number);
+  
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
+    const a = partsA[i] || 0;
+    const b = partsB[i] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  
+  return 0;
+}
 
 // 添加图片代理处理程序
 ipcMain.handle('proxy-image', async (_, imageUrl) => {
