@@ -1,0 +1,396 @@
+/* 滚动状态类 - 增强滚动条的显示逻辑 */
+.scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+body.dark-mode .scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3) !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+/* 添加GlobalOutlined图标的样式类 */
+.globalIcon {
+  font-size: 10px !important; /* 添加!important覆盖antd默认样式 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  line-height: 1;
+  transform: scale(0.8);
+}
+
+/* 文章列表容器 */
+.scrollableArticleListContainer {
+  height: 100%;
+  position: relative;
+  box-sizing: border-box;
+  padding: 0;
+  /* 滚动条样式优化 */
+  overflow-y: auto;
+  scrollbar-width: none; /* Firefox默认隐藏 */
+  -ms-overflow-style: none; /* IE 默认隐藏 */
+}
+
+/* Webkit 浏览器默认隐藏滚动条 */
+.scrollableArticleListContainer::-webkit-scrollbar {
+  width: 8px; /* 进一步加宽滚动条使其更易于交互 */
+  background: transparent;
+}
+
+.scrollableArticleListContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollableArticleListContainer::-webkit-scrollbar-thumb {
+  background-color: transparent; /* 默认透明 */
+  border-radius: 20px;
+  transition: background-color 0.2s, opacity 0.2s, visibility 0.2s;
+  opacity: 0;
+  visibility: hidden;
+}
+
+/* 悬停或滚动时显示滚动条 */
+.scrollableArticleListContainer:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2);
+  visibility: visible;
+  opacity: 0.6;
+}
+
+.scrollableArticleListContainer.scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.3);
+  visibility: visible;
+  opacity: 1;
+}
+
+/* 焦点时移除轮廓线 */
+.scrollableArticleListContainer:focus {
+  outline: none;
+}
+
+/* 深色模式滚动条 */
+body.dark-mode .scrollableArticleListContainer:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .scrollableArticleListContainer.scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.3);
+  visibility: visible;
+  opacity: 1;
+}
+
+/* 平滑过渡的虚拟列表 */
+.virtualList {
+  transition: opacity 0.15s ease;
+  will-change: transform, opacity;
+  backface-visibility: hidden; /* 加速渲染 */
+}
+
+/* 添加可拖拽区域 */
+.draggableHeader {
+  -webkit-app-region: drag;
+  height: 36px;
+  width: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+}
+
+/* 文章项基本样式 */
+.articleItem {
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  position: relative;
+  box-sizing: border-box;
+  
+  /* 移除背景色和阴影 */
+  background-color: transparent;
+  border: none;
+  border-radius: 8px;
+  margin: 6px 10px;
+  padding: 10px 10px 10px 13px;
+  box-shadow: none;
+}
+
+.articleItem:hover {
+  background-color: rgba(245, 245, 245, 0.7);
+}
+
+/* 选中状态样式 */
+.articleItemSelected {
+  background-color: var(--selected-bg-color, #f5f5f5);
+}
+
+body.dark-mode .articleItemSelected {
+  background-color: #2a2a2a;
+}
+
+/* 已读文章样式 */
+.readArticle {
+  opacity: 0.8;
+}
+
+.readArticle:hover {
+  opacity: 0.9;
+}
+
+/* 元数据区域布局 */
+.articleMeta {
+  display: flex;
+  align-items: flex-end; /* 底部对齐 */
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  width: 100%;
+  margin-bottom: 5px;
+}
+
+/* 包裹图标和来源的容器样式 */
+.feedInfo {
+  display: flex;
+  align-items: flex-end; /* 底部对齐 */
+  min-width: 0;
+  gap: 3px;
+}
+
+.feedIcon {
+  width: 12px; /* 更小的图标 */
+  height: 12px; /* 更小的图标 */
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0px 0px 1px rgba(0, 0, 0, 0.2));
+  margin-bottom: 2px; /* 微调位置以改善对齐 */
+  overflow: visible;
+  font-size: 10px;
+  padding: 1px;
+}
+
+.feedIcon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+body.dark-mode .feedIcon {
+  filter: drop-shadow(0px 0px 1px rgba(255, 255, 255, 0.2));
+}
+
+.feedName {
+  font-weight: 400;
+  color: #999999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  min-width: 0;
+  flex-shrink: 1;
+  line-height: 1.2;
+}
+
+.articleDate {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: #999999;
+  line-height: 1.2;
+}
+
+/* 内容区域 */
+.bottomContent {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  align-items: center;
+}
+
+/* 文本内容区域 */
+.textContent {
+  height: 68px;
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+}
+
+.articleTitle {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #262626;
+  margin: 0 0 3px 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.dark-mode .articleTitle {
+  color: #e6e6e6;
+}
+
+.unreadArticleTitle {
+  font-weight: 600;
+  color: #000;
+}
+
+body.dark-mode .unreadArticleTitle {
+  color: #fff;
+}
+
+.readArticleTitle {
+  font-weight: 400;
+  color: #888888;
+}
+
+.articleSummary {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #595959;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body.dark-mode .articleSummary {
+  color: #b3b3b3;
+}
+
+/* 右侧图片区域 */
+.imageContainer {
+  flex-shrink: 0;
+  width: 68px;
+  height: 68px;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #f5f5f5;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 已读状态样式设置 */
+.readArticle .articleTitle,
+.readArticle .feedName,
+.readArticle .articleDate,
+.readArticle .articleSummary {
+  color: #888888 !important;
+  font-weight: 400;
+}
+
+/* 加载状态 */
+.loadingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.5);
+  z-index: 10;
+}
+
+body.dark-mode .loadingOverlay {
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+/* 列表切换刷新指示器 */
+.refreshingIndicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #1677ff 0%, #69b1ff 50%, #1677ff 100%);
+  background-size: 200% 100%;
+  animation: loadingAnimation 1.5s infinite linear;
+  z-index: 100;
+  box-shadow: 0 0 5px rgba(102, 153, 255, 0.3);
+  opacity: 0;
+  display: none;
+}
+
+@keyframes loadingAnimation {
+  0% { background-position: 100% 0; }
+  100% { background-position: 0 0; }
+}
+
+/* 空状态样式 */
+.emptyContainer {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100%;
+  animation: fadeIn 0.3s ease forwards;
+  opacity: 0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 文本截断通用样式 */
+.titleLines2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+
+.descLines2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+
+/* 添加3行摘要显示类 */
+.descLines3 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-all;
+}
+
+/* 深色模式下的文章项 */
+body.dark-mode .articleItem {
+  background-color: transparent;
+  box-shadow: none;
+}
+
+body.dark-mode .articleItem:hover {
+  background-color: #2a2a2a;
+}

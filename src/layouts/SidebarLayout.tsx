@@ -24,7 +24,8 @@ import FeedList from '../components/FeedList';
 import { useDatabase } from '../contexts/DatabaseContext';
 import { useSettings } from '../contexts/SettingsContext';
 import { FeedSource, Group, Article as DbArticle } from '../db/database';
-import { refreshAllFeeds, fetchRssFeed } from '../utils/rssParser';
+import { refreshAllFeeds } from '../utils/rssParser';
+import { preserveArticleStatus } from '../utils/feedRefreshHelper';
 import { cleanupOldArticles, cleanupOrphanedArticles, detectAndCleanupDuplicateArticles, cleanupArticlesByReadStatus } from '../utils/cleanupHelper';
 import { getTodayRange, updateUnreadCountOptimized } from '../utils/helpers';
 import { processFeedIcons } from '../utils/iconUtils';
@@ -311,8 +312,8 @@ const SidebarLayout: React.FC = () => {
         async (feed, articles) => {
           // onProgress callback
           if (db && articles.length > 0) {
-            await db.articles.bulkPut(articles);
-            await updateUnreadCountOptimized(db, feed.id!);
+            // 使用辅助函数处理文章状态保留
+            await preserveArticleStatus(db, feed, articles);
           }
         },
         (results) => {

@@ -103,20 +103,18 @@ const SettingsPage: React.FC = () => {
             titleColor: values.titleColor ?? settings.appearance.reading.titleColor,
             titleFontSize: values.titleFontSize ?? settings.appearance.reading.titleFontSize,
             autoMarkAsRead: values.autoMarkAsRead ?? settings.appearance.reading.autoMarkAsRead,
-          },
+          }
         },
-        layout: {
-          ...settings.layout,
-        },
+        layout: { ...settings.layout },
+        features: { ...settings.features },
+        devOptions: {
+          ...settings.devOptions,
+          useNewArticleList: values.devOptions?.useNewArticleList ?? settings.devOptions?.useNewArticleList,
+        }
       };
 
-      // 调试打印，检查设置更新情况
-      console.log('[SettingsPage] 更新前设置:', settings);
-      console.log('[SettingsPage] 更新后设置:', newSettings);
-
       updateSettings(newSettings);
-      message.success('设置已自动保存');
-    }, 500), // 500毫秒的防抖延迟
+    }, 500),
     [settings, updateSettings]
   );
 
@@ -517,6 +515,18 @@ const SettingsPage: React.FC = () => {
               >
                 <Input.Password placeholder="请在这里输入你的 API Key" />
               </Form.Item>
+            </div>
+          </Card>
+          
+          {/* 新增开发者选项区块 */}
+          <Card className={styles.settingCard} style={{ marginTop: 20 }}>
+            <div className={styles.formSection}>
+              <Title level={5}><SettingOutlined /> 开发者选项</Title>
+              <Text type="secondary">
+                以下选项用于测试和开发目的，可能会影响应用的稳定性。
+              </Text>
+              
+              {/* 移除文章列表V2切换选项，因为我们只使用V2版本 */}
             </div>
           </Card>
           

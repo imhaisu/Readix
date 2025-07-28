@@ -346,7 +346,7 @@ const applyHighlights = (content: string, annotationsToApply: Annotation[]): str
 
 export interface UseAnnotationsParams {
   articleId: string | null;
-  scrollableContentRef: React.RefObject<HTMLDivElement>;
+  scrollableContentRef: React.RefObject<HTMLDivElement | null>;
 }
 
 export const useAnnotations = ({ articleId, scrollableContentRef }: UseAnnotationsParams) => {

@@ -30,8 +30,23 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion] = useState<string>('');
 
   useEffect(() => {
+    // 获取当前应用版本
+    const fetchCurrentVersion = async () => {
+      if (window.electron?.getAppVersion) {
+        try {
+          const version = await window.electron.getAppVersion();
+          setCurrentVersion(version);
+        } catch (err) {
+          console.error('获取应用版本失败:', err);
+        }
+      }
+    };
+
+    fetchCurrentVersion();
+
     // 监听来自主进程的更新状态消息
     const handleUpdateStatus = (event: any, data: any) => {
       console.log('收到更新状态:', data);
@@ -133,8 +148,10 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
             message={`发现新版本 v${updateInfo?.version || ''}`}
             description={
               <div>
-                <p>发布日期: {updateInfo?.releaseDate || '未知'}</p>
-                <p>更新说明: {updateInfo?.releaseNotes || '无'}</p>
+                <p><strong>当前版本:</strong> v{currentVersion}</p>
+                <p><strong>新版本:</strong> v{updateInfo?.version || ''}</p>
+                <p><strong>发布日期:</strong> {updateInfo?.releaseDate ? new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN') : '未知'}</p>
+                <p><strong>更新说明:</strong> {updateInfo?.releaseNotes || '无'}</p>
               </div>
             }
             type="success"
@@ -172,7 +189,13 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         
       case 'idle':
       default:
-        return <Text>点击按钮检查更新</Text>;
+        return (
+          <div>
+            <Text>当前版本: v{currentVersion}</Text>
+            <br />
+            <Text>点击按钮检查更新</Text>
+          </div>
+        );
     }
   };
 

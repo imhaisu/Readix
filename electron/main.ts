@@ -352,6 +352,11 @@ app.whenReady().then(() => {
   }
 });
 
+// 添加获取应用版本的IPC处理程序
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // 配置自动更新
 function configureAutoUpdater() {
   // 手动设置更新URL

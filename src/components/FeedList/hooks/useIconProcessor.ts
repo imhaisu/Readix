@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FeedSource } from '../../../db/database';
 
+// 全局缓存，应用生命周期内保持
+const globalIconCache = new Map<string, string | undefined>();
+
 export const useIconProcessor = (feeds: FeedSource[]) => {
   const [processedFeeds, setProcessedFeeds] = useState<FeedSource[]>([]);
   // 记录已经处理过的图标URL，防止重复处理
-  const processedIconUrls = useRef<Map<string, string | undefined>>(new Map());
+  const processedIconUrls = useRef<Map<string, string | undefined>>(globalIconCache);
   
   // 处理单个图标URL的函数
   const processSingleIconUrl = useCallback(async (iconUrl: string | undefined): Promise<string | undefined> => {
@@ -32,22 +35,33 @@ export const useIconProcessor = (feeds: FeedSource[]) => {
       
       // 将结果存入缓存
       processedIconUrls.current.set(iconUrl, result);
+      // 同时更新全局缓存
+      globalIconCache.set(iconUrl, result);
       return result;
     } catch (error) {
       console.error('处理图标URL出错:', error);
       processedIconUrls.current.set(iconUrl, undefined);
+      globalIconCache.set(iconUrl, undefined);
       return undefined;
     }
   }, []);
   
   // 批量处理订阅源图标
   const processAllFeedIcons = useCallback(async (feeds: FeedSource[]): Promise<FeedSource[]> => {
-    return Promise.all(feeds.map(async (feed) => {
+    const startTime = performance.now();
+    
+    // 使用Promise.all优化并行处理
+    const processed = await Promise.all(feeds.map(async (feed) => {
       if (!feed.iconUrl) return feed;
       
       const processedUrl = await processSingleIconUrl(feed.iconUrl);
       return { ...feed, iconUrl: processedUrl };
     }));
+    
+    const endTime = performance.now();
+    console.log(`图标处理耗时: ${Math.round(endTime - startTime)}ms，处理了 ${feeds.length} 个图标`);
+    
+    return processed;
   }, [processSingleIconUrl]);
 
   // 处理图标

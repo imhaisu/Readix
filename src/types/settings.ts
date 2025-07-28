@@ -6,6 +6,13 @@ export interface Settings {
     features: {
         // 已移除useNewFeedList设置项，因为现在只使用新版组件
     };
+    devOptions?: DeveloperOptions; // 开发者选项，可选
+}
+
+// 新增开发者选项接口
+export interface DeveloperOptions {
+  // 已移除旧版文章列表选项
+  [key: string]: any;
 }
 
 export interface GeneralSettings {
@@ -19,6 +26,7 @@ export interface GeneralSettings {
     autoCleanup: boolean; // 是否启用自动清理
     cleanupUnreadDays: number; // 未读文章保留天数，0表示不清理
     cleanupReadDays: number; // 已读文章保留天数，0表示不清理
+    // 移除useArticleListV2选项，因为现在只使用V2版本
 }
 
 export interface AppearanceSettings {
@@ -69,6 +77,7 @@ export const defaultSettings: Settings = {
         autoCleanup: false,
         cleanupUnreadDays: 0,
         cleanupReadDays: 30,
+        // 移除useArticleListV2选项，因为现在只使用V2版本
     },
     appearance: {
         reading: {
@@ -113,5 +122,8 @@ export const defaultSettings: Settings = {
     },
     features: {
         // 已移除useNewFeedList设置项
+    },
+    devOptions: {
+        // 已移除旧版文章列表选项
     },
 };

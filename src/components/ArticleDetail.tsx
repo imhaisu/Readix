@@ -135,16 +135,19 @@ const useContentCache = (articleId: string | null, content: string | undefined) 
 };
 
 const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewMode, onChangeViewMode, onArticleModified, onNavigate }) => {
+  console.log('ArticleDetail render with articleId:', articleId);
+  
   const { db } = useDatabase();
   const { settings } = useSettings();
   const [article, setArticle] = useState<Article | null | undefined>(undefined);
+  console.log('ArticleDetail article state:', article ? article.title : 'none');
   const [sourceTitle, setSourceTitle] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [fetchingFullText, setFetchingFullText] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const scrollableContentRef = useRef<HTMLDivElement>(null);
-  const mainContentAreaRef = useRef<HTMLDivElement>(null);
-  const articleDetailContainerRef = useRef<HTMLDivElement>(null);
+  const scrollableContentRef = useRef<HTMLDivElement | null>(null);
+  const mainContentAreaRef = useRef<HTMLDivElement | null>(null);
+  const articleDetailContainerRef = useRef<HTMLDivElement | null>(null);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [imageModalVisible, setImageModalVisible] = useState(false);
@@ -179,6 +182,10 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   const isMountedRef = useRef(true);
   // 添加一个ref来追踪当前文章ID，用于解决竞态问题
   const currentArticleIdRef = useRef<string | null>(null);
+  // 添加一个引用来跟踪正在加载的文章ID，防止重复加载
+  const loadingArticleRef = useRef<string | null>(null);
+  // 重新添加 loadArticleRef，但类型更精确
+  const loadArticleRef = useRef<((forceReload?: boolean) => Promise<void>) | null>(null);
 
   const iconButtonStyle: React.CSSProperties = {
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -718,8 +725,6 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   
   // 删除之前的useEffect，将其合并到组件挂载效果中
   // 删除之前的componentWillUnmount效果，将其合并到主useEffect中
-  
-  const loadArticleRef = useRef<((forceReload?: boolean) => Promise<void>) | null>(null);
 
   const performUpgrade = useCallback(async (articleToUpgrade: Article) => {
     if (!articleToUpgrade || !articleToUpgrade.url || !db || !isMounted) return;
@@ -812,8 +817,20 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   }, [db, isMounted]);
 
   const loadArticle = useCallback(async (forceReload = false) => {
+    console.log('loadArticle called, articleId:', articleId, 'db:', !!db, 'forceReload:', forceReload);
+    
+    // 防止重复加载：如果已经在加载此文章且非强制刷新，则跳过
+    if (!forceReload && loadingArticleRef.current === articleId) {
+      console.log('已经在加载此文章，跳过重复加载');
+      return;
+    }
+    
     if (articleId && db) {
+      // 设置加载标志
+      loadingArticleRef.current = articleId;
+      
       if (forceReload || !article || article.id !== articleId) {
+        console.log('loadArticle - loading article data');
         // 首先设置加载状态，避免内容闪烁
         setLoading(true);
         
@@ -848,7 +865,9 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
   
           // 预先获取文章和订阅源信息，确定默认模式
           const currentArticleData = await db.articles.get(articleId);
+          console.log('loadArticle - fetched article:', currentArticleData ? currentArticleData.title : 'not found');
           if (!currentArticleData) {
+            console.error('loadArticle - article not found:', articleId);
             setArticle(null);
             setLoading(false);
             return;
@@ -1014,11 +1033,33 @@ const ArticleDetail: React.FC<ArticleDetailProps> = ({ articleId, onClose, viewM
     loadArticleRef.current = loadArticle;
   }, [loadArticle]);
 
+  // Effect: 加载文章数据 - 优化后的版本
   useEffect(() => {
-    loadArticle();
+    // 保存 loadArticle 函数的引用，以便可以在其他地方调用
+    loadArticleRef.current = loadArticle;
+    
+    console.log('ArticleDetail useEffect for articleId:', articleId);
+    // 仅当 articleId 变化或组件首次加载时执行
+    if (articleId) {
     // 每次文章ID变化时，重置滚动位置恢复标志
     scrollPositionRestored.current = false;
-  }, [articleId, loadArticle]);
+      
+      // 使用一个延迟加载标志来防止多次加载
+      const loadingId = articleId;
+      const loadArticleData = async () => {
+        // 确保当前加载的文章ID和请求的文章ID相同（防止竞态条件）
+        if (loadingId !== articleId) return;
+        
+        // 如果 db 已初始化且当前没有加载这篇文章，则加载文章
+        if (db && (!article || article.id !== articleId)) {
+          await loadArticle(true);  // 强制重新加载
+        }
+      };
+      
+      loadArticleData();
+    }
+    // 只依赖 articleId 和 db，移除对 loadArticle 的依赖
+  }, [articleId, db, article, loadArticle]);
 
   const handleFetchAndUpgradeArticle = useCallback(async (articleToUpgrade: Article) => {
     if (annotations.length > 0) {

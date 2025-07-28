@@ -155,28 +155,68 @@ export const useArticleListManager = ({
     }
   }, [currentFeedId, prevFeedId, allArticles, safeSelectArticle]);
 
-  // 当过滤条件或上下文变化时，清除持久豁免列表，但保留当前选中的文章
+  // Effect: 当上下文或筛选条件变化时，更新豁免的文章ID
   useEffect(() => {
     setPersistentlyExemptedIds(prev => {
       const newSet = new Set<string>();
-      // 如果有当前选中的文章，保留它，但仅当它属于当前订阅源
+      
       if (selectedArticleIdRef.current) {
-        const selectedArticle = allArticles.find(a => a.id === selectedArticleIdRef.current);
-        if (selectedArticle && (!currentFeedId || selectedArticle.sourceId === currentFeedId)) {
+        const selectedArticle = allArticles.find(article => article.id === selectedArticleIdRef.current);
+        
+        // 添加额外检查：如果是"未读"筛选，确保只有未读文章被豁免
+        const meetsFilterRequirement = 
+          !filter.isRead || filter.isRead !== 'false' || // 如果不是未读筛选，则不用检查
+          (selectedArticle && selectedArticle.isRead === 'false'); // 如果是未读筛选，检查文章是否未读
+        
+        if (selectedArticle && 
+            (!currentFeedId || selectedArticle.sourceId === currentFeedId)) {
+          // 无论文章是否符合筛选条件，都保留当前选中的文章，确保它能够显示
           newSet.add(selectedArticleIdRef.current);
         }
+        // 移除了在未读筛选下自动取消已读文章选中的逻辑
       }
       return newSet;
     });
-  }, [filter, currentFeedId, currentGroupId, listRefreshKey, allArticles]);
 
-  // 当文章列表刷新时，确保当前选中的文章仍然在豁免列表中
+    console.log('上下文或筛选条件变化 - 清除持久豁免列表');
+  }, [filter, currentFeedId, currentGroupId, listRefreshKey, allArticles, safeSelectArticle]);
+
+  // 当文章列表刷新时，处理选中文章的显示逻辑
   useEffect(() => {
+    console.log('文章列表刷新触发, 处理选中文章:', selectedArticleIdRef.current);
+    
+    // 清空所有持久豁免
+    setPersistentlyExemptedIds(new Set<string>());
+    
     if (selectedArticleIdRef.current) {
-      setExemptedArticleIds(prev => new Set([...prev, selectedArticleIdRef.current!]));
-      setPersistentlyExemptedIds(prev => new Set([...prev, selectedArticleIdRef.current!]));
+      // 查找当前选中的文章
+      const selectedArticle = allArticles.find(a => a.id === selectedArticleIdRef.current);
+      
+      if (!selectedArticle) {
+        console.log('选中的文章未找到，可能已被删除');
+        return;
+      }
+      
+      // 检查当前是否是"未读"筛选
+      const isUnreadFilter = filter.isRead === 'false';
+      
+      // 检查文章是否符合筛选条件
+      const meetsFilterRequirement = 
+        !isUnreadFilter || // 不是未读筛选
+        selectedArticle.isRead === 'false'; // 是未读筛选且文章未读
+      
+      console.log('文章是否符合筛选条件:', meetsFilterRequirement);
+      
+      // 无论是否符合筛选条件，始终保留当前选中的文章，确保能够显示
+      setExemptedArticleIds(prev => new Set([selectedArticleIdRef.current!, ...prev]));
+      
+      // 删除取消选中的逻辑，让用户可以看到任何选中的文章
+      // 即使在未读筛选条件下，也允许查看已读文章
+    } else {
+      // 没有选中文章，清空所有豁免
+      setExemptedArticleIds(new Set<string>());
     }
-  }, [articleListRefreshTrigger]);
+  }, [articleListRefreshTrigger, filter, allArticles, safeSelectArticle]);
 
   const toggleArticleReadStatus = useCallback(async (articleId: string, currentStatus: 'true' | 'false', sourceId: string | undefined) => {
     if (!db) return;
@@ -266,8 +306,6 @@ export const useArticleListManager = ({
 
     const isSwitch = hasContextChanged || hasFilterOrSearchChanged;
 
-    // 添加防抖，避免频繁重新加载
-    const loadTimeoutId = setTimeout(() => {
       const loadArticlesForContext = async () => {
         if (!hasInitialLoaded) {
           setLoading(true);
@@ -280,6 +318,9 @@ export const useArticleListManager = ({
         
         console.log('===== ArticleListManager: 开始加载文章 =====');
         console.log('当前上下文:', { currentFeedId, currentGroupId, currentTopicId, filter });
+        
+        // 记录开始时间，用于性能分析
+        const startTime = performance.now();
         
         const newExemptedIds = new Set<string>();
         if (selectedArticleIdRef.current) {
@@ -428,6 +469,11 @@ export const useArticleListManager = ({
           }
           
           console.log('===== ArticleListManager: 文章加载完成 =====');
+          
+          // 计算并记录加载耗时
+          const endTime = performance.now();
+          console.log(`文章加载耗时: ${Math.round(endTime - startTime)}ms，共加载 ${finalArticles.length} 篇文章`);
+          
         } catch (err) {
           setError('加载文章失败，请稍后重试。');
           console.error("Error loading articles:", err);
@@ -442,61 +488,42 @@ export const useArticleListManager = ({
       };
 
       loadArticlesForContext();
-    }, 100); // 减少防抖延迟以提高响应速度
     
-    // 清理函数，如果组件卸载或依赖改变，取消定时器
-    return () => {
-      clearTimeout(loadTimeoutId);
-    };
-    
-  }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, filter, searchTerm, listRefreshKey, globalFilterRules]);
-  // 注意：这里移除了articleListRefreshTrigger依赖，避免不必要的多次刷新
+  }, [db, isInitialized, currentFeedId, currentGroupId, currentTopicId, filter, searchTerm, listRefreshKey, globalFilterRules, articleListRefreshTrigger]);
+  // 添加回articleListRefreshTrigger依赖，确保响应全局刷新事件
 
   
   // Effect 2: Combine fetched articles with exempted articles for display
   useEffect(() => {
     const combineArticles = async () => {
       if (!db || loading) return;
+      
+      console.log('合并文章列表 - 开始处理');
+      console.log('当前筛选条件:', filter);
 
       // 使用 useMemo 或者在这里缓存结果，避免不必要的重新计算
       const articlesMap = new Map(allArticles.map(a => [a.id, a]));
       
       const exemptedIdsToFetch = new Set<string>();
       const combinedExemptedIds = new Set([...exemptedArticleIds, ...persistentlyExemptedIds]);
+      const isUnreadFilter = filter.isRead === 'false';
+      
+      console.log('豁免ID数量:', combinedExemptedIds.size);
+      console.log('当前选中文章:', selectedArticleIdRef.current);
+      
+      // 获取豁免文章
+      let exemptedArticles: Article[] = [];
 
       // 只处理真正需要获取的文章 ID
+      if (combinedExemptedIds.size > 0) {
       combinedExemptedIds.forEach(id => {
         if (!articlesMap.has(id)) {
           exemptedIdsToFetch.add(id);
         }
       });
 
-      // 如果没有需要额外获取的文章，直接使用现有数据
-      if (exemptedIdsToFetch.size === 0) {
-        const finalIdSet = new Set([...allArticles.map(a => a.id), ...combinedExemptedIds]);
-        const finalArticles = Array.from(finalIdSet)
-          .map(id => articlesMap.get(id))
-          .filter((a): a is Article => !!a)
-          .sort((a, b) => b.publishDate - a.publishDate);
-        
-        setDisplayedArticles(finalArticles);
-        
-        // 发送文章计数变化事件，这样FeedList可以保持同步
-        const articleCount = finalArticles.length;
-        document.dispatchEvent(new CustomEvent('articleCountChanged', { 
-          detail: { 
-            count: articleCount,
-            filter: filter,
-            feedId: currentFeedId,
-            groupId: currentGroupId,
-            topicId: currentTopicId
-          } 
-        }));
-        
-        return;
-      }
-
-      // 只有当真正需要时才从数据库获取额外的文章
+        // 如果有需要从数据库获取的豁免ID
+        if (exemptedIdsToFetch.size > 0) {
       try {
         const missingExemptedArticles = await db.articles.where('id').anyOf([...exemptedIdsToFetch]).toArray();
         missingExemptedArticles.forEach(article => {
@@ -505,13 +532,49 @@ export const useArticleListManager = ({
       } catch (error) {
         console.error("Error fetching exempted articles:", error);
       }
+        }
+        
+        // 收集所有豁免文章
+        exemptedArticles = Array.from(combinedExemptedIds)
+          .map(id => articlesMap.get(id))
+          .filter((a): a is Article => !!a);
+          
+        console.log('找到豁免文章数量:', exemptedArticles.length);
+      }
       
-      const finalIdSet = new Set([...allArticles.map(a => a.id), ...combinedExemptedIds]);
-      const finalArticles = Array.from(finalIdSet)
-        .map(id => articlesMap.get(id))
-        .filter((a): a is Article => !!a)
-        .sort((a, b) => b.publishDate - a.publishDate);
+      // 准备最终文章列表
+      let finalArticles: Article[] = [...allArticles];
       
+      // 如果是"未读"筛选，需要特别处理
+      if (isUnreadFilter) {
+        console.log('应用未读筛选逻辑');
+        
+        // 当前选中的文章，即使是已读也需要显示
+        const selectedArticle = selectedArticleIdRef.current 
+          ? articlesMap.get(selectedArticleIdRef.current)
+          : undefined;
+        
+        // 将豁免文章中符合条件的添加到结果中
+        // 对于未读筛选，只添加当前选中的文章，其他已读文章不添加
+        if (selectedArticle) {
+          // 只有当前选中的文章才可能被豁免显示，其他已读文章不显示
+          if (!finalArticles.some(a => a.id === selectedArticle.id)) {
+            finalArticles.push(selectedArticle);
+          }
+        }
+      } else {
+        // 非未读筛选模式，添加所有豁免文章
+        for (const exemptedArticle of exemptedArticles) {
+          if (!finalArticles.some(a => a.id === exemptedArticle.id)) {
+            finalArticles.push(exemptedArticle);
+          }
+        }
+      }
+      
+      // 最后进行排序
+      finalArticles.sort((a, b) => b.publishDate - a.publishDate);
+      
+      console.log('最终文章数量:', finalArticles.length);
       setDisplayedArticles(finalArticles);
       
       // 发送文章计数变化事件
@@ -525,6 +588,8 @@ export const useArticleListManager = ({
           topicId: currentTopicId
         } 
       }));
+      
+      console.log('合并文章列表 - 完成处理');
     };
 
     // 使用 requestAnimationFrame 确保在下一帧渲染时更新，避免阻塞当前帧
@@ -553,28 +618,59 @@ export const useArticleListManager = ({
     }
   };
 
-  const handleMarkArticlesAsRead = async (articlesToMark: Article[]) => {
-    if (!db || articlesToMark.length === 0) return;
-    try {
-      const articleIds = articlesToMark.map(a => a.id);
-      await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
-      setAllArticles(prev =>
-        prev.map(a => (articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a))
-      );
-      setExemptedArticleIds(prev => new Set([...prev, ...articleIds]));
+  const markAsRead = (articleIds: string[]) => {
+    setAllArticles(prev =>
+      prev.map(a => (articleIds.includes(a.id) ? { ...a, isRead: 'true' } : a))
+    );
+  };
 
-      const affectedFeeds = new Set(articlesToMark.map(a => a.sourceId).filter(Boolean));
-      for (const feedId of affectedFeeds) {
+  const markArticlesAsRead = async (articleIds: string[]) => {
+    if (!db || articleIds.length === 0) return;
+    try {
+      await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
+      
+      markAsRead(articleIds);
+      
+      // 检查当前是否使用"未读"筛选
+      const isUnreadFilter = filter.isRead === 'false';
+      
+      // 如果使用的是"未读"筛选，我们需要更谨慎地处理豁免列表
+      if (isUnreadFilter) {
+        // 在"未读"筛选模式下，我们只豁免当前选中的文章
+        // 其他已标记为已读的文章不应该保留在视图中
+        const currentlySelectedId = selectedArticleIdRef.current;
+        setExemptedArticleIds(prev => {
+          const newSet = new Set(prev);
+          // 仅当当前选中的文章被标记为已读时，保留它
+          if (currentlySelectedId && articleIds.includes(currentlySelectedId)) {
+            newSet.add(currentlySelectedId);
+          }
+          return newSet;
+        });
+      } else {
+        // 非"未读"筛选模式下，保持原有逻辑
+        setExemptedArticleIds(prev => {
+          const newSet = new Set(prev);
+          articleIds.forEach(id => newSet.add(id));
+          return newSet;
+        });
+      }
+
+      // 优化：一次性获取所有受影响的订阅源ID
+      const articlesToUpdate = await db.articles.where('id').anyOf(articleIds).toArray();
+      const affectedFeedIds = [...new Set(articlesToUpdate.map(a => a.sourceId).filter(Boolean))];
+      
+      // 批量更新未读计数
+      for (const feedId of affectedFeedIds) {
         if (feedId) {
           const newUnreadCount = await db.articles.where({ sourceId: feedId, isRead: 'false' }).count();
-          const feedInfo = feedInfoMap.get(feedId);
-          if (feedInfo && feedInfo.id) {
-            await db.feeds.update(feedInfo.id, { unreadCount: newUnreadCount });
-          }
+          await db.feeds.update(feedId, { unreadCount: newUnreadCount });
         }
       }
+      
       triggerFeedCountRefresh();
-      return articlesToMark.length;
+      
+      return articleIds.length;
     } catch (error) {
       console.error('批量标记文章为已读失败:', error);
       throw error;
@@ -590,6 +686,7 @@ export const useArticleListManager = ({
     error,
     toggleArticleReadStatus,
     handleToggleStar,
-    handleMarkArticlesAsRead,
+    markArticlesAsRead,
+    markAsRead, // 暴露新方法
   };
 }; 

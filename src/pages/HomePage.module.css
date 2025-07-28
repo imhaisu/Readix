@@ -63,13 +63,44 @@
 
 /* 底部控制栏 - 使用全局样式强制覆盖 */
 .listFooterControls {
-  padding: 0;
-  border-top: 0.5px solid var(--border-color-light);
-  margin: 0 4px; /* 左右各留出4px的间距 */
+  padding: 8px 12px;
   flex-shrink: 0;
-  background-color: #ffffff;
+  background-color: var(--bg-primary, #f5f5f5);
   user-select: none;
   -webkit-user-select: none;
+  border-top: none;
+  margin: 0;
+  position: relative; /* 为动画添加相对定位 */
+  overflow: hidden; /* 防止动画溢出 */
+}
+
+/* 背景滑块动画元素 */
+.listFooterControls::after {
+  content: '';
+  position: absolute;
+  height: 32px;
+  border-radius: 16px;
+  background-color: var(--bg-tertiary, #e6e6e6);
+  top: 50%;
+  transform: translateY(-50%);
+  transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.2s ease;
+  z-index: 0; /* 确保在按钮下方 */
+}
+
+/* 为不同状态设置滑块位置 */
+.listFooterControls[data-active-filter="all"]::after {
+  left: 6px;
+  width: calc(33.33% - 8px); /* 更宽的滑块 */
+}
+
+.listFooterControls[data-active-filter="unread"]::after {
+  left: calc(33.33% + 2px);
+  width: calc(33.33% - 4px); /* 更宽的滑块 */
+}
+
+.listFooterControls[data-active-filter="starred"]::after {
+  left: calc(66.66% + 2px);
+  width: calc(33.33% - 8px); /* 更宽的滑块 */
 }
 
 /* 使用全局选择器强制覆盖Ant Design样式 */
@@ -80,38 +111,40 @@
   border: none !important;
   box-shadow: none !important;
   border-radius: 0 !important;
+  gap: 4px;
+  position: relative; /* 确保按钮在滑块上方 */
+  z-index: 1; /* 提高层级 */
 }
 
 .listFooterControls :global(.ant-radio-button-wrapper) {
   flex: 1;
   border: none !important;
-  border-radius: 0 !important;
+  border-radius: 16px !important; /* 圆角边框 */
   background: transparent !important;
   box-shadow: none !important;
   outline: none !important;
-  color: #8E8E93 !important;
+  color: rgba(0, 0, 0, 0.45) !important;
   padding: 6px 4px;
-  height: 40px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.2s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
+  position: relative; /* 确保内容显示在滑块上方 */
+  z-index: 2;
 }
 
 .listFooterControls :global(.ant-radio-button-wrapper-checked) {
-  color: var(--text-primary) !important;
+  color: rgba(0, 0, 0, 0.85) !important;
   font-weight: 500 !important;
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  background: transparent !important; /* 移除背景，由滑块提供 */
+  transform: none; /* 移除放大效果 */
 }
 
 .listFooterControls :global(.ant-radio-button-wrapper:hover) {
-  color: var(--text-primary) !important;
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  color: rgba(0, 0, 0, 0.65) !important;
+  background: transparent !important; /* 移除hover背景 */
 }
 
 /* 彻底移除所有焦点和交互状态的边框效果 */
@@ -130,21 +163,10 @@
 }
 
 /* 强制移除Ant Design的所有可能边框效果 */
-.listFooterControls :global(.ant-radio-group-outline .ant-radio-button-wrapper),
-.listFooterControls :global(.ant-radio-group-outline .ant-radio-button-wrapper-checked),
-.listFooterControls :global(.ant-radio-button-wrapper.ant-radio-button-wrapper-checked),
 .listFooterControls :global(.ant-radio-button-wrapper:not(:first-child)),
 .listFooterControls :global(.ant-radio-button-wrapper:first-child),
-.listFooterControls :global(.ant-radio-button-wrapper:last-child),
-.listFooterControls :global(.ant-radio-button-wrapper.css-dev-only-do-not-override-1m2bkf9),
-.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9),
-.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9:focus),
-.listFooterControls :global(.css-dev-only-do-not-override-1m2bkf9:active) {
+.listFooterControls :global(.ant-radio-button-wrapper:last-child) {
   border: none !important;
-  border-left: none !important;
-  border-right: none !important;
-  border-top: none !important;
-  border-bottom: none !important;
   outline: none !important;
   box-shadow: none !important;
 }
@@ -222,27 +244,44 @@
   height: 100% !important;
 }
 
-/* 图标和文字样式 - 水平布局优化 */
+/* 图标和文字样式 - 调整大小 */
 .listFooterControls :global(.anticon) {
-  font-size: 14px !important;
+  font-size: 15px !important; /* 减小图标尺寸 */
   color: inherit !important;
 }
 
-.listFooterControls :global(.ant-radio-button-label span:not(.anticon)) {
-  font-size: 11px !important;
-  font-weight: inherit !important;
+.listFooterControls :global(.ant-radio-button-wrapper-checked) :global(.anticon) {
+  font-size: 16px !important; /* 选中时图标稍大 */
+}
+
+.listFooterControls :global(.ant-radio-button-wrapper span:not(.anticon)) {
+  font-size: 12px !important; /* 减小字号 */
+  font-weight: 500 !important;
   color: inherit !important;
   line-height: 1;
 }
 
 /* 暗色主题 */
 :global(.dark-theme) .listFooterControls {
-  background-color: #1C1C1E;
-  border-top-color: rgba(255, 255, 255, 0.1);
+  background-color: var(--bg-primary-dark, #1c1c1e);
+}
+
+:global(.dark-theme) .listFooterControls::after {
+  background-color: var(--bg-tertiary-dark, #2c2c2e);
 }
 
 :global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper) {
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper-checked) {
+  color: rgba(255, 255, 255, 0.85) !important;
+  background: transparent !important;
+}
+
+:global(.dark-theme) .listFooterControls :global(.ant-radio-button-wrapper:hover) {
+  color: rgba(255, 255, 255, 0.65) !important;
+  background: transparent !important;
 }
 
 .articleListControls {
@@ -398,12 +437,14 @@
   left: 0;
   right: 0;
   z-index: 10;
+  display: none; /* 完全隐藏下拉刷新指示器 */
 }
 
 .pullToRefreshIndicatorContainer.visible {
-  opacity: 0.8; /* 降低不透明度 */
-  max-height: 30px; /* 减小高度 */
-  padding: 6px 0;
+  opacity: 0;
+  max-height: 0;
+  padding: 0;
+  display: none; /* 即使处于可见状态也隐藏 */
 }
 
 /* Style for the pull-to-refresh icon */
@@ -461,9 +502,9 @@
 /* NEW Styles for the Search Input container within the Panel */
 .panelSearchInputContainer {
   /* 外部容器样式 */
-  padding: 4px 12px;
+  padding: 0px 12px 4px 12px; /* 减少顶部内边距，保留底部和两侧内边距 */
   background-color: var(--bg-primary);
-  min-height: 38px; /* 新增：固定最小高度防止抖动 */
+  min-height: 32px; /* 减小最小高度 */
   box-sizing: border-box; /* 新增 */
 }
 
@@ -598,6 +639,8 @@
   align-items: center;
   justify-content: center;
   margin-right: 4px; /* 与右侧按钮的间距 */
+  display: none !important; /* 隐藏头部刷新指示器 */
+  opacity: 0 !important; /* 确保Spin组件也不显示 */
 } 
 
 /* 强制指定 Spin 组件的颜色为灰色 */

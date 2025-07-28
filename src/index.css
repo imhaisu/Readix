@@ -728,3 +728,32 @@ html, body {
   }
 }
 /* --- End Pulsing Loader --- */ 
+
+/* 全局隐藏刷新指示器和蓝线 */
+.refreshingIndicator,
+.progressBar,
+.pull-to-refresh-indicator,
+.pullToRefreshIndicatorContainer,
+.ant-progress-line {
+  display: none !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+}
+
+/* 隐藏 ant-design 进度条组件 */
+.ant-progress-inner,
+.ant-progress-bg,
+.ant-progress-success-bg {
+  display: none !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  visibility: hidden !important;
+}
+
+/* 隐藏蓝色加载指示器 */
+.ant-spin-dot-item {
+  background-color: transparent !important;
+} 

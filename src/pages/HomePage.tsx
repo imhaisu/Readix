@@ -14,7 +14,8 @@ import {
   MenuOutlined,
   BugOutlined
 } from '@ant-design/icons';
-import ArticleList, { ArticleListHandle } from '../components/ArticleList';
+import { ArticleListHandle } from '../components/ArticleListBridge';
+import ArticleListBridge from '../components/ArticleListBridge'; // 修改为 ArticleListBridge
 import ArticleDetail from '../components/ArticleDetail';
 import WelcomePage from '../components/WelcomePage';
 import { useDatabase } from '../contexts/DatabaseContext';
@@ -23,14 +24,11 @@ import { useFilter, FilterType } from '../contexts/FilterContext';
 import { refreshAllFeeds } from '../utils/rssParser';
 import { FeedSource, Article, Topic } from '../db/database';
 import { getTodayRange, debounce, updateUnreadCountOptimized, formatDate, logDateIssue } from '../utils/helpers';
-import { debugFeedFilterRules, forceApplyAllFeedRules, checkAndFixAllFeedRules } from '../utils/filterUtils';
+import { debugFeedFilterRules, forceApplyAllFeedRules, checkAndFixAllFeedRules, diagnoseTopicFilters } from '../utils/filterUtils';
 import { debugGlobalFilterRules } from '../contexts/FilterRulesContext';
 import { applyAllRulesToAllArticles } from '../utils/filterApplier';
-import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
-import styles from './HomePage.module.css';
-import { useLayout } from '../contexts/LayoutContext';
-import { GeneralSettings } from '../types/settings';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { LogConfig } from '../utils/logConfig';
+import { preserveArticleStatus } from '../utils/feedRefreshHelper';
 
 import { useTitleBar } from '../contexts/TitleBarContext';
 import { useArticleListManager } from '../hooks/useArticleListManager';
@@ -41,8 +39,11 @@ import AddFeedModal from '../components/AddFeedModal';
 import DiscoverFeedsModal from '../components/DiscoverFeedsModal';
 import MindMapModal from '../components/MindMapModal';
 import PulsingLoader from '../components/PulsingLoader';
-import { LogConfig } from '../utils/logConfig';
-import { diagnoseTopicFilters } from '../utils/filterUtils';
+import { Panel, PanelGroup, PanelResizeHandle, ImperativePanelHandle, ImperativePanelGroupHandle } from 'react-resizable-panels';
+import styles from './HomePage.module.css';
+import { useLayout } from '../contexts/LayoutContext';
+import { GeneralSettings } from '../types/settings';
+import { useLiveQuery } from 'dexie-react-hooks';
 
 const { Header, Content } = Layout;
 const { Option } = Select;
@@ -335,8 +336,13 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
         
         if (allFeeds.length > 0) {
           try {
-            // 使用refreshAllFeeds函数刷新所有订阅源
-            const results = await refreshAllFeeds(allFeeds);
+            // 使用refreshAllFeeds函数刷新所有订阅源，简化调用方式避免类型错误
+            const results = await refreshAllFeeds(allFeeds, async (feed, articles) => {
+              if (db && articles.length > 0) {
+                await preserveArticleStatus(db, feed, articles);
+              }
+            });
+            
             const successCount = results.filter(result => result.articles.length > 0).length;
             const failCount = allFeeds.length - successCount;
             
@@ -446,9 +452,11 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   }, [isArticleListVisible]);
 
   const handleArticleSelect = (articleId: string | null) => {
+    console.log('HomePage handleArticleSelect:', articleId);
     const selectedArticle = articleListRef.current?.getArticles().find(a => a.id === articleId);
 
     if (selectedArticle) {
+      console.log('Found selectedArticle:', selectedArticle.title);
       // 异步获取订阅源信息，并根据defaultViewMode设置视图模式
       if (db && selectedArticle.sourceId) {
         db.feeds.get(selectedArticle.sourceId).then(feed => {
@@ -486,6 +494,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
     }
     
     setSelectedArticleId(articleId);
+    console.log('After setSelectedArticleId, value is:', articleId);
 
     if (articleId && listPanelRef.current?.getSize() === 0) {
       listPanelRef.current?.expand();
@@ -681,21 +690,28 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
       okText: '全部设为已读',
       cancelText: '取消',
       onOk: async () => {
-        try {
           const articleIds = unreadArticles.map(a => a.id);
-          const sourceIds = [...new Set(unreadArticles.map(a => a.sourceId))];
 
+        // 立即更新UI
+        if (articleListRef.current) {
+          articleListRef.current.markAsRead(articleIds);
+        }
+
+        // 异步更新数据库和计数
+        try {
           await db.articles.where('id').anyOf(articleIds).modify({ isRead: 'true' });
-
+          const sourceIds = [...new Set(unreadArticles.map(a => a.sourceId))];
           for (const sId of sourceIds) {
-            await updateUnreadCountOptimized(db, sId);
+            if (sId) {
+              const feed = feeds.find(f => f.id === sId);
+              await updateUnreadCountOptimized(db, sId, feed?.unreadCount);
           }
-          
+          }
           triggerArticleListRefresh();
-
+          message.success(`操作成功，${unreadArticles.length} 篇文章已标记为已读。`);
         } catch (error) {
-          LogConfig.error('HOMEPAGE', 'Failed to mark all as read:', error);
-          message.error('操作失败');
+          LogConfig.error('HOMEPAGE', 'Failed to mark all as read in DB:', error);
+          message.error('后台更新失败，但UI已更新。');
         }
       },
     });
@@ -747,9 +763,15 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
   useEffect(() => {
     const handleRefreshEvent = () => {
       console.log('收到全局刷新事件，正在刷新文章列表...');
+      message.loading({ content: '正在刷新文章列表...', key: 'article-refresh' });
       triggerArticleListRefresh();
       // 强制重新加载文章列表
       setListRefreshKey(prev => prev + 1);
+      
+      // 300ms 后显示刷新成功消息，给用户明确的反馈
+      setTimeout(() => {
+        message.success({ content: '文章列表已更新', key: 'article-refresh', duration: 2 });
+      }, 300);
     };
     
     window.addEventListener('refresh-article-list', handleRefreshEvent);
@@ -1192,7 +1214,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                       // 移除下拉刷新事件
                     >
                       {feeds.length > 0 || groupId || feedId ? (
-                        <ArticleList
+                        <ArticleListBridge
                           ref={articleListRef}
                           key={`${feedId}-${groupId}-${topicId}-${activeListFilter}-${listRefreshKey}`}
                           filter={articleFilterForList}
@@ -1211,7 +1233,10 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                         <Empty description="没有文章，请添加订阅源或分组。" style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center'}} />
                       )}
                     </div>
-                    <div className={styles.listFooterControls}>
+                    <div 
+                      className={styles.listFooterControls} 
+                      data-active-filter={activeListFilter}
+                    >
                       <Radio.Group
                         value={activeListFilter}
                         onChange={(e) => {
@@ -1223,19 +1248,19 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
                         <Radio.Button value="all" style={{ flex: 1, textAlign: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                             <AppstoreAddOutlined />
-                            <span>全部</span>
+                            {activeListFilter === 'all' && <span>全部</span>}
                           </div>
                         </Radio.Button>
                         <Radio.Button value="unread" style={{ flex: 1, textAlign: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                             <CheckCircleOutlined />
-                            <span>未读</span>
+                            {activeListFilter === 'unread' && <span>未读</span>}
                           </div>
                         </Radio.Button>
                         <Radio.Button value="starred" style={{ flex: 1, textAlign: 'center' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                             <StarOutlined />
-                            <span>收藏</span>
+                            {activeListFilter === 'starred' && <span>收藏</span>}
                           </div>
                         </Radio.Button>
                       </Radio.Group>
@@ -1256,7 +1281,7 @@ const HomePage: React.FC<HomePageProps> = ({ filter }) => {
               <div className={styles.articleDetailContainer}>
                 {selectedArticleId ? (
                   <ArticleDetail 
-                    key={selectedArticleId}
+                    key={Date.now()}
                     articleId={selectedArticleId} 
                     viewMode={articleDetailViewMode} 
                     onChangeViewMode={handleArticleDetailViewModeChange}
