@@ -101,8 +101,8 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
       return;
     }
 
-    // 优先使用manual检查，如果不存在则使用普通检查
-    const checkFunction = window.electron.checkForUpdatesManual || window.electron.checkForUpdates;
+    // 使用手动检查
+    const checkFunction = window.electron.checkForUpdatesManual;
     
     if (!checkFunction) {
       setError('更新检查功能不可用');

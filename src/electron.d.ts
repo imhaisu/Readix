@@ -11,6 +11,10 @@ interface FeedSource {
 declare global {
   interface Window {
     electron: {
+      // 应用信息
+      getAppVersion: () => Promise<string>;
+      getPlatform: () => Promise<string>;
+      
       // 窗口控制
       windowControls: {
         minimize: () => void;
@@ -35,7 +39,6 @@ declare global {
       exportOPML: (opmlContent: string) => Promise<any>;
       
       // 系统交互
-      getPlatform: () => Promise<string>;
       shellOpenExternal: (url: string) => Promise<boolean>;
       getLocalIconBase64: (iconPath: string) => Promise<{ success: boolean; data?: string; error?: string }>;
 
@@ -59,6 +62,7 @@ declare global {
       testDoubaoApi: (apiKey: string) => Promise<{ success: boolean; error?: string }>;
       streamAiSummary: (contentText: string) => void;
       onAiSummaryUpdate: (callback: (type: string, data?: any) => void) => () => void;
+      offAiSummaryUpdate: (callback: (type: string, data?: any) => void) => void;
       
       // IPC通信
       ipcRenderer: {

@@ -359,170 +359,14 @@ ipcMain.handle('get-app-version', () => {
 
 // 配置自动更新
 function configureAutoUpdater() {
-  // 手动设置更新URL
-  const feedURL = `https://github.com/imhaisu/NewReader/releases/latest/download`;
-  console.log('[Main Process] 设置更新URL:', feedURL);
-  
-  // 防止重复下载和安装
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-  
-  // 禁用自动下载
-  autoUpdater.allowPrerelease = false;
-  
-  // 设置Logger详细程度
-  const log = require('electron-log');
-  log.transports.file.level = 'debug';
-  console.log('[Main Process] 配置自动更新...');
+  console.log('[Main Process] 配置更新检查...');
   console.log('[Main Process] 当前应用版本:', app.getVersion());
-  console.log('[Main Process] 更新日志路径:', log.transports.file.getFile().path);
   
-  // 添加详细的错误日志，但向用户展示友好的错误信息
-  autoUpdater.on('error', (err) => {
-    console.error('[Main Process] 更新出错:', err);
-    console.error('[Main Process] 错误详情:', err.toString());
-    if (err.stack) {
-      console.error('[Main Process] 错误堆栈:', err.stack);
-    }
-    // TypeScript较旧版本不支持Error.cause，使用any类型绕过
-    const anyErr = err as any;
-    if (anyErr.cause) {
-      console.error('[Main Process] 错误原因:', anyErr.cause);
-    }
-    if (err.message) {
-      console.error('[Main Process] 错误消息:', err.message);
-    }
-    
-    // 检查错误类型，转换为用户友好的消息
-    let userFriendlyMessage = '检查更新失败，请稍后再试';
-    
-    // 判断是否为404错误（latest-mac.yml或其他文件未找到）
-    if (err.message && (
-        err.message.includes('404') || 
-        err.message.includes('latest-mac.yml') ||
-        err.message.includes('Cannot find') ||
-        err.message.includes('update info'))) {
-      // 向用户显示"当前已是最新版本"而非错误
-      console.log('[Main Process] 发现404错误，转换为友好提示');
-      mainWindow?.webContents.send('update-status', { status: 'not-available', message: '当前已是最新版本' });
-      return;
-    }
-    
-    // 其他错误类型的友好处理
-    if (err.message && err.message.includes('net::ERR_INTERNET_DISCONNECTED')) {
-      userFriendlyMessage = '网络连接问题，请检查您的网络设置';
-    } else if (err.message && err.message.includes('net::ERR_CONNECTION_TIMED_OUT')) {
-      userFriendlyMessage = '连接超时，请检查您的网络设置';
-    }
-    
-    mainWindow?.webContents.send('update-status', { 
-      status: 'error', 
-      error: userFriendlyMessage 
-    });
-  });
-
-  // 设置更新事件监听
-  autoUpdater.on('checking-for-update', () => {
-    console.log('[Main Process] 正在检查更新...');
-    try {
-      const feedURL = autoUpdater.getFeedURL();
-      console.log('[Main Process] 更新URL:', feedURL || '未设置');
-    } catch (error) {
-      console.error('[Main Process] 获取更新URL出错:', error);
-    }
-    mainWindow?.webContents.send('update-status', { status: 'checking' });
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    console.log('[Main Process] 发现新版本:', info.version);
-    mainWindow?.webContents.send('update-status', { 
-      status: 'available', 
-      version: info.version,
-      releaseDate: info.releaseDate,
-      releaseNotes: info.releaseNotes
-    });
-
-    // 弹出对话框询问用户是否下载更新
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '发现新版本',
-        message: `Readix ${info.version} 已发布，是否现在更新？`,
-        detail: `发布日期: ${info.releaseDate || '未知'}\n${info.releaseNotes || ''}`,
-        buttons: ['是', '否'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          // 用户确认下载，开始下载更新
-          autoUpdater.downloadUpdate().catch(err => {
-            console.error('[Main Process] 下载更新失败:', err);
-            // 下载失败时也提供友好提示
-            mainWindow?.webContents.send('update-status', { 
-              status: 'error', 
-              error: '下载更新失败，请稍后再试' 
-            });
-          });
-        }
-      }).catch(err => {
-        console.error('[Main Process] 显示对话框失败:', err);
-      });
-    }
-  });
-
-  autoUpdater.on('update-not-available', (info) => {
-    console.log('[Main Process] 已是最新版本');
-    mainWindow?.webContents.send('update-status', { 
-      status: 'not-available',
-      message: '当前已是最新版本' 
-    });
-  });
-
-  autoUpdater.on('download-progress', (progressObj) => {
-    const progress = {
-      percent: progressObj.percent,
-      bytesPerSecond: progressObj.bytesPerSecond,
-      transferred: progressObj.transferred,
-      total: progressObj.total
-    };
-    console.log(`[Main Process] 下载进度: ${progress.percent.toFixed(2)}%`);
-    mainWindow?.webContents.send('update-status', { status: 'downloading', progress });
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    console.log('[Main Process] 更新已下载，准备安装');
-    mainWindow?.webContents.send('update-status', { status: 'downloaded' });
-    
-    // 通知用户更新已下载，询问是否立即安装
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '更新已下载',
-        message: '新版本已下载完成，立即安装并重启应用?',
-        buttons: ['立即安装', '稍后安装'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          // 用户确认安装，退出并安装更新
-          autoUpdater.quitAndInstall(false, true);
-        }
-      }).catch(err => {
-        console.error('[Main Process] 显示更新下载完成对话框失败:', err);
-      });
-    }
-  });
-
   // 启动时检查更新
   setTimeout(() => {
     console.log('[Main Process] 启动后自动检查更新');
-    try {
-      autoUpdater.checkForUpdates().catch(err => {
-        console.error('[Main Process] 检查更新失败:', err);
-        // 错误时不向用户显示技术错误，而是统一友好提示
-        // 错误处理会通过autoUpdater.on('error')事件处理
-      });
-    } catch (error) {
-      console.error('[Main Process] 检查更新过程中出现异常:', error);
-    }
+    // 使用手动检查机制，不依赖electron-updater
+    // 更新检查将通过用户手动触发或通过IPC调用
   }, 3000); // 延迟3秒检查，避免影响启动速度
 }
 
@@ -1372,188 +1216,176 @@ ipcMain.handle('check-for-updates', async () => {
     return { success: false, error: '开发模式下不支持自动更新' };
   }
   
-  try {
-    console.log('[Main Process] 手动检查更新...');
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) {
-      return { success: false, error: '检查更新失败，未收到响应' };
+  // 直接调用手动检查逻辑
+  return await ipcMain.handle('check-for-updates-manual', async () => {
+    if (isDevelopment) {
+      log.info('开发模式下不支持自动更新');
+      return { success: false, error: '开发模式下不支持自动更新' };
     }
-    return { success: true, updateInfo: result.updateInfo };
-  } catch (error: any) {
-    console.error('[Main Process] 手动检查更新失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 添加IPC处理程序以检查GitHub上的最新版本
-ipcMain.handle('check-for-updates-manual', async () => {
-  if (isDevelopment) {
-    log.info('开发模式下不支持自动更新');
-    return { success: false, error: '开发模式下不支持自动更新' };
-  }
-  
-  try {
-    log.info('手动检查GitHub更新');
-    // 获取当前版本
-    const currentVersion = app.getVersion();
-    log.info(`当前版本: ${currentVersion}`);
     
-    // 从GitHub API获取所有版本信息 - 使用公共API，不需要认证
-    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'ReadixApp'
-      },
-      timeout: 10000 // 10秒超时
-    });
-    
-    if (response.status === 200 && response.data.length > 0) {
-      // 过滤非草稿版本并按发布日期排序
-      const releases = response.data
-        .filter((release: any) => !release.draft && release.published_at)
-        .sort((a: any, b: any) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
+    try {
+      log.info('手动检查GitHub更新');
+      // 获取当前版本
+      const currentVersion = app.getVersion();
+      log.info(`当前版本: ${currentVersion}`);
       
-      if (releases.length === 0) {
-        log.info('没有找到已发布的版本');
-        mainWindow?.webContents.send('update-status', { status: 'not-available' });
-        return { success: true, updateAvailable: false, message: '当前已是最新版本' };
-      }
+      // 从GitHub API获取所有版本信息 - 使用公共API，不需要认证
+      const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
+        headers: {
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'ReadixApp'
+        },
+        timeout: 10000 // 10秒超时
+      });
       
-      // 获取最新版本
-      const latestRelease = releases[0];
-      const latestVersion = latestRelease.tag_name.replace('v', '');
-      const releaseNotes = latestRelease.body || '';
-      const releaseDate = latestRelease.published_at;
-      
-      log.info(`最新版本: ${latestVersion}`);
-      log.info(`发布说明: ${releaseNotes}`);
-      
-      // 版本比较
-      const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0;
-      
-      if (isUpdateAvailable) {
-        log.info('发现新版本');
+      if (response.status === 200 && response.data.length > 0) {
+        // 过滤非草稿版本并按发布日期排序
+        const releases = response.data
+          .filter((release: any) => !release.draft && release.published_at)
+          .sort((a: any, b: any) => new Date(b.published_at).getTime() - new Date(a.published_at).getTime());
         
-        // 获取下载资源
-        const assets = latestRelease.assets || [];
-        let downloadUrl = '';
-        
-        // 根据平台选择下载URL
-        if (process.platform === 'darwin') {
-          // macOS - 寻找DMG文件
-          const dmgAsset = assets.find((asset: any) => asset.name.endsWith('.dmg'));
-          if (dmgAsset) {
-            downloadUrl = dmgAsset.browser_download_url;
-            log.info(`找到macOS DMG下载地址: ${downloadUrl}`);
-          }
-        } else if (process.platform === 'win32') {
-          // Windows - 寻找EXE或MSI文件
-          const winAsset = assets.find((asset: any) => asset.name.endsWith('.exe') || asset.name.endsWith('.msi'));
-          if (winAsset) {
-            downloadUrl = winAsset.browser_download_url;
-            log.info(`找到Windows下载地址: ${downloadUrl}`);
-          }
-        } else if (process.platform === 'linux') {
-          // Linux - 寻找AppImage或deb文件
-          const linuxAsset = assets.find((asset: any) => asset.name.endsWith('.AppImage') || asset.name.endsWith('.deb'));
-          if (linuxAsset) {
-            downloadUrl = linuxAsset.browser_download_url;
-            log.info(`找到Linux下载地址: ${downloadUrl}`);
-          }
+        if (releases.length === 0) {
+          log.info('没有找到已发布的版本');
+          mainWindow?.webContents.send('update-status', { status: 'not-available' });
+          return { success: true, updateAvailable: false, message: '当前已是最新版本' };
         }
         
-        // 通知用户有新版本
-        if (mainWindow && downloadUrl) {
-          mainWindow.webContents.send('update-status', { 
-            status: 'available',
+        // 获取最新版本
+        const latestRelease = releases[0];
+        const latestVersion = latestRelease.tag_name.replace('v', '');
+        const releaseNotes = latestRelease.body || '';
+        const releaseDate = latestRelease.published_at;
+        
+        log.info(`最新版本: ${latestVersion}`);
+        log.info(`发布说明: ${releaseNotes}`);
+        
+        // 版本比较
+        const isUpdateAvailable = compareVersions(latestVersion, currentVersion) > 0;
+        
+        if (isUpdateAvailable) {
+          log.info('发现新版本');
+          
+          // 获取下载资源
+          const assets = latestRelease.assets || [];
+          let downloadUrl = '';
+          
+          // 根据平台选择下载URL
+          if (process.platform === 'darwin') {
+            // macOS - 寻找DMG文件
+            const dmgAsset = assets.find((asset: any) => asset.name.endsWith('.dmg'));
+            if (dmgAsset) {
+              downloadUrl = dmgAsset.browser_download_url;
+              log.info(`找到macOS DMG下载地址: ${downloadUrl}`);
+            }
+          } else if (process.platform === 'win32') {
+            // Windows - 寻找EXE或MSI文件
+            const winAsset = assets.find((asset: any) => asset.name.endsWith('.exe') || asset.name.endsWith('.msi'));
+            if (winAsset) {
+              downloadUrl = winAsset.browser_download_url;
+              log.info(`找到Windows下载地址: ${downloadUrl}`);
+            }
+          } else if (process.platform === 'linux') {
+            // Linux - 寻找AppImage或deb文件
+            const linuxAsset = assets.find((asset: any) => asset.name.endsWith('.AppImage') || asset.name.endsWith('.deb'));
+            if (linuxAsset) {
+              downloadUrl = linuxAsset.browser_download_url;
+              log.info(`找到Linux下载地址: ${downloadUrl}`);
+            }
+          }
+          
+          // 通知用户有新版本
+          if (mainWindow && downloadUrl) {
+            mainWindow.webContents.send('update-status', { 
+              status: 'available',
+              version: latestVersion,
+              releaseDate: releaseDate,
+              releaseNotes: releaseNotes,
+              downloadUrl: downloadUrl
+            });
+            
+            const { response } = await dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: '发现新版本',
+              message: `Readix ${latestVersion} 已发布，是否打开下载页面？`,
+              detail: `发布日期: ${releaseDate || '未知'}\n${releaseNotes || ''}`,
+              buttons: ['是', '否'],
+              defaultId: 0
+            });
+            
+            if (response === 0) {
+              // 用户确认，打开下载链接
+              await shell.openExternal(downloadUrl);
+            }
+          } else if (!downloadUrl) {
+            log.warn(`没有找到适合当前平台(${process.platform})的下载资源`);
+            // 使用release页面作为备用
+            downloadUrl = latestRelease.html_url;
+          }
+          
+          return { 
+            success: true, 
+            updateAvailable: true,
             version: latestVersion,
             releaseDate: releaseDate,
             releaseNotes: releaseNotes,
-            downloadUrl: downloadUrl
-          });
-          
-          const { response } = await dialog.showMessageBox(mainWindow, {
-            type: 'info',
-            title: '发现新版本',
-            message: `Readix ${latestVersion} 已发布，是否打开下载页面？`,
-            detail: `发布日期: ${releaseDate || '未知'}\n${releaseNotes || ''}`,
-            buttons: ['是', '否'],
-            defaultId: 0
-          });
-          
-          if (response === 0) {
-            // 用户确认，打开下载链接
-            await shell.openExternal(downloadUrl);
-          }
-        } else if (!downloadUrl) {
-          log.warn(`没有找到适合当前平台(${process.platform})的下载资源`);
-          // 使用release页面作为备用
-          downloadUrl = latestRelease.html_url;
+            downloadUrl: downloadUrl || latestRelease.html_url
+          };
+        } else {
+          log.info('已是最新版本');
+          mainWindow?.webContents.send('update-status', { status: 'not-available' });
+          return { success: true, updateAvailable: false, message: '当前已是最新版本' };
         }
-        
-        return { 
-          success: true, 
-          updateAvailable: true,
-          version: latestVersion,
-          releaseDate: releaseDate,
-          releaseNotes: releaseNotes,
-          downloadUrl: downloadUrl || latestRelease.html_url
-        };
       } else {
-        log.info('已是最新版本');
-        mainWindow?.webContents.send('update-status', { status: 'not-available' });
+        log.error('GitHub API请求失败或没有releases:', response.status);
+        // 友好错误提示
+        mainWindow?.webContents.send('update-status', { 
+          status: 'not-available', 
+          message: '当前已是最新版本' 
+        });
         return { success: true, updateAvailable: false, message: '当前已是最新版本' };
       }
-    } else {
-      log.error('GitHub API请求失败或没有releases:', response.status);
-      // 友好错误提示
-      mainWindow?.webContents.send('update-status', { 
-        status: 'not-available', 
-        message: '当前已是最新版本' 
-      });
-      return { success: true, updateAvailable: false, message: '当前已是最新版本' };
-    }
-  } catch (error: any) {
-    log.error('检查更新出错:', error);
-    
-    // 详细记录错误信息以便调试
-    if (error.response) {
-      log.error(`HTTP状态: ${error.response.status}`);
-      log.error(`响应数据: ${JSON.stringify(error.response.data)}`);
-    } else if (error.request) {
-      log.error(`请求错误: ${error.message}`);
-      log.error(`错误代码: ${error.code}`);
-    } else {
-      log.error(`错误: ${error.message}`);
-    }
-    
-    // 根据错误类型返回用户友好的消息
-    let userFriendlyMessage = '检查更新失败，请稍后再试';
-    
-    if (error.response) {
-      if (error.response.status === 404) {
-        userFriendlyMessage = '当前已是最新版本';
-        mainWindow?.webContents.send('update-status', { status: 'not-available' });
-        return { success: true, updateAvailable: false, message: userFriendlyMessage };
-      } else if (error.response.status === 403) {
-        userFriendlyMessage = '请求频率受限，请稍后再试';
-      } else if (error.response.status >= 500) {
-        userFriendlyMessage = '更新服务器暂时不可用，请稍后再试';
+    } catch (error: any) {
+      log.error('检查更新出错:', error);
+      
+      // 详细记录错误信息以便调试
+      if (error.response) {
+        log.error(`HTTP状态: ${error.response.status}`);
+        log.error(`响应数据: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        log.error(`请求错误: ${error.message}`);
+        log.error(`错误代码: ${error.code}`);
+      } else {
+        log.error(`错误: ${error.message}`);
       }
-    } else if (error.code === 'ENOTFOUND') {
-      userFriendlyMessage = '网络连接问题，请检查您的网络设置';
-    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
-      userFriendlyMessage = '连接超时，请检查您的网络设置';
+      
+      // 根据错误类型返回用户友好的消息
+      let userFriendlyMessage = '检查更新失败，请稍后再试';
+      
+      if (error.response) {
+        if (error.response.status === 404) {
+          userFriendlyMessage = '当前已是最新版本';
+          mainWindow?.webContents.send('update-status', { status: 'not-available' });
+          return { success: true, updateAvailable: false, message: userFriendlyMessage };
+        } else if (error.response.status === 403) {
+          userFriendlyMessage = '请求频率受限，请稍后再试';
+        } else if (error.response.status >= 500) {
+          userFriendlyMessage = '更新服务器暂时不可用，请稍后再试';
+        }
+      } else if (error.code === 'ENOTFOUND') {
+        userFriendlyMessage = '网络连接问题，请检查您的网络设置';
+      } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+        userFriendlyMessage = '连接超时，请检查您的网络设置';
+      }
+      
+      // 发送友好的错误消息到前端
+      mainWindow?.webContents.send('update-status', { 
+        status: 'error', 
+        error: userFriendlyMessage 
+      });
+      
+      return { success: false, error: userFriendlyMessage };
     }
-    
-    // 发送友好的错误消息到前端
-    mainWindow?.webContents.send('update-status', { 
-      status: 'error', 
-      error: userFriendlyMessage 
-    });
-    
-    return { success: false, error: userFriendlyMessage };
-  }
+  });
 });
 
 // 版本比较函数

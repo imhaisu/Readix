@@ -1,0 +1,27 @@
+{
+  "updateCheck": {
+    "enabled": true,
+    "checkInterval": 86400000,
+    "githubRepo": "imhaisu/NewReader",
+    "githubApiUrl": "https://api.github.com/repos/imhaisu/NewReader/releases",
+    "timeout": 10000
+  },
+  "platforms": {
+    "darwin": {
+      "fileExtensions": [".dmg", ".zip"],
+      "downloadUrlPattern": "https://github.com/imhaisu/NewReader/releases/download/v{version}/Readix-{version}.dmg"
+    },
+    "win32": {
+      "fileExtensions": [".exe", ".msi"],
+      "downloadUrlPattern": "https://github.com/imhaisu/NewReader/releases/download/v{version}/Readix-Setup-{version}.exe"
+    },
+    "linux": {
+      "fileExtensions": [".AppImage", ".deb"],
+      "downloadUrlPattern": "https://github.com/imhaisu/NewReader/releases/download/v{version}/Readix-{version}.AppImage"
+    }
+  },
+  "versioning": {
+    "currentVersion": "0.1.9",
+    "versionFormat": "semver"
+  }
+} 

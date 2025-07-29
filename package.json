@@ -1,6 +1,6 @@
 {
   "name": "readix",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "本地化轻量级RSS阅读器",
   "main": "dist/electron/main.js",
   "scripts": {
@@ -15,7 +15,10 @@
     "package:win": "npm run build && electron-builder --win",
     "package:mac": "npm run build && electron-builder --mac",
     "package:linux": "npm run build && electron-builder --linux",
-    "release": "npm run build && electron-builder --publish always"
+    "release": "npm run build && electron-builder --publish always",
+    "test:update": "node test-update-complete.js",
+    "test:update-simple": "node test-update-local.js",
+    "test:update-integration": "node test-update-integration.js"
   },
   "author": "",
   "license": "MIT",
@@ -92,12 +95,6 @@
     "linux": {
       "target": "AppImage",
       "icon": "assets/icon.png"
-    },
-    "publish": [
-      {
-        "provider": "generic",
-        "url": "https://github.com/imhaisu/NewReader/releases/download/v${version}"
-      }
-    ]
+    }
   }
 }
