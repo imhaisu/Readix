@@ -360,7 +360,7 @@ ipcMain.handle('get-app-version', () => {
 // 配置自动更新
 function configureAutoUpdater() {
   // 手动设置更新URL
-  const feedURL = `https://github.com/imhaisu/NewReader/releases/latest/download`;
+  const feedURL = `https://github.com/imhaisu/Readix/releases/latest/download`;
   console.log('[Main Process] 设置更新URL:', feedURL);
   
   // 防止重复下载和安装
@@ -1385,6 +1385,57 @@ ipcMain.handle('check-for-updates', async () => {
   }
 });
 
+// 添加下载更新的IPC处理程序
+ipcMain.handle('download-update', async () => {
+  if (isDevelopment) {
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
+  try {
+    console.log('[Main Process] 开始下载更新...');
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Main Process] 下载更新失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 添加安装更新的IPC处理程序
+ipcMain.handle('install-update', async () => {
+  if (isDevelopment) {
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
+  try {
+    console.log('[Main Process] 安装更新...');
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[Main Process] 安装更新失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 添加检查更新的IPC处理程序
+ipcMain.handle('check-for-updates', async () => {
+  if (isDevelopment) {
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
+  try {
+    console.log('[Main Process] 手动检查更新...');
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) {
+      return { success: false, error: '检查更新失败，未收到响应' };
+    }
+    return { success: true, updateInfo: result.updateInfo };
+  } catch (error: any) {
+    console.error('[Main Process] 手动检查更新失败:', error);
+    return { success: false, error: error.message };
+  }
+});
+
 // 添加IPC处理程序以检查GitHub上的最新版本
 ipcMain.handle('check-for-updates-manual', async () => {
   if (isDevelopment) {
@@ -1399,7 +1450,7 @@ ipcMain.handle('check-for-updates-manual', async () => {
     log.info(`当前版本: ${currentVersion}`);
     
     // 从GitHub API获取所有版本信息 - 使用公共API，不需要认证
-    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
+    const response = await axios.get('https://api.github.com/repos/imhaisu/Readix/releases', {
       headers: {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'ReadixApp'
