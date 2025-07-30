@@ -87,17 +87,16 @@
     },
     "win": {
       "target": "nsis",
-      "icon": "assets/icons.icns"
+      "icon": "assets/icon.png"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "assets/icons.icns"
+      "icon": "assets/icon.png"
     },
     "publish": [
       {
-        "provider": "github",
-        "owner": "imhaisu",
-        "repo": "Readix"
+        "provider": "generic",
+        "url": "https://github.com/imhaisu/Readix/releases/download/v${version}"
       }
     ]
   }

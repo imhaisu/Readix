@@ -1385,57 +1385,6 @@ ipcMain.handle('check-for-updates', async () => {
   }
 });
 
-// 添加下载更新的IPC处理程序
-ipcMain.handle('download-update', async () => {
-  if (isDevelopment) {
-    return { success: false, error: '开发模式下不支持自动更新' };
-  }
-  
-  try {
-    console.log('[Main Process] 开始下载更新...');
-    await autoUpdater.downloadUpdate();
-    return { success: true };
-  } catch (error: any) {
-    console.error('[Main Process] 下载更新失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 添加安装更新的IPC处理程序
-ipcMain.handle('install-update', async () => {
-  if (isDevelopment) {
-    return { success: false, error: '开发模式下不支持自动更新' };
-  }
-  
-  try {
-    console.log('[Main Process] 安装更新...');
-    autoUpdater.quitAndInstall(false, true);
-    return { success: true };
-  } catch (error: any) {
-    console.error('[Main Process] 安装更新失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
-// 添加检查更新的IPC处理程序
-ipcMain.handle('check-for-updates', async () => {
-  if (isDevelopment) {
-    return { success: false, error: '开发模式下不支持自动更新' };
-  }
-  
-  try {
-    console.log('[Main Process] 手动检查更新...');
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) {
-      return { success: false, error: '检查更新失败，未收到响应' };
-    }
-    return { success: true, updateInfo: result.updateInfo };
-  } catch (error: any) {
-    console.error('[Main Process] 手动检查更新失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
 // 添加IPC处理程序以检查GitHub上的最新版本
 ipcMain.handle('check-for-updates-manual', async () => {
   if (isDevelopment) {

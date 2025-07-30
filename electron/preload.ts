@@ -41,8 +41,6 @@ contextBridge.exposeInMainWorld('electron', {
   // 应用更新
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   checkForUpdatesManual: () => ipcRenderer.invoke('check-for-updates-manual'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  installUpdate: () => ipcRenderer.invoke('install-update'),
   onUpdateStatus: (callback: (event: any, status: any) => void) => {
     ipcRenderer.on('update-status', callback);
     return () => ipcRenderer.removeListener('update-status', callback);
