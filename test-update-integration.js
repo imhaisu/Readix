@@ -27,7 +27,7 @@ async function simulateUpdateCheck() {
   try {
     // 1. 检查GitHub API连接
     console.log('1️⃣ 检查GitHub API连接...');
-    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
+    const response = await axios.get('https://api.github.com/repos/imhaisu/Readix/releases', {
       headers: {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'ReadixApp'

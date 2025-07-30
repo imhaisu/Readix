@@ -45,7 +45,7 @@ async function testGitHubAPI() {
   console.log('\n--- 测试GitHub API连接 ---');
   
   try {
-    const response = await axios.get('https://api.github.com/repos/imhaisu/NewReader/releases', {
+    const response = await axios.get('https://api.github.com/repos/imhaisu/Readix/releases', {
       headers: {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'ReadixApp'
