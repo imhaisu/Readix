@@ -51,6 +51,8 @@ declare global {
         downloadUrl?: string;
         message?: string;
       }>;
+      downloadUpdate: () => Promise<{ success: boolean; error?: string }>;
+      installUpdate: () => Promise<{ success: boolean; error?: string }>;
       onUpdateStatus: (callback: (event: any, status: any) => void) => () => void;
       offUpdateStatus: (callback: (event: any, status: any) => void) => void;
 

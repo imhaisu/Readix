@@ -357,17 +357,51 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+// 添加检查更新的IPC处理程序
+ipcMain.handle('check-for-updates', () => {
+  console.log('[Main Process] 手动检查更新');
+  try {
+    autoUpdater.checkForUpdates();
+    return { success: true };
+  } catch (error) {
+    console.error('[Main Process] 检查更新失败:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// 添加下载更新的IPC处理程序
+ipcMain.handle('download-update', () => {
+  console.log('[Main Process] 手动下载更新');
+  try {
+    autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (error) {
+    console.error('[Main Process] 下载更新失败:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+// 添加安装更新的IPC处理程序
+ipcMain.handle('install-update', () => {
+  console.log('[Main Process] 手动安装更新');
+  try {
+    autoUpdater.quitAndInstall(false, true);
+    return { success: true };
+  } catch (error) {
+    console.error('[Main Process] 安装更新失败:', error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
 // 配置自动更新
 function configureAutoUpdater() {
   // 手动设置更新URL
   const feedURL = `https://github.com/imhaisu/Readix/releases/latest/download`;
   console.log('[Main Process] 设置更新URL:', feedURL);
   
-  // 防止重复下载和安装
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-  
-  // 禁用自动下载
+  // 配置自动下载和安装
+  autoUpdater.autoDownload = false; // 手动控制下载
+  autoUpdater.autoInstallOnAppQuit = true; // 退出时自动安装
   autoUpdater.allowPrerelease = false;
   
   // 设置Logger详细程度
@@ -447,16 +481,16 @@ function configureAutoUpdater() {
       dialog.showMessageBox(mainWindow, {
         type: 'info',
         title: '发现新版本',
-        message: `Readix ${info.version} 已发布，是否现在更新？`,
+        message: `Readix ${info.version} 已发布，是否现在下载？`,
         detail: `发布日期: ${info.releaseDate || '未知'}\n${info.releaseNotes || ''}`,
-        buttons: ['是', '否'],
+        buttons: ['立即下载', '稍后下载'],
         defaultId: 0
       }).then(({ response }) => {
         if (response === 0) {
           // 用户确认下载，开始下载更新
+          console.log('[Main Process] 开始下载更新...');
           autoUpdater.downloadUpdate().catch(err => {
             console.error('[Main Process] 下载更新失败:', err);
-            // 下载失败时也提供友好提示
             mainWindow?.webContents.send('update-status', { 
               status: 'error', 
               error: '下载更新失败，请稍后再试' 
@@ -490,19 +524,24 @@ function configureAutoUpdater() {
 
   autoUpdater.on('update-downloaded', (info) => {
     console.log('[Main Process] 更新已下载，准备安装');
-    mainWindow?.webContents.send('update-status', { status: 'downloaded' });
+    mainWindow?.webContents.send('update-status', { 
+      status: 'downloaded',
+      version: info.version 
+    });
     
     // 通知用户更新已下载，询问是否立即安装
     if (mainWindow) {
       dialog.showMessageBox(mainWindow, {
         type: 'info',
-        title: '更新已下载',
-        message: '新版本已下载完成，立即安装并重启应用?',
+        title: '更新下载完成',
+        message: `Readix ${info.version} 已下载完成，是否立即安装？`,
+        detail: '安装后应用将自动重启',
         buttons: ['立即安装', '稍后安装'],
         defaultId: 0
       }).then(({ response }) => {
         if (response === 0) {
           // 用户确认安装，退出并安装更新
+          console.log('[Main Process] 用户确认安装，开始安装更新...');
           autoUpdater.quitAndInstall(false, true);
         }
       }).catch(err => {
