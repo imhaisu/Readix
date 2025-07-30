@@ -80,6 +80,13 @@
       "output": "release",
       "buildResources": "assets"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "imhaisu",
+        "repo": "NewReader"
+      }
+    ],
     "mac": {
       "category": "public.app-category.news",
       "icon": "assets/icons.icns",

@@ -21,7 +21,6 @@
     }
   },
   "versioning": {
-    "currentVersion": "0.1.9",
     "versionFormat": "semver"
   }
 } 

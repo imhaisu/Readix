@@ -3,6 +3,7 @@ export interface Settings {
     appearance: AppearanceSettings;
     advanced: AdvancedSettings;
     layout: LayoutSettings;
+    updates?: UpdateSettings; // 更新设置，可选
     features: {
         // 已移除useNewFeedList设置项，因为现在只使用新版组件
     };
@@ -10,6 +11,13 @@ export interface Settings {
 }
 
 // 新增开发者选项接口
+export interface UpdateSettings {
+  autoCheck: boolean;
+  checkInterval: number; // 毫秒
+  downloadAutomatically: boolean;
+  installAutomatically: boolean;
+}
+
 export interface DeveloperOptions {
   // 已移除旧版文章列表选项
   [key: string]: any;

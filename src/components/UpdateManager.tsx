@@ -101,8 +101,8 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
       return;
     }
 
-    // 使用手动检查
-    const checkFunction = window.electron.checkForUpdatesManual;
+    // 使用新的自动更新检查
+    const checkFunction = window.electron.checkForUpdates;
     
     if (!checkFunction) {
       setError('更新检查功能不可用');
@@ -129,6 +129,38 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
     }
   };
 
+  const handleDownloadUpdate = async () => {
+    if (!window.electron?.downloadUpdate) {
+      setError('下载功能不可用');
+      return;
+    }
+
+    try {
+      setStatus('downloading');
+      setError(null);
+      await window.electron.downloadUpdate();
+    } catch (err: any) {
+      console.error('下载更新出错:', err);
+      setError('下载更新时发生错误，请稍后再试');
+      setStatus('error');
+    }
+  };
+
+  const handleInstallUpdate = async () => {
+    if (!window.electron?.installUpdate) {
+      setError('安装功能不可用');
+      return;
+    }
+
+    try {
+      await window.electron.installUpdate();
+    } catch (err: any) {
+      console.error('安装更新出错:', err);
+      setError('安装更新时发生错误');
+      setStatus('error');
+    }
+  };
+
   const formatBytes = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -144,19 +176,30 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         
       case 'available':
         return (
-          <Alert
-            message={`发现新版本 v${updateInfo?.version || ''}`}
-            description={
-              <div>
-                <p><strong>当前版本:</strong> v{currentVersion}</p>
-                <p><strong>新版本:</strong> v{updateInfo?.version || ''}</p>
-                <p><strong>发布日期:</strong> {updateInfo?.releaseDate ? new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN') : '未知'}</p>
-                <p><strong>更新说明:</strong> {updateInfo?.releaseNotes || '无'}</p>
-              </div>
-            }
-            type="success"
-            showIcon
-          />
+          <div>
+            <Alert
+              message={`发现新版本 v${updateInfo?.version || ''}`}
+              description={
+                <div>
+                  <p><strong>当前版本:</strong> v{currentVersion}</p>
+                  <p><strong>新版本:</strong> v{updateInfo?.version || ''}</p>
+                  <p><strong>发布日期:</strong> {updateInfo?.releaseDate ? new Date(updateInfo.releaseDate).toLocaleDateString('zh-CN') : '未知'}</p>
+                  <p><strong>更新说明:</strong> {updateInfo?.releaseNotes || '无'}</p>
+                </div>
+              }
+              type="success"
+              showIcon
+            />
+            <div style={{ marginTop: 16 }}>
+              <Button 
+                type="primary" 
+                onClick={handleDownloadUpdate}
+                icon={<CloudDownloadOutlined />}
+              >
+                下载更新
+              </Button>
+            </div>
+          </div>
         );
         
       case 'downloading':
@@ -178,7 +221,20 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         );
         
       case 'downloaded':
-        return <Alert message="更新已下载，将在下次启动时安装" type="success" showIcon />;
+        return (
+          <div>
+            <Alert message="更新已下载完成" type="success" showIcon />
+            <div style={{ marginTop: 16 }}>
+              <Button 
+                type="primary" 
+                onClick={handleInstallUpdate}
+                icon={<CloudDownloadOutlined />}
+              >
+                立即安装
+              </Button>
+            </div>
+          </div>
+        );
         
       case 'error':
         // 显示友好错误提示，使用info类型而非error
