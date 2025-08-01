@@ -11,6 +11,9 @@ interface FeedSource {
 declare global {
   interface Window {
     electron: {
+      // 应用信息
+      getAppVersion: () => Promise<string>;
+      
       // 窗口控制
       windowControls: {
         minimize: () => void;
