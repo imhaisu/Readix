@@ -274,10 +274,10 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
             />
             {progress && (
               <div style={{ marginTop: 8 }}>
-                <Text type="secondary">
+              <Text type="secondary">
                   下载速度: {formatSpeed(progress.bytesPerSecond)} | 
                   进度: {formatBytes(progress.transferred)} / {formatBytes(progress.total)}
-                </Text>
+              </Text>
               </div>
             )}
           </div>
@@ -321,10 +321,10 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
           <Alert
             message="软件更新"
             description={
-              <div>
+          <div>
                 <p><strong>当前版本:</strong> v{currentVersion}</p>
                 <p>点击下方按钮检查是否有新版本可用</p>
-              </div>
+          </div>
             }
             type="info"
             showIcon
@@ -413,24 +413,24 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
 
   return (
     <>
-      <Card className={className}>
-        <div>
+    <Card className={className}>
+      <div>
           <Title level={5}>
             <CloudDownloadOutlined /> 软件更新
           </Title>
-          <div style={{ marginBottom: 16 }}>
-            {renderStatusContent()}
-          </div>
-          <Space>
-            <Button 
-              type="primary"
-              icon={<SyncOutlined />} 
-              onClick={handleCheckForUpdates}
-              loading={isChecking || status === 'checking'}
+        <div style={{ marginBottom: 16 }}>
+          {renderStatusContent()}
+        </div>
+        <Space>
+          <Button 
+            type="primary"
+            icon={<SyncOutlined />} 
+            onClick={handleCheckForUpdates}
+            loading={isChecking || status === 'checking'}
               disabled={status === 'downloading' || isDownloading}
-            >
-              检查更新
-            </Button>
+          >
+            检查更新
+          </Button>
             {status === 'downloaded' && (
               <Button
                 type="primary"
@@ -441,9 +441,9 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
                 立即安装
               </Button>
             )}
-          </Space>
-        </div>
-      </Card>
+        </Space>
+      </div>
+    </Card>
       {renderUpdateModal()}
     </>
   );

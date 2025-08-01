@@ -495,7 +495,7 @@ const SettingsPage: React.FC = () => {
           {process.env.NODE_ENV === 'development' ? (
             <UpdateManagerDev className={styles.settingCard} />
           ) : (
-            <UpdateManager className={styles.settingCard} />
+          <UpdateManager className={styles.settingCard} />
           )}
         </>
       )

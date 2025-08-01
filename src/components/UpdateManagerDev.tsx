@@ -283,7 +283,7 @@ const UpdateManagerDev: React.FC<UpdateManagerDevProps> = ({ className }) => {
         ]}
         width={500}
         bodyStyle={{ 
-          maxHeight: '450px', 
+          maxHeight: '400px', 
           overflow: 'hidden',
           padding: '16px 24px'
         }}
@@ -315,7 +315,7 @@ const UpdateManagerDev: React.FC<UpdateManagerDevProps> = ({ className }) => {
               <Text strong>更新说明</Text>
               <Divider style={{ margin: '8px 0' }} />
               <div style={{ 
-                maxHeight: '180px', 
+                maxHeight: '200px', 
                 overflowY: 'auto',
                 paddingRight: '8px'
               }}>
