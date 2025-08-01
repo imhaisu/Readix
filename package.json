@@ -1,6 +1,6 @@
 {
   "name": "readix",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "本地化轻量级RSS阅读器",
   "main": "dist/electron/main.js",
   "scripts": {
@@ -97,7 +97,7 @@
       {
         "provider": "generic",
         "url": "https://github.com/imhaisu/Readix/releases/download/v${version}"
-    }
+      }
     ]
   }
 }
