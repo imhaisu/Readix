@@ -559,7 +559,7 @@ async function fetchAndParseFeed(feedUrl: string) {
         'Accept': 'application/rss+xml,application/xml,text/xml,application/atom+xml',
       },
       responseType: 'text',
-      timeout: 15000,
+      timeout: (store.get('settings')?.advanced?.fetchTimeout || 15) * 1000, // 使用设置的超时时间
       maxRedirects: 5,
     });
     return response.data;
@@ -933,8 +933,7 @@ const domainRequestTracker: Record<string, { lastRequest: number, pendingRequest
 
 // 添加文章内容缓存系统
 const articleContentCache = new Map<string, {content: string, title: string, timestamp: number}>();
-const CACHE_MAX_SIZE = 100; // 最多缓存100篇文章
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+// 不再使用硬编码的CACHE_MAX_SIZE和CACHE_TTL
 
 // 域名限流配置，有些域名需要更严格的限流
 const DOMAIN_RATE_LIMITS: Record<string, {interval: number, maxPending: number}> = {
@@ -945,9 +944,13 @@ const DOMAIN_RATE_LIMITS: Record<string, {interval: number, maxPending: number}>
 // 清理过期缓存
 const cleanupCache = () => {
   const now = Date.now();
+  const settings = store.get('settings');
+  const cacheTTL = (settings?.advanced?.cacheTTL || 24) * 60 * 60 * 1000;
+  const cacheSize = settings?.advanced?.cacheSize || 100;
+  
   let expiredCount = 0;
   for (const [key, value] of articleContentCache.entries()) {
-    if (now - value.timestamp > CACHE_TTL) {
+    if (now - value.timestamp > cacheTTL) {
       articleContentCache.delete(key);
       expiredCount++;
     }
@@ -957,13 +960,13 @@ const cleanupCache = () => {
   }
   
   // 如果缓存太大，删除最旧的条目
-  if (articleContentCache.size > CACHE_MAX_SIZE) {
+  if (articleContentCache.size > cacheSize) {
     // 按时间戳排序
     const sortedEntries = [...articleContentCache.entries()]
       .sort((a, b) => a[1].timestamp - b[1].timestamp);
       
     // 删除最旧的条目，直到缓存大小达到目标
-    const entriesToDelete = sortedEntries.slice(0, articleContentCache.size - CACHE_MAX_SIZE);
+    const entriesToDelete = sortedEntries.slice(0, articleContentCache.size - cacheSize);
     for (const [key] of entriesToDelete) {
       articleContentCache.delete(key);
     }
@@ -1040,7 +1043,7 @@ ipcMain.handle('fetch-article-content', async (event, articleUrl) => {
       // 使用axios手动获取网页内容，这样我们可以设置超时
       const response = await axios.get(articleUrl, {
         headers,
-        timeout: 15000 // 15秒超时
+        timeout: (store.get('settings')?.advanced?.fetchTimeout || 15) * 1000, // 15秒超时
       });
       
       const dom = new JSDOM(response.data, {

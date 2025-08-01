@@ -26,44 +26,33 @@ body.dark-mode .scrolling::-webkit-scrollbar-thumb {
 /* 文章列表容器 */
 .scrollableArticleListContainer {
   height: 100%;
-  position: relative;
-  box-sizing: border-box;
-  padding: 0;
-  /* 滚动条样式优化 */
   overflow-y: auto;
-  scrollbar-width: none; /* Firefox默认隐藏 */
-  -ms-overflow-style: none; /* IE 默认隐藏 */
+  outline: none;
+  position: relative;
 }
 
-/* Webkit 浏览器默认隐藏滚动条 */
+/* 默认状态下，完全隐藏滚动条 */
 .scrollableArticleListContainer::-webkit-scrollbar {
-  width: 8px; /* 进一步加宽滚动条使其更易于交互 */
+  display: none; 
+}
+
+/* 当处于滚动状态时，显示滚动条 */
+.scrollableArticleListContainer.scrolling::-webkit-scrollbar {
+  display: block;
+  width: 8px;
+}
+
+.scrollableArticleListContainer.scrolling::-webkit-scrollbar-track {
   background: transparent;
-}
-
-.scrollableArticleListContainer::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollableArticleListContainer::-webkit-scrollbar-thumb {
-  background-color: transparent; /* 默认透明 */
-  border-radius: 20px;
-  transition: background-color 0.2s, opacity 0.2s, visibility 0.2s;
-  opacity: 0;
-  visibility: hidden;
-}
-
-/* 悬停或滚动时显示滚动条 */
-.scrollableArticleListContainer:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  visibility: visible;
-  opacity: 0.6;
 }
 
 .scrollableArticleListContainer.scrolling::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.3);
-  visibility: visible;
-  opacity: 1;
+  background-color: rgba(181, 181, 181, 0.5);
+  border-radius: 4px;
+}
+
+.scrollableArticleListContainer.scrolling::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(142, 142, 142, 0.8);
 }
 
 /* 焦点时移除轮廓线 */
@@ -87,6 +76,32 @@ body.dark-mode .scrollableArticleListContainer.scrolling::-webkit-scrollbar-thum
   transition: opacity 0.15s ease;
   will-change: transform, opacity;
   backface-visibility: hidden; /* 加速渲染 */
+}
+
+/* We target the .virtualList class which is the actual scrolling container from react-window */
+.virtualList::-webkit-scrollbar {
+  width: 8px;
+}
+
+.virtualList::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* By default, the scrollbar thumb is invisible */
+.virtualList::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 4px;
+  transition: background-color 0.3s ease-in-out;
+}
+
+/* Show the scrollbar thumb ONLY when the list is being scrolled */
+.virtualList.scrolling::-webkit-scrollbar-thumb {
+  background-color: rgba(181, 181, 181, 0.5);
+}
+
+/* Darken the thumb when hovered directly */
+.virtualList::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(142, 142, 142, 0.8);
 }
 
 /* 添加可拖拽区域 */

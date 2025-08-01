@@ -185,46 +185,48 @@ const SidebarLayout: React.FC = () => {
 
   // 启动时清理任务 - 删除此段代码
   useEffect(() => {
-    if (dbInitialized && settingsInitialized && db && !startupTasksDone.current && settings) {
-      console.log('[SidebarLayout] 应用启动，检查清理设置:', settings.general);
-      
-      // 根据设置决定是否执行启动清理
-      if (settings.general.autoCleanup) {
-        console.log('[SidebarLayout] 自动清理已启用，准备清理文章');
-        const performStartupCleanup = async () => {
-          try {
-            // 分别处理已读和未读文章
-            if (settings.general.cleanupReadDays > 0 || settings.general.cleanupUnreadDays > 0) {
-              await cleanupArticlesByReadStatus(
-                db, 
-                settings.general.cleanupReadDays, 
-                settings.general.cleanupUnreadDays
-              );
+    // 只有在db和settings都初始化后才执行启动任务
+    if (dbInitialized && settingsInitialized && db && !startupTasksDone.current) {
+      const performStartupTasks = () => {
+        // 自动清理
+        if (settings.general.autoCleanup) {
+          console.log('[SidebarLayout] 启动自动清理任务');
+          const performStartupCleanup = async () => {
+            try {
+              if (settings.general.cleanupReadDays > 0 || settings.general.cleanupUnreadDays > 0) {
+                await cleanupArticlesByReadStatus(
+                  db,
+                  settings.general.cleanupReadDays,
+                  settings.general.cleanupUnreadDays
+                );
+              } else if (settings.general.retentionDays > 0) {
+                await cleanupOldArticles(db, settings.general.retentionDays);
+              }
+              console.log('[SidebarLayout] 启动文章清理任务完成');
+            } catch (err) {
+              console.error('[SidebarLayout] 启动文章清理时出错:', err);
+            } finally {
+              triggerArticleListRefresh();
             }
-            // 兼容旧版本 - 使用全局保留天数
-            else if (settings.general.retentionDays > 0) {
-              await cleanupOldArticles(db, settings.general.retentionDays);
-            }
-            console.log('[SidebarLayout] Article cleanup task completed on startup.');
-          } catch (err) {
-            console.error('[SidebarLayout] Error during startup article cleanup:', err);
-          } finally {
-            triggerArticleListRefresh();
-          }
-        };
-        
-        performStartupCleanup();
-      } else {
-        console.log('[SidebarLayout] 自动清理未启用，跳过清理');
-      }
+          };
+          performStartupCleanup();
+        } else {
+          console.log('[SidebarLayout] 自动清理未启用，跳过清理');
+        }
 
-      if (settings.general.syncOnStartup) {
-        console.log('[SidebarLayout] 启动同步已启用，开始同步订阅源');
-        handleRefreshAll(true);
-      } else {
-        console.log('[SidebarLayout] 启动同步未启用，跳过同步');
-      }
+        // 启动时同步
+        if (settings.general.syncOnStartup) {
+          console.log('[SidebarLayout] 启动同步已启用，开始同步订阅源');
+          handleRefreshAll(true);
+        } else {
+          console.log('[SidebarLayout] 启动同步未启用，跳过同步');
+        }
+      };
       
+      // 延迟10秒执行启动任务，以避免影响初始加载性能
+      console.log('[SidebarLayout] 启动任务将在10秒后执行...');
+      setTimeout(performStartupTasks, 10000);
+
       startupTasksDone.current = true;
     }
   }, [dbInitialized, settingsInitialized, db, settings, triggerArticleListRefresh]);
@@ -320,7 +322,8 @@ const SidebarLayout: React.FC = () => {
           // onComplete callback
           triggerArticleListRefresh();
           triggerFeedCountRefresh();
-        }
+        },
+        settings.advanced.syncConcurrency // 传递并发数
       );
 
     } catch (error) {

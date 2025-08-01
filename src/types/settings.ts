@@ -53,6 +53,10 @@ export interface AdvancedSettings {
         pullToRefresh: boolean;
     };
     doubaoApiKey?: string;
+    syncConcurrency?: number; // 同步并发数
+    fetchTimeout?: number; // 抓取超时时间（秒）
+    cacheSize?: number; // 文章内容缓存数量
+    cacheTTL?: number; // 文章内容缓存有效期（小时）
 }
 
 export interface LayoutSettings {
@@ -110,6 +114,10 @@ export const defaultSettings: Settings = {
             pullToRefresh: true,
         },
         doubaoApiKey: '',
+        syncConcurrency: 5, // 默认并发数为5
+        fetchTimeout: 15, // 默认超时15秒
+        cacheSize: 100, // 默认缓存100篇文章
+        cacheTTL: 24, // 默认缓存24小时
     },
     layout: {
         windowSize: {

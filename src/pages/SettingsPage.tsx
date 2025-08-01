@@ -86,6 +86,10 @@ const SettingsPage: React.FC = () => {
         advanced: {
           ...settings.advanced,
           maxArticlesPerFeed: values.maxArticlesPerFeed ?? settings.advanced.maxArticlesPerFeed,
+          syncConcurrency: values.syncConcurrency ?? settings.advanced.syncConcurrency,
+          fetchTimeout: values.fetchTimeout ?? settings.advanced.fetchTimeout,
+          cacheSize: values.cacheSize ?? settings.advanced.cacheSize,
+          cacheTTL: values.cacheTTL ?? settings.advanced.cacheTTL,
           doubaoApiKey: values.doubaoApiKey ?? settings.advanced.doubaoApiKey,
           enableNotifications: values.enableNotifications ?? settings.advanced.enableNotifications,
           startMinimized: values.startMinimized ?? settings.advanced.startMinimized,
@@ -178,8 +182,8 @@ const SettingsPage: React.FC = () => {
     }
 
     Modal.confirm({
-      title: '清理孤儿文章',
-      content: '此操作将删除所有没有对应订阅源的文章。这些文章可能是由于删除订阅源时未正确清理导致的。确定要继续吗？',
+      title: '清理无来源的文章',
+      content: '此操作将删除那些其原始订阅源已被删除的文章。确定要继续吗？',
       okText: '确认清理',
       okType: 'danger',
       cancelText: '取消',
@@ -191,10 +195,10 @@ const SettingsPage: React.FC = () => {
           const count = await cleanupOrphanedArticles(db);
           
           if (count > 0) {
-            message.success({ content: `成功清理了 ${count} 篇孤儿文章！`, key: 'cleanup' });
+            message.success({ content: `成功清理了 ${count} 篇无来源的文章！`, key: 'cleanup' });
             triggerArticleListRefresh();
           } else {
-            message.info({ content: '没有找到需要清理的孤儿文章。', key: 'cleanup' });
+            message.info({ content: '没有找到需要清理的无来源的文章。', key: 'cleanup' });
           }
         } catch (error: any) {
           message.error({ content: `清理失败: ${error.message}`, key: 'cleanup' });
@@ -380,16 +384,17 @@ const SettingsPage: React.FC = () => {
           <Card className={styles.settingCard}>
             <div className={styles.formSection}>
               <Title level={5}><SyncOutlined /> 订阅源设置</Title>
-              {/* 注释掉有问题的设置项 
               <Form.Item name="syncOnStartup" valuePropName="checked" tooltip="启动应用时自动同步所有订阅源。">
                 <div>
                   <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   <Text style={{ marginLeft: 8 }}>启动时同步订阅源</Text>
                 </div>
               </Form.Item>
-              */}
               <Form.Item name="maxArticlesPerFeed" label="每个订阅源最大文章数" tooltip="设置为0表示无限制。当订阅源的文章数超过此限制时，最旧的文章将被自动删除。">
                 <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="syncConcurrency" label="同步并发数" tooltip="同时刷新订阅源的最大数量。较高的值可以加快刷新速度，但也可能导致网络拥堵或被服务器阻止。建议值为3-10。">
+                <InputNumber min={1} max={20} style={{ width: '100%' }} />
               </Form.Item>
               
               {/* 移除订阅源列表版本选择开关，因为现在只使用新版组件 */}
@@ -399,14 +404,12 @@ const SettingsPage: React.FC = () => {
             
             <div className={styles.formSection}>
               <Title level={5}><DeleteOutlined /> 文章清理</Title>
-              {/* 注释掉有问题的设置项 
               <Form.Item name="autoCleanup" valuePropName="checked" tooltip="启用后，系统会根据下面的设置自动清理文章。">
                 <div>
                   <Switch checkedChildren="开启" unCheckedChildren="关闭" />
                   <Text style={{ marginLeft: 8 }}>启用自动文章清理</Text>
                 </div>
               </Form.Item>
-              */}
               <Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
                 您可以设置保留天数，然后手动执行清理操作。
               </Text>
@@ -430,7 +433,7 @@ const SettingsPage: React.FC = () => {
                   loading={cleaningArticles}
                   danger
                 >
-                  立即清理过期文章
+                  清理过期文章
                 </Button>
               </Form.Item>
             </div>
@@ -467,7 +470,7 @@ const SettingsPage: React.FC = () => {
               <Title level={5}><ClearOutlined /> 数据维护</Title>
               <Form.Item
                 label="数据清理"
-                help="清理没有对应订阅源的'孤儿'文章，这些文章可能是由于删除订阅源时未正确清理导致的。"
+                help="清理那些其原始订阅源已被删除的文章。"
               >
                 <Button 
                   icon={<ClearOutlined />} 
@@ -475,18 +478,7 @@ const SettingsPage: React.FC = () => {
                   loading={cleaningOrphans}
                   danger
                 >
-                  清理孤儿文章
-                </Button>
-              </Form.Item>
-              <Form.Item
-                label="验证设置"
-                help="检查设置是否已正确保存到系统中。"
-              >
-                <Button 
-                  icon={<QuestionCircleOutlined />} 
-                  onClick={handleVerifySettings}
-                >
-                  验证设置保存状态
+                  清理无来源的文章
                 </Button>
               </Form.Item>
             </div>
@@ -522,18 +514,35 @@ const SettingsPage: React.FC = () => {
               </Form.Item>
             </div>
           </Card>
-          
-          {/* 新增开发者选项区块 */}
+
           <Card className={styles.settingCard} style={{ marginTop: 20 }}>
             <div className={styles.formSection}>
-              <Title level={5}><SettingOutlined /> 开发者选项</Title>
-              <Text type="secondary">
-                以下选项用于测试和开发目的，可能会影响应用的稳定性。
-              </Text>
-              
-              {/* 移除文章列表V2切换选项，因为我们只使用V2版本 */}
+              <Title level={5}><SettingOutlined /> 网络与缓存</Title>
+              <Form.Item name="fetchTimeout" label="内容抓取超时时间 (秒)" tooltip="获取订阅源或文章内容的超时时间。网络不佳时可适当调高。">
+                <InputNumber min={5} max={60} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="cacheSize" label="文章缓存数量" tooltip="在内存中缓存的文章数量。增加此值可加快已读文章的加载速度，但会占用更多内存。">
+                <InputNumber min={10} max={500} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item name="cacheTTL" label="文章缓存有效期 (小时)" tooltip="缓存在内存中的文章的有效期。超过此时效的文章缓存将被清除。">
+                <InputNumber min={1} max={168} style={{ width: '100%' }} />
+              </Form.Item>
             </div>
           </Card>
+          
+          {/* 新增开发者选项区块 */}
+          {process.env.NODE_ENV === 'development' && (
+            <Card className={styles.settingCard} style={{ marginTop: 20 }}>
+              <div className={styles.formSection}>
+                <Title level={5}><SettingOutlined /> 开发者选项</Title>
+                <Text type="secondary">
+                  以下选项用于测试和开发目的，可能会影响应用的稳定性。
+                </Text>
+                
+                {/* 移除文章列表V2切换选项，因为我们只使用V2版本 */}
+              </div>
+            </Card>
+          )}
           
           <Card className={styles.settingCard} style={{ marginTop: 20 }}>
             <div className={styles.formSection}>
@@ -580,12 +589,6 @@ const SettingsPage: React.FC = () => {
             items={tabItems}
           />
           
-          <div className={styles.autoSaveNote}>
-            <Text type="secondary">
-              <QuestionCircleOutlined style={{ marginRight: 8 }} />
-              设置会在修改后自动保存
-            </Text>
-          </div>
         </Form>
       </Content>
     </Layout>

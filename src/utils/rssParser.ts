@@ -516,48 +516,43 @@ export const fetchRssFeed = async (
 export const refreshAllFeeds = async (
   feeds: FeedSource[],
   onProgress?: (feed: FeedSource, articles: Article[]) => void,
-  onComplete?: (results: { feed: FeedSource, articles: Article[] }[]) => void
+  onComplete?: (results: { feed: FeedSource, articles: Article[] }[]) => void,
+  concurrency: number = 5 // 默认并发数为5
 ): Promise<{ feed: FeedSource, articles: Article[] }[]> => {
   const results: { feed: FeedSource, articles: Article[] }[] = [];
-  const failedFeeds: FeedSource[] = [];
+  const failedFeeds: { feed: FeedSource, error: any }[] = [];
+  const queue = [...feeds];
   
-  for (const feed of feeds) {
-    try {
-      const articles = await fetchRssFeed(feed);
-      results.push({ feed, articles });
-      if (onProgress) {
-        onProgress(feed, articles);
-      }
-    } catch (error) {
-      log.error(`刷新订阅源 "${feed.title}" 时失败:`, error);
-      failedFeeds.push(feed);
-    }
-  }
-  
-  // 对失败的订阅源尝试一次重试，但使用更严格的错误处理
-  if (failedFeeds.length > 0) {
-    log.warn(`第一次刷新失败的订阅源: ${failedFeeds.length}个，开始重试...`);
-    
-    for (const feed of failedFeeds) {
+  const worker = async () => {
+    while(queue.length > 0) {
+      const feed = queue.shift();
+      if (!feed) continue;
+
       try {
-        // 使用更长的超时时间重试
         const articles = await fetchRssFeed(feed);
         results.push({ feed, articles });
-        if (onProgress) {
-          onProgress(feed, articles);
-        }
-        log.warn(`订阅源 "${feed.title}" 重试成功`);
+        onProgress?.(feed, articles);
       } catch (error) {
-        log.error(`订阅源 "${feed.title}" 重试仍然失败:`, error);
-        // 仍然添加到结果中，但文章为空数组
-        results.push({ feed, articles: [] });
+        log.error(`刷新订阅源 "${feed.title}" 时失败:`, error);
+        failedFeeds.push({ feed, error: error as any });
       }
     }
+  };
+
+  const workers = Array.from({ length: Math.min(concurrency, feeds.length) }, () => worker());
+  await Promise.all(workers);
+
+  if (failedFeeds.length > 0) {
+    log.warn(`有 ${failedFeeds.length} 个订阅源刷新失败。`);
+    failedFeeds.forEach(({ feed }) => {
+      // 确保即使失败的源也包含在最终结果中，以便UI可以反映其状态
+      if (!results.some(r => r.feed.id === feed.id)) {
+        results.push({ feed, articles: [] });
+      }
+    });
   }
 
-  if (onComplete) {
-    onComplete(results);
-  }
+  onComplete?.(results);
   
   return results;
 };

@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useRef, ReactNode, useEffect, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useRef, ReactNode, useEffect } from 'react';
 import { FixedSizeList } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import styles from './ArticleListV2.module.css';
@@ -39,27 +39,25 @@ function VirtualListComponent<T>(
   ref: React.Ref<VirtualListHandle>
 ) {
   const listRef = useRef<FixedSizeList>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [isScrolling, setIsScrolling] = useState(false);
+  const listOuterRef = useRef<HTMLDivElement>(null);
   const scrollTimerRef = useRef<number | null>(null);
-  
-  // 处理滚动事件
+
   const handleScroll = () => {
-    // 激活滚动状态
-    setIsScrolling(true);
+    if (listOuterRef.current && !listOuterRef.current.classList.contains(styles.scrolling)) {
+      listOuterRef.current.classList.add(styles.scrolling);
+    }
     
-    // 清除之前的计时器
     if (scrollTimerRef.current) {
       window.clearTimeout(scrollTimerRef.current);
     }
     
-    // 设置新的计时器，延迟隐藏滚动条
     scrollTimerRef.current = window.setTimeout(() => {
-      setIsScrolling(false);
-    }, 1000); // 滚动停止1秒后隐藏滚动条
+      if (listOuterRef.current) {
+        listOuterRef.current.classList.remove(styles.scrolling);
+      }
+    }, 1500); // 滚动停止1.5秒后移除class
   };
 
-  // 清除计时器
   useEffect(() => {
     return () => {
       if (scrollTimerRef.current) {
@@ -72,39 +70,31 @@ function VirtualListComponent<T>(
     scrollToItem: (index: number, align: 'auto' | 'smart' | 'center' | 'end' | 'start' = 'auto') => {
       if (listRef.current) {
         listRef.current.scrollToItem(index, align);
-        // 触发滚动状态以显示滚动条
-        handleScroll();
       }
     },
     scrollTo: (offset: number) => {
       if (listRef.current) {
         listRef.current.scrollTo(offset);
-        // 触发滚动状态以显示滚动条
-        handleScroll();
       }
     },
     scrollToTop: () => {
       if (listRef.current) {
         listRef.current.scrollTo(0);
-        // 触发滚动状态以显示滚动条
-        handleScroll();
       }
     },
     getScrollPosition: () => {
-      return containerRef.current?.scrollTop ?? 0;
+      return listOuterRef.current?.scrollTop ?? 0;
     }
   }), []);
   
   return (
-    <div 
-      ref={containerRef} 
-      className={`${styles.scrollableArticleListContainer} ${isScrolling ? styles.scrolling : ''}`}
-      onScroll={handleScroll} // 在容器上直接监听滚动事件
-    >
+    <div className={styles.scrollableArticleListContainer}>
       <AutoSizer>
         {({ height, width }) => (
           <FixedSizeList
             ref={listRef}
+            outerRef={listOuterRef}
+            onScroll={handleScroll}
             height={height}
             width={width}
             itemCount={items.length}
