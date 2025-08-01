@@ -358,14 +358,21 @@ ipcMain.handle('get-app-version', () => {
 });
 
 // 添加检查更新的IPC处理程序
-ipcMain.handle('check-for-updates', () => {
-  console.log('[Main Process] 手动检查更新');
+ipcMain.handle('check-for-updates', async () => {
+  if (isDevelopment) {
+    return { success: false, error: '开发模式下不支持自动更新' };
+  }
+  
   try {
-    autoUpdater.checkForUpdates();
-    return { success: true };
-  } catch (error) {
-    console.error('[Main Process] 检查更新失败:', error);
-    return { success: false, error: (error as Error).message };
+    console.log('[Main Process] 手动检查更新...');
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) {
+      return { success: false, error: '检查更新失败，未收到响应' };
+    }
+    return { success: true, updateInfo: result.updateInfo };
+  } catch (error: any) {
+    console.error('[Main Process] 手动检查更新失败:', error);
+    return { success: false, error: error.message };
   }
 });
 
@@ -475,32 +482,7 @@ function configureAutoUpdater() {
       releaseDate: info.releaseDate,
       releaseNotes: info.releaseNotes
     });
-
-    // 弹出对话框询问用户是否下载更新
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '发现新版本',
-        message: `Readix ${info.version} 已发布，是否现在下载？`,
-        detail: `发布日期: ${info.releaseDate || '未知'}\n${info.releaseNotes || ''}`,
-        buttons: ['立即下载', '稍后下载'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          // 用户确认下载，开始下载更新
-          console.log('[Main Process] 开始下载更新...');
-          autoUpdater.downloadUpdate().catch(err => {
-            console.error('[Main Process] 下载更新失败:', err);
-            mainWindow?.webContents.send('update-status', { 
-              status: 'error', 
-              error: '下载更新失败，请稍后再试' 
-            });
-          });
-        }
-      }).catch(err => {
-        console.error('[Main Process] 显示对话框失败:', err);
-      });
-    }
+    // 不再弹出系统对话框，让前端处理用户交互
   });
 
   autoUpdater.on('update-not-available', (info) => {
@@ -528,26 +510,7 @@ function configureAutoUpdater() {
       status: 'downloaded',
       version: info.version 
     });
-    
-    // 通知用户更新已下载，询问是否立即安装
-    if (mainWindow) {
-      dialog.showMessageBox(mainWindow, {
-        type: 'info',
-        title: '更新下载完成',
-        message: `Readix ${info.version} 已下载完成，是否立即安装？`,
-        detail: '安装后应用将自动重启',
-        buttons: ['立即安装', '稍后安装'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          // 用户确认安装，退出并安装更新
-          console.log('[Main Process] 用户确认安装，开始安装更新...');
-          autoUpdater.quitAndInstall(false, true);
-        }
-      }).catch(err => {
-        console.error('[Main Process] 显示更新下载完成对话框失败:', err);
-      });
-    }
+    // 不再弹出系统对话框，让前端处理用户交互
   });
 
   // 启动时检查更新
@@ -1405,25 +1368,6 @@ ipcMain.handle('shell-open-external', async (_, url) => {
   }
 });
 
-// 添加检查更新的IPC处理程序
-ipcMain.handle('check-for-updates', async () => {
-  if (isDevelopment) {
-    return { success: false, error: '开发模式下不支持自动更新' };
-  }
-  
-  try {
-    console.log('[Main Process] 手动检查更新...');
-    const result = await autoUpdater.checkForUpdates();
-    if (!result) {
-      return { success: false, error: '检查更新失败，未收到响应' };
-    }
-    return { success: true, updateInfo: result.updateInfo };
-  } catch (error: any) {
-    console.error('[Main Process] 手动检查更新失败:', error);
-    return { success: false, error: error.message };
-  }
-});
-
 // 添加IPC处理程序以检查GitHub上的最新版本
 ipcMain.handle('check-for-updates-manual', async () => {
   if (isDevelopment) {
@@ -1510,20 +1454,7 @@ ipcMain.handle('check-for-updates-manual', async () => {
             releaseNotes: releaseNotes,
             downloadUrl: downloadUrl
           });
-          
-          const { response } = await dialog.showMessageBox(mainWindow, {
-            type: 'info',
-            title: '发现新版本',
-            message: `Readix ${latestVersion} 已发布，是否打开下载页面？`,
-            detail: `发布日期: ${releaseDate || '未知'}\n${releaseNotes || ''}`,
-            buttons: ['是', '否'],
-            defaultId: 0
-          });
-          
-          if (response === 0) {
-            // 用户确认，打开下载链接
-            await shell.openExternal(downloadUrl);
-          }
+          // 不再弹出系统对话框，让前端处理用户交互
         } else if (!downloadUrl) {
           log.warn(`没有找到适合当前平台(${process.platform})的下载资源`);
           // 使用release页面作为备用

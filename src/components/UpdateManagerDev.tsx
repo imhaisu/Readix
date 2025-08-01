@@ -27,185 +27,101 @@ interface UpdateInfo {
   releaseNotes?: string;
 }
 
-interface UpdateManagerProps {
+interface UpdateManagerDevProps {
   className?: string;
 }
 
-const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
+const UpdateManagerDev: React.FC<UpdateManagerDevProps> = ({ className }) => {
   const [status, setStatus] = useState<UpdateStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [currentVersion, setCurrentVersion] = useState<string>('');
+  const [currentVersion, setCurrentVersion] = useState<string>('1.0.3');
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
 
+  // 模拟获取当前版本
   useEffect(() => {
-    // 获取当前应用版本
-    const fetchCurrentVersion = async () => {
-      if (window.electron?.getAppVersion) {
-        try {
-          const version = await window.electron.getAppVersion();
-          setCurrentVersion(version);
-        } catch (err) {
-          console.error('获取应用版本失败:', err);
-        }
-      }
-    };
-
-    fetchCurrentVersion();
-
-    // 监听来自主进程的更新状态消息
-    const handleUpdateStatus = (event: any, data: any) => {
-      console.log('收到更新状态:', data);
-      
-      // 处理状态
-      setStatus(data.status);
-      
-      // 处理自定义消息
-      if (data.message) {
-        setStatusMessage(data.message);
-      } else {
-        setStatusMessage(null);
-      }
-      
-      // 处理错误信息
-      if (data.status === 'error' && data.error) {
-        setError(data.error);
-        message.error(data.error);
-      } else {
-        setError(null);
-      }
-      
-      // 处理下载进度
-      if (data.status === 'downloading' && data.progress) {
-        setProgress(data.progress);
-        setIsDownloading(true);
-      } else if (data.status === 'downloaded') {
-        setIsDownloading(false);
-        message.success('更新下载完成！');
-      }
-      
-      // 处理版本信息
-      if (data.status === 'available') {
-        setUpdateInfo({
-          version: data.version,
-          releaseDate: data.releaseDate,
-          releaseNotes: data.releaseNotes
-        });
-        // 自动显示更新对话框
-        setShowUpdateModal(true);
-      }
-    };
-
-    if (window.electron && window.electron.onUpdateStatus) {
-      window.electron.onUpdateStatus(handleUpdateStatus);
-    }
-
-    return () => {
-      // 清理监听器
-      if (window.electron && window.electron.offUpdateStatus) {
-        window.electron.offUpdateStatus(handleUpdateStatus);
-      }
-    };
+    setCurrentVersion('1.0.3');
   }, []);
 
+  // 模拟检查更新
   const handleCheckForUpdates = async () => {
-    if (!window.electron) {
-      setError('更新功能仅在Electron环境下可用');
-      return;
-    }
-
-    // 优先使用manual检查，如果不存在则使用普通检查
-    const checkFunction = window.electron.checkForUpdatesManual || window.electron.checkForUpdates;
-    
-    if (!checkFunction) {
-      setError('更新检查功能不可用');
-      return;
-    }
-
     setIsChecking(true);
     setError(null);
     setStatus('checking');
     message.loading('正在检查更新...', 0);
     
-    try {
-      const result = await checkFunction();
-      message.destroy();
-      
-      // 结果处理已在handleUpdateStatus中进行，这里只需额外处理错误
-      if (!result.success && result.error) {
-        setError(result.error);
-        setStatus('error');
-        message.error(result.error);
-      }
-    } catch (err: any) {
-      message.destroy();
-      console.error('检查更新出错:', err);
-      setError('检查更新时发生错误，请稍后再试');
-      setStatus('error');
-      message.error('检查更新时发生错误，请稍后再试');
-    } finally {
-      setIsChecking(false);
-    }
+    // 模拟网络延迟
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    message.destroy();
+    
+    // 模拟发现新版本
+    const mockUpdateInfo = {
+      version: '1.0.4',
+      releaseDate: new Date().toISOString(),
+      releaseNotes: '🎉 新版本发布！\n\n✨ 新功能：\n- 优化应用内更新体验\n- 改进用户界面设计\n- 增强错误处理机制\n\n🐛 修复：\n- 修复已知问题\n- 提升应用稳定性\n\n🚀 性能优化：\n- 提升启动速度\n- 优化内存使用'
+    };
+    
+    setUpdateInfo(mockUpdateInfo);
+    setStatus('available');
+    setShowUpdateModal(true);
+    setIsChecking(false);
   };
 
-  // 处理下载更新
+  // 模拟下载更新
   const handleDownloadUpdate = async () => {
-    if (!window.electron?.downloadUpdate) {
-      setError('下载更新功能不可用');
-      return;
-    }
-
     setIsDownloading(true);
     setStatus('downloading');
     setShowUpdateModal(false);
     message.loading('正在下载更新...', 0);
     
-    try {
-      const result = await window.electron.downloadUpdate();
-      message.destroy();
-      
-      if (!result.success && result.error) {
-        setError(result.error);
-        setStatus('error');
-        message.error(result.error);
+    // 模拟下载进度
+    const totalSize = 150 * 1024 * 1024; // 150MB
+    let downloaded = 0;
+    const downloadInterval = setInterval(() => {
+      downloaded += Math.random() * 1024 * 1024 * 2; // 随机增加1-3MB
+      if (downloaded >= totalSize) {
+        downloaded = totalSize;
+        clearInterval(downloadInterval);
+        
+        message.destroy();
+        message.success('更新下载完成！');
+        setStatus('downloaded');
+        setIsDownloading(false);
+        return;
       }
-    } catch (err: any) {
-      message.destroy();
-      console.error('下载更新失败:', err);
-      setError('下载更新失败，请稍后再试');
-      setStatus('error');
-      message.error('下载更新失败，请稍后再试');
-    } finally {
-      setIsDownloading(false);
-    }
+      
+      const percent = (downloaded / totalSize) * 100;
+      const speed = Math.random() * 1024 * 1024 * 5 + 1024 * 1024; // 1-6MB/s
+      
+      setProgress({
+        percent,
+        bytesPerSecond: speed,
+        transferred: downloaded,
+        total: totalSize
+      });
+    }, 100);
   };
 
-  // 处理安装更新
+  // 模拟安装更新
   const handleInstallUpdate = async () => {
-    if (!window.electron?.installUpdate) {
-      setError('安装更新功能不可用');
-      return;
-    }
-
     setIsInstalling(true);
     message.loading('正在安装更新，应用将自动重启...', 0);
     
-    try {
-      await window.electron.installUpdate();
-      // 不需要设置状态，因为应用会重启
-    } catch (err: any) {
-      message.destroy();
-      console.error('安装更新失败:', err);
-      setError('安装更新失败，请稍后再试');
-      message.error('安装更新失败，请稍后再试');
-    } finally {
-      setIsInstalling(false);
-    }
+    // 模拟安装过程
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    message.destroy();
+    message.success('更新安装完成！');
+    setIsInstalling(false);
+    
+    // 模拟应用重启
+    setTimeout(() => {
+      message.info('应用将重新启动以完成更新...');
+    }, 1000);
   };
 
   const formatBytes = (bytes: number): string => {
@@ -319,11 +235,14 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
       default:
         return (
           <Alert
-            message="软件更新"
+            message="软件更新 (开发模式)"
             description={
               <div>
                 <p><strong>当前版本:</strong> v{currentVersion}</p>
-                <p>点击下方按钮检查是否有新版本可用</p>
+                <p>点击下方按钮模拟检查更新流程</p>
+                <p style={{ color: '#ff4d4f', fontSize: '12px' }}>
+                  ⚠️ 这是开发模式下的模拟更新，用于测试UI效果
+                </p>
               </div>
             }
             type="info"
@@ -364,7 +283,7 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
         ]}
         width={500}
         bodyStyle={{ 
-          maxHeight: '400px', 
+          maxHeight: '450px', 
           overflow: 'hidden',
           padding: '16px 24px'
         }}
@@ -392,11 +311,11 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
           
           {/* 更新说明区域 - 可滚动 */}
           {updateInfo.releaseNotes && (
-            <div style={{ flex: 1, overflow: 'hidden' }}>
+            <div style={{ flex: 1, overflow: 'hidden', marginBottom: 16 }}>
               <Text strong>更新说明</Text>
               <Divider style={{ margin: '8px 0' }} />
               <div style={{ 
-                maxHeight: '200px', 
+                maxHeight: '180px', 
                 overflowY: 'auto',
                 paddingRight: '8px'
               }}>
@@ -406,6 +325,16 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
               </div>
             </div>
           )}
+          
+          {/* 开发模式提示 - 固定位置 */}
+          <div style={{ flexShrink: 0 }}>
+            <Alert
+              message="开发模式提示"
+              description="这是模拟的更新流程，用于测试UI效果。在实际生产环境中，这里会进行真实的更新下载和安装。"
+              type="warning"
+              showIcon
+            />
+          </div>
         </div>
       </Modal>
     );
@@ -416,7 +345,7 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
       <Card className={className}>
         <div>
           <Title level={5}>
-            <CloudDownloadOutlined /> 软件更新
+            <CloudDownloadOutlined /> 软件更新 (开发模式)
           </Title>
           <div style={{ marginBottom: 16 }}>
             {renderStatusContent()}
@@ -449,4 +378,4 @@ const UpdateManager: React.FC<UpdateManagerProps> = ({ className }) => {
   );
 };
 
-export default UpdateManager; 
+export default UpdateManagerDev; 

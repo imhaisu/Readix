@@ -27,6 +27,7 @@ import type { TabsProps } from 'antd';
 import { cleanupOrphanedArticles } from '../utils/cleanupHelper';
 import { debounce } from 'lodash';
 import UpdateManager from '../components/UpdateManager';
+import UpdateManagerDev from '../components/UpdateManagerDev';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -491,7 +492,11 @@ const SettingsPage: React.FC = () => {
             </div>
           </Card>
 
-          <UpdateManager className={styles.settingCard} />
+          {process.env.NODE_ENV === 'development' ? (
+            <UpdateManagerDev className={styles.settingCard} />
+          ) : (
+            <UpdateManager className={styles.settingCard} />
+          )}
         </>
       )
     },
